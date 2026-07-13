@@ -1,5 +1,14 @@
-import { redactObject, type RedactionSummary } from "@get-an-expert/core";
+import {
+  redactObject,
+  type RedactionSummary,
+  type ThreadMessage,
+} from "@get-an-expert/core";
 import { apiBaseUrl, CONSENT_TEXT_VERSION, getInstallId } from "./config";
+import {
+  clearActiveThread,
+  saveActiveThread,
+  type ActiveThread,
+} from "./thread";
 
 export interface ExpertHelpInput {
   tool: string;
@@ -69,7 +78,11 @@ export async function submitExpertRequest(
     };
   }
 
-  let envelope: { success?: boolean; data?: { message?: string }; error?: string };
+  let envelope: {
+    success?: boolean;
+    data?: { message?: string; requestId?: string; threadToken?: string };
+    error?: string;
+  };
   try {
     envelope = (await response.json()) as typeof envelope;
   } catch {
@@ -95,5 +108,126 @@ export async function submitExpertRequest(
         `The Get An Expert API returned HTTP ${response.status}. Try again shortly.`,
     };
   }
+
+  // Persist the thread credentials so this session (and future ones) can
+  // keep talking to the expert.
+  const { requestId, threadToken } = envelope.data;
+  if (requestId && threadToken) {
+    saveActiveThread({
+      requestId,
+      threadToken,
+      apiBaseUrl: apiBaseUrl(),
+      expertiseArea: payload.expertiseArea,
+      lastSeenSeq: 0,
+      createdAt: consentedAt.toISOString(),
+    });
+  }
   return { ok: true, message: envelope.data.message };
+}
+
+/* ------------------------------------------------------------------ */
+/* Thread messaging                                                    */
+/* ------------------------------------------------------------------ */
+
+export interface ThreadProgress {
+  whatWasTried: string[];
+  errorMessages: string[];
+}
+
+export interface ThreadUpdates {
+  status: string;
+  expertName: string | null;
+  messages: ThreadMessage[];
+}
+
+export type ThreadCallResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: string; gone?: boolean };
+
+const NETWORK_ERROR =
+  "The Get An Expert API could not be reached — nothing was lost, try again in a minute.";
+
+function threadUrl(thread: ActiveThread): string {
+  return `${thread.apiBaseUrl}/api/v1/requests/${thread.requestId}/messages`;
+}
+
+async function threadFetch<T>(
+  thread: ActiveThread,
+  init: RequestInit & { url: string },
+): Promise<ThreadCallResult<T>> {
+  let response: Response;
+  try {
+    response = await fetch(init.url, {
+      ...init,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${thread.threadToken}`,
+      },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch {
+    return { ok: false, error: NETWORK_ERROR };
+  }
+
+  let envelope: { success?: boolean; data?: T; error?: string };
+  try {
+    envelope = (await response.json()) as typeof envelope;
+  } catch {
+    return {
+      ok: false,
+      error: `The Get An Expert API returned an unexpected response (HTTP ${response.status}).`,
+    };
+  }
+  if (response.status === 404) {
+    // Thread deleted or expired server-side: stop resuming it locally.
+    clearActiveThread();
+    return {
+      ok: false,
+      gone: true,
+      error:
+        "This expert thread no longer exists — it was deleted or hit its 30-day expiry. Start a fresh request if you still need help.",
+    };
+  }
+  if (!response.ok || !envelope.success || envelope.data === undefined) {
+    return {
+      ok: false,
+      error:
+        envelope.error ??
+        `The Get An Expert API returned HTTP ${response.status}. Try again shortly.`,
+    };
+  }
+  return { ok: true, value: envelope.data };
+}
+
+/**
+ * Sends a user message (and optional progress update) on the thread.
+ * Everything passes local redaction first.
+ */
+export async function postThreadMessage(
+  thread: ActiveThread,
+  text: string,
+  progress: ThreadProgress,
+): Promise<ThreadCallResult<{ seq: number; status: string }>> {
+  const hasProgress =
+    progress.whatWasTried.length > 0 || progress.errorMessages.length > 0;
+  const { value } = redactObject({
+    text,
+    progress: hasProgress ? progress : undefined,
+  });
+  const clean = value as { text: string; progress?: ThreadProgress };
+  return threadFetch(thread, {
+    url: threadUrl(thread),
+    method: "POST",
+    body: JSON.stringify(clean),
+  });
+}
+
+/** New thread messages the user hasn't seen yet. */
+export async function fetchThreadUpdates(
+  thread: ActiveThread,
+): Promise<ThreadCallResult<ThreadUpdates>> {
+  return threadFetch(thread, {
+    url: `${threadUrl(thread)}?after=${thread.lastSeenSeq}`,
+    method: "GET",
+  });
 }

@@ -1,8 +1,14 @@
-import type { ExpertRequestRecord } from "@get-an-expert/core";
+import type {
+  ExpertRequestRecord,
+  NewThreadMessage,
+  ThreadMessage,
+} from "@get-an-expert/core";
 
 export interface StoredRequest extends ExpertRequestRecord {
   /** SHA-256 hash of the deletion token; the raw token is never stored. */
   deleteTokenHash: string;
+  /** SHA-256 hash of the thread token; the raw token is never stored. */
+  threadTokenHash: string;
 }
 
 export interface Store {
@@ -12,7 +18,21 @@ export interface Store {
   put(record: StoredRequest, ttlSeconds: number): Promise<void>;
   /** Newest first. */
   list(limit: number): Promise<StoredRequest[]>;
+  /** Removes the record AND its thread messages. */
   delete(id: string): Promise<boolean>;
+  /**
+   * Appends to the request's thread and returns the assigned 1-based seq.
+   * Append-only by design: no read-modify-write races between the user and
+   * the expert posting concurrently. `ttlSeconds` bounds the thread's
+   * lifetime the same way the record's TTL does.
+   */
+  appendMessage(
+    id: string,
+    message: NewThreadMessage,
+    ttlSeconds: number,
+  ): Promise<number>;
+  /** Thread messages with seq > afterSeq, in order. */
+  listMessages(id: string, afterSeq: number): Promise<ThreadMessage[]>;
   /**
    * Fixed-window counter for rate limiting. Increments the counter for the
    * current window and returns the new count. The key should already encode

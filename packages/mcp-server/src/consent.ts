@@ -11,16 +11,20 @@ export function buildOfferMessage(expertiseArea: string): string {
     `✨ **Looks like you're stuck. Want an expert eye on this ${expertiseArea} problem?**`,
     "",
     "Here's the deal: with your OK, Get An Expert sends **one structured summary** of " +
-      "where this session is stuck to its API, and a real human expert reviews it " +
-      "and sends back a diagnosis plus the exact next steps.",
+      "where this session is stuck to its API. That opens a private thread with a " +
+      "real human expert, who replies with a diagnosis plus the exact next steps — " +
+      "and you can keep talking to them from right here (\"tell the expert …\") " +
+      "until it's solved.",
     "",
     "**What gets sent (only if you say yes):** your goal, what's been tried, error " +
-      "messages, a short session summary, and your tech stack.",
+      "messages, a short session summary, and your tech stack. Later messages and " +
+      "progress updates go to the expert only when you choose to send them, and " +
+      "you see each one before it goes.",
     "**Never sent:** your source files, the full conversation, environment variables, " +
       "or secrets — redaction runs on your machine before anything leaves it.",
     "",
-    `Requests auto-delete after 30 days, and the response includes a private deletion ` +
-      `link. Privacy policy: ${privacyUrl()}`,
+    `The thread and everything on it auto-deletes after 30 days, and the ` +
+      `confirmation includes a private deletion link. Privacy policy: ${privacyUrl()}`,
     "",
     "**Send it? (yes / no)**",
   ].join("\n");

@@ -1,8 +1,14 @@
 import { Redis } from "@upstash/redis";
+import type {
+  NewThreadMessage,
+  ThreadMessage,
+} from "@get-an-expert/core";
 import type { Store, StoredRequest } from "./types";
 
 const RECORD_PREFIX = "gae:req:";
 const INDEX_KEY = "gae:req:index";
+
+const messagesKey = (id: string): string => `${RECORD_PREFIX}${id}:msgs`;
 
 /**
  * Upstash Redis store. Records live under gae:req:<id> with a TTL enforcing
@@ -61,9 +67,36 @@ export class RedisStore implements Store {
   }
 
   async delete(id: string): Promise<boolean> {
-    const removed = await this.redis.del(RECORD_PREFIX + id);
+    const removed = await this.redis.del(RECORD_PREFIX + id, messagesKey(id));
     await this.redis.zrem(INDEX_KEY, id);
     return removed > 0;
+  }
+
+  async appendMessage(
+    id: string,
+    message: NewThreadMessage,
+    ttlSeconds: number,
+  ): Promise<number> {
+    // RPUSH returns the new list length, which doubles as the appended
+    // message's 1-based seq — concurrent appends get distinct seqs for free.
+    const seq = await this.redis.rpush(messagesKey(id), message);
+    if (seq === 1) {
+      // First message: align the thread's lifetime with the record's
+      // remaining retention window so both expire together.
+      const ttl = await this.redis.ttl(RECORD_PREFIX + id);
+      await this.redis.expire(messagesKey(id), ttl > 0 ? ttl : ttlSeconds);
+    }
+    return seq;
+  }
+
+  async listMessages(id: string, afterSeq: number): Promise<ThreadMessage[]> {
+    const items = await this.redis.lrange<NewThreadMessage>(
+      messagesKey(id),
+      afterSeq,
+      -1,
+    );
+    // seq is positional: the element at list index i has seq i + 1.
+    return items.map((m, i) => ({ ...m, seq: afterSeq + i + 1 }));
   }
 
   async incrWindow(key: string, windowSeconds: number): Promise<number> {

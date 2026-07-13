@@ -31,19 +31,32 @@ export interface ExpertRequestPayload {
   clientRedactions?: RedactionSummary[];
 }
 
-/** The guidance a human expert sends back to the stuck user. */
-export interface ExpertResponse {
-  /** Short personal note from the expert. */
-  intro: string;
-  /** Why they're stuck, in plain words. */
-  diagnosis: string;
-  /** The ready-to-paste prompt that should get them unstuck. */
-  suggestedPrompt: string;
-  /** ISO timestamp of when the expert responded. */
-  respondedAt: string;
+/**
+ * One entry on a request's thread. Threads are append-only: user and expert
+ * messages plus "activity" entries (consented progress updates, status
+ * changes). `seq` is 1-based and assigned by the store on append.
+ */
+export interface ThreadMessage {
+  seq: number;
+  from: "user" | "expert";
+  /** "message" = someone typed it; "activity" = system/progress entry. */
+  kind: "message" | "activity";
+  text: string;
+  /** ISO timestamp. */
+  at: string;
 }
 
-export type ExpertRequestStatus = "new" | "answered" | "escalated" | "failed";
+/** Input shape for appends — the store assigns `seq`. */
+export type NewThreadMessage = Omit<ThreadMessage, "seq">;
+
+/**
+ * new      → submitted, no expert engaged yet
+ * live     → an expert has claimed or replied (also set when a user message
+ *            reopens a solved thread)
+ * solved   → the expert marked it resolved; the thread stays reopenable
+ *            until the record's 30-day expiry
+ */
+export type ExpertRequestStatus = "new" | "live" | "solved";
 
 /** Consent metadata recorded with every request. */
 export interface ConsentRecord {
@@ -54,7 +67,7 @@ export interface ConsentRecord {
   at: string;
 }
 
-/** What the backend stores. */
+/** What the backend stores. Thread messages live beside it, keyed by id. */
 export interface ExpertRequestRecord {
   id: string;
   createdAt: string;
@@ -63,5 +76,8 @@ export interface ExpertRequestRecord {
   /** What the server-side re-redaction pass removed. */
   serverRedactions: RedactionSummary[];
   consent: ConsentRecord;
-  response?: ExpertResponse;
+  /** Display name of the expert who claimed the thread. */
+  expertName?: string;
+  /** ISO timestamp of the latest thread activity (createdAt until then). */
+  lastActivityAt?: string;
 }

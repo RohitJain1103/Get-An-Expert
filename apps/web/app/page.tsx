@@ -30,9 +30,10 @@ export default function Home() {
         <p className="mt-6 max-w-2xl text-lg leading-8 text-zinc-600 dark:text-zinc-400">
           Get An Expert is an MCP server for Claude Code, Codex, Cursor,
           Windsurf, and other AI coding tools. When a session goes in circles,
-          it offers a hand — and with your explicit OK, sends a redacted
-          summary of where you&apos;re stuck. A real human expert reviews it
-          and responds with a diagnosis plus the exact prompt to try next.
+          it offers a hand — and with your explicit OK, opens a private
+          thread with a real human expert who diagnoses the problem and hands
+          you the exact prompt to try next. Still stuck? Keep talking to them
+          from inside your session until it&apos;s solved.
         </p>
 
         <section className="mt-12">
