@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { analyzeStuckSession } from "@/lib/analyst";
+import { clientIp } from "@/lib/client-ip";
 import { env } from "@/lib/env";
 import { checkRateLimit } from "@/lib/ratelimit";
 import { expertRequestSchema } from "@/lib/schema";
@@ -9,13 +10,18 @@ import { createExpertRequest } from "@/lib/usecases";
 /** Analysis at high effort can take a couple of minutes. */
 export const maxDuration = 300;
 
-function clientIp(request: NextRequest): string {
-  return (
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown"
-  );
-}
+/** Reject oversized bodies before buffering/parsing (defense in depth). */
+const MAX_BODY_BYTES = 300_000;
 
 export async function POST(request: NextRequest) {
+  const declaredLength = Number(request.headers.get("content-length") ?? "0");
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
+    return Response.json(
+      { success: false, data: null, error: "Request body too large." },
+      { status: 413 },
+    );
+  }
+
   let body: unknown;
   try {
     body = await request.json();
@@ -41,7 +47,7 @@ export async function POST(request: NextRequest) {
   const store = getStore();
   const rate = await checkRateLimit(
     store,
-    clientIp(request),
+    clientIp(request.headers),
     parsed.data.installId,
   );
   if (!rate.allowed) {

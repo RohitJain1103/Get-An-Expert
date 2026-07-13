@@ -37,8 +37,10 @@ export function getInstallId(): string {
   }
   const id = randomUUID();
   try {
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(file, `${id}\n`, "utf8");
+    // Restrict to the owner: on shared machines this file shouldn't be
+    // world-readable (it keys rate limiting for this install).
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    writeFileSync(file, `${id}\n`, { encoding: "utf8", mode: 0o600 });
   } catch {
     // Not being able to persist is fine; a per-session id still works.
   }
