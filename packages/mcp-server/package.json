@@ -1,6 +1,6 @@
 {
   "name": "get-an-expert-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Stuck in your AI coding session? Get An Expert offers a hand at the right moment — with your explicit consent, it sends a redacted summary of where you're stuck to Get An Expert and returns tailored advice on the best next prompt. Human experts in the loop coming soon.",
   "keywords": [
     "mcp",
