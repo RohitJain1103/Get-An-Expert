@@ -7,6 +7,7 @@ import { privacyUrl, SERVER_NAME, SERVER_VERSION, apiBaseUrl } from "./config";
 import {
   buildConsentRequiredMessage,
   buildDeclinedMessage,
+  buildElicitationFailedMessage,
   buildOfferMessage,
 } from "./consent";
 
@@ -26,6 +27,13 @@ const server = new McpServer(
   { name: SERVER_NAME, version: SERVER_VERSION },
   { instructions: INSTRUCTIONS },
 );
+
+/**
+ * Set once offer_expert_help has run in this session. request_expert_help
+ * refuses to send unless an offer (and its consent notice) was shown first,
+ * so a request can't be fired "cold" without the user ever seeing the offer.
+ */
+let offerShownThisSession = false;
 
 /** Normalize the MCP client name into our payload's tool label. */
 function detectHostTool(): string {
@@ -60,9 +68,12 @@ server.registerTool(
       openWorldHint: false,
     },
   },
-  async ({ expertiseArea }) => ({
-    content: [{ type: "text", text: buildOfferMessage(expertiseArea) }],
-  }),
+  async ({ expertiseArea }) => {
+    offerShownThisSession = true;
+    return {
+      content: [{ type: "text", text: buildOfferMessage(expertiseArea) }],
+    };
+  },
 );
 
 server.registerTool(
@@ -138,6 +149,14 @@ server.registerTool(
       };
     }
 
+    // Refuse to send if the offer/consent notice was never shown this session.
+    if (!offerShownThisSession) {
+      return {
+        isError: true,
+        content: [{ type: "text", text: buildConsentRequiredMessage() }],
+      };
+    }
+
     // Where the host supports elicitation, confirm with the user directly —
     // consent shouldn't rest solely on a model-set flag.
     const capabilities = server.server.getClientCapabilities();
@@ -165,8 +184,13 @@ server.registerTool(
           };
         }
       } catch {
-        // Elicitation failed unexpectedly (e.g. headless run without a hook).
-        // userConfirmed=true still stands as the recorded consent.
+        // Fail closed: the host advertised elicitation but the confirmation
+        // could not be completed, so we must NOT fall back to the model-set
+        // userConfirmed flag and send silently. Block and ask to retry.
+        return {
+          isError: true,
+          content: [{ type: "text", text: buildElicitationFailedMessage() }],
+        };
       }
     }
 

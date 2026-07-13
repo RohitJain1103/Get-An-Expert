@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { createHash } from "node:crypto";
 import { env } from "./env";
+import { safeEqual } from "./id";
 
 export const DASHBOARD_COOKIE = "gae_dash";
 
@@ -12,5 +13,6 @@ export async function isDashboardAuthed(): Promise<boolean> {
   const passcode = env.dashboardPasscode();
   if (!passcode) return false;
   const cookie = (await cookies()).get(DASHBOARD_COOKIE)?.value;
-  return cookie === hashPasscode(passcode);
+  // Timing-safe: this gates read access to every stored request.
+  return cookie ? safeEqual(cookie, hashPasscode(passcode)) : false;
 }
