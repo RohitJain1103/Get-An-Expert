@@ -93,6 +93,57 @@ xyz123
     expect(text).not.toContain("hunter2hunter2");
   });
 
+  it("redacts SCREAMING_SNAKE_CASE env-var secrets (suffix keywords)", () => {
+    const input = [
+      "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMIK7MDENGbPxRfiCYEXAMPLEKEY",
+      "STRIPE_SECRET_KEY=whatever_this_is_1234567890",
+      "DATABASE_PASSWORD=hunter2hunter2extra",
+      "JWT_SECRET=myjwtsupersecretvalue123",
+      'client_secret="GOCSPXabc123defg456hijk789lmno"',
+    ].join("\n");
+    const { text } = redactText(input);
+    expect(text).not.toContain("wJalrXUtnFEMIK7MDENGbPxRfiCYEXAMPLEKEY");
+    expect(text).not.toContain("whatever_this_is_1234567890");
+    expect(text).not.toContain("hunter2hunter2extra");
+    expect(text).not.toContain("myjwtsupersecretvalue123");
+    // Identifier names are preserved; only the values are redacted.
+    expect(text).toContain("AWS_SECRET_ACCESS_KEY=");
+  });
+
+  it("redacts credentials embedded in http(s) URLs and DSNs", () => {
+    const { text } = redactText(
+      "webhook https://myuser:MySuperSecretPass1@example.com/api/hook",
+    );
+    expect(text).toContain("https://");
+    expect(text).toContain("example.com");
+    expect(text).not.toContain("MySuperSecretPass1");
+    expect(text).not.toContain("myuser:");
+  });
+
+  it("redacts PGP/GPG private key blocks", () => {
+    const pem = `-----BEGIN PGP PRIVATE KEY BLOCK-----
+lQOYBFabc123defXYZ
+-----END PGP PRIVATE KEY BLOCK-----`;
+    const { text } = redactText(`key:\n${pem}\nend`);
+    expect(text).toContain("[REDACTED:private-key]");
+    expect(text).not.toContain("lQOYBFabc123defXYZ");
+    expect(text).toContain("end");
+  });
+
+  it("redacts common vendor token formats without a key= prefix", () => {
+    const input = [
+      "GOCSPX-abcdefghijklmnopqrstuvwxyz12",
+      "dop_v1_abcdefghijklmnopqrstuvwxyz0123456789abcdef",
+      "AC0123456789abcdef0123456789abcdef",
+      "key-0123456789abcdef0123456789abcdef",
+    ].join(" ");
+    const { text } = redactText(input);
+    expect(text).not.toContain("GOCSPX-abcdefghij");
+    expect(text).not.toContain("dop_v1_abcdefghij");
+    expect(text).not.toContain("AC0123456789abcdef0123456789abcdef");
+    expect(text).not.toContain("key-0123456789abcdef0123456789abcdef");
+  });
+
   it("leaves clean text untouched and reports no redactions", () => {
     const input = "The useEffect hook re-renders because deps change.";
     const { text, redactions } = redactText(input);

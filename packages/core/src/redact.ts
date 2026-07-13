@@ -36,8 +36,9 @@ const placeholder = (type: string): string => `[REDACTED:${type}]`;
 const SECRET_PATTERNS: SecretPattern[] = [
   {
     type: "private-key",
+    // Trailing [A-Z ]* also covers "... PRIVATE KEY BLOCK-----" (PGP/GPG).
     pattern:
-      /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----/g,
+      /-----BEGIN [A-Z0-9 ]*PRIVATE KEY[A-Z ]*-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY[A-Z ]*-----/g,
   },
   { type: "anthropic-api-key", pattern: /\bsk-ant-[A-Za-z0-9_-]{16,}/g },
   {
@@ -62,13 +63,21 @@ const SECRET_PATTERNS: SecretPattern[] = [
   { type: "npm-token", pattern: /\bnpm_[A-Za-z0-9]{36}\b/g },
   { type: "huggingface-token", pattern: /\bhf_[A-Za-z0-9]{30,}\b/g },
   {
+    type: "google-oauth-client-secret",
+    pattern: /\bGOCSPX-[A-Za-z0-9_-]{10,}/g,
+  },
+  { type: "digitalocean-token", pattern: /\bdop_v1_[A-Za-z0-9]{32,}\b/g },
+  { type: "twilio-key", pattern: /\b(?:AC|SK)[a-f0-9]{32}\b/g },
+  { type: "mailgun-key", pattern: /\bkey-[a-f0-9]{32}\b/g },
+  {
     type: "jwt",
     pattern: /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g,
   },
   {
     type: "connection-credentials",
-    pattern:
-      /\b((?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|rediss?|amqps?|s?ftp):\/\/)[^\s:@/]+:[^\s@/]+@/gi,
+    // Any URI scheme with embedded user:pass@ — covers http(s) basic-auth
+    // webhooks and Sentry DSNs, not just database schemes.
+    pattern: /\b([a-z][a-z0-9+.-]*:\/\/)[^\s:@/]+:[^\s@/]+@/gi,
     replacement: `$1${placeholder("connection-credentials")}@`,
   },
   {
@@ -77,8 +86,12 @@ const SECRET_PATTERNS: SecretPattern[] = [
   },
   {
     type: "credential",
+    // The keyword may appear anywhere in the identifier, so SCREAMING_SNAKE
+    // names like AWS_SECRET_ACCESS_KEY / DB_PASSWORD / CLIENT_SECRET match —
+    // not only when the keyword is the identifier's prefix. Leading \b keeps
+    // start positions anchored to word boundaries (avoids O(n^2) scanning).
     pattern:
-      /\b((?:api[_-]?key|apikey|secret|token|password|passwd|pwd|auth)[A-Za-z0-9_-]*)(\s*[:=]\s*)(["']?)(?!\[REDACTED)([^\s"'[\]]{8,})\3/gi,
+      /\b([A-Za-z0-9_-]*(?:api[_-]?key|apikey|secret|token|password|passwd|pwd|auth)[A-Za-z0-9_-]*)(\s*[:=]\s*)(["']?)(?!\[REDACTED)([^\s"'[\]]{8,})\3/gi,
     replacement: `$1$2$3${placeholder("credential")}$3`,
   },
 ];
