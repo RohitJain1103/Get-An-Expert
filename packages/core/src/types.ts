@@ -31,18 +31,16 @@ export interface ExpertRequestPayload {
   clientRedactions?: RedactionSummary[];
 }
 
-/** The guidance returned to the stuck user. */
+/** The guidance a human expert sends back to the stuck user. */
 export interface ExpertResponse {
-  /** Warm 2-3 sentence human-voiced opener. */
+  /** Short personal note from the expert. */
   intro: string;
   /** Why they're stuck, in plain words. */
   diagnosis: string;
   /** The ready-to-paste prompt that should get them unstuck. */
   suggestedPrompt: string;
-  /** Honest one-liner that this first pass is AI-assisted. */
-  disclosure: string;
-  model?: string;
-  generatedAt: string;
+  /** ISO timestamp of when the expert responded. */
+  respondedAt: string;
 }
 
 export type ExpertRequestStatus = "new" | "answered" | "escalated" | "failed";

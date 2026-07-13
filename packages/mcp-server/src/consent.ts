@@ -3,7 +3,7 @@ import { privacyUrl } from "./config";
 /**
  * The consent notice shown to the user before anything can be sent.
  * This copy is load-bearing for compliance (explicit opt-in, "what we
- * send / never send" pairing, AI disclosure, retention + deletion) —
+ * send / never send" pairing, retention + deletion) —
  * bump CONSENT_TEXT_VERSION in config.ts whenever it changes.
  */
 export function buildOfferMessage(expertiseArea: string): string {
@@ -11,9 +11,8 @@ export function buildOfferMessage(expertiseArea: string): string {
     `✨ **Looks like you're stuck. Want an expert eye on this ${expertiseArea} problem?**`,
     "",
     "Here's the deal: with your OK, Get An Expert sends **one structured summary** of " +
-      "where this session is stuck to its API, and you get back a diagnosis plus the " +
-      "exact prompt to try next. Today that first response is AI-assisted triage " +
-      "(it's labeled as such) — human experts are joining soon.",
+      "where this session is stuck to its API, and a real human expert reviews it " +
+      "and sends back a diagnosis plus the exact next steps.",
     "",
     "**What gets sent (only if you say yes):** your goal, what's been tried, error " +
       "messages, a short session summary, and your tech stack.",

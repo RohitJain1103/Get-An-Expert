@@ -31,7 +31,7 @@ export default function PrivacyPage() {
         Privacy Policy
       </h1>
       <p className="mt-2 text-sm text-zinc-500">
-        Effective date: July 13, 2026 · Version 1.0
+        Effective date: July 13, 2026 · Version 1.1
       </p>
 
       <Section title="1. Who we are">
@@ -93,12 +93,9 @@ export default function PrivacyPage() {
       <Section title="5. Why we use it, and our legal basis">
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            Generating your unstuck suggestion — <em>consent</em> (GDPR Art.
-            6(1)(a)), given per request.
-          </li>
-          <li>
-            Optional human-expert follow-up (when available) —{" "}
-            <em>consent</em>.
+            Sharing your session summary with a human expert who reviews it
+            and writes your response — <em>consent</em> (GDPR Art. 6(1)(a)),
+            given per request.
           </li>
           <li>
             Service security, rate limiting, and abuse prevention —{" "}
@@ -114,26 +111,25 @@ export default function PrivacyPage() {
         </p>
       </Section>
 
-      <Section title="6. AI processing disclosure">
+      <Section title="6. Human review">
         <p>
-          Your session summary is processed by Anthropic&apos;s Claude API to
-          generate the suggestion you receive. Responses are AI-generated and
-          labeled as such in every reply. Anthropic does not train models on
-          API inputs or outputs by default, and we never permit our data to be
-          used for model training. The AI suggestion is informational only —
-          it is not an automated decision with legal or similarly significant
-          effect (GDPR Art. 22 does not apply).
+          Your session summary is reviewed by a human expert at Get An
+          Expert, who writes the response you receive. We do not use your
+          data to generate automated responses, we never permit it to be used
+          for model training, and no decision with legal or similarly
+          significant effect is made about you (GDPR Art. 22 does not apply).
         </p>
       </Section>
 
       <Section title="7. Who we share data with">
         <p>
-          We use three subprocessors, strictly to run the service: Vercel
-          (hosting), Anthropic (AI processing), and Upstash (storage). We do
-          not sell your data, do not share it for advertising, and do not
-          allow anyone to train models on it. Because we do not sell or share
-          personal information as defined by the CCPA/CPRA, no &quot;Do Not
-          Sell or Share&quot; mechanism is needed.
+          We use two subprocessors, strictly to run the service: Vercel
+          (hosting) and Upstash (storage). Your summary is visible to the
+          vetted expert who answers it. We do not sell your data, do not
+          share it for advertising, and do not allow anyone to train models
+          on it. Because we do not sell or share personal information as
+          defined by the CCPA/CPRA, no &quot;Do Not Sell or Share&quot;
+          mechanism is needed.
         </p>
       </Section>
 
@@ -149,7 +145,7 @@ export default function PrivacyPage() {
       <Section title="9. Retention and deletion">
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            Session summaries and generated suggestions{" "}
+            Session summaries and expert responses{" "}
             <strong>auto-delete 30 days</strong> after submission.
           </li>
           <li>
