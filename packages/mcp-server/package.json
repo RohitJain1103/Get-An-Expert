@@ -1,0 +1,40 @@
+{
+  "name": "get-an-expert-mcp",
+  "version": "0.1.0",
+  "description": "Stuck in your AI coding session? Get An Expert offers a hand at the right moment — with your explicit consent, it sends a redacted summary of where you're stuck to Get An Expert and returns tailored advice on the best next prompt. Human experts in the loop coming soon.",
+  "keywords": [
+    "mcp",
+    "modelcontextprotocol",
+    "expert",
+    "help",
+    "claude-code",
+    "codex",
+    "coding-assistant"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "get-an-expert-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --clean",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "prepublishOnly": "pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "tsup": "^8.5.1",
+    "tsx": "^4.23.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
+  }
+}

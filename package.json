@@ -1,0 +1,12 @@
+{
+  "name": "get-an-expert",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Get An Expert — human expert helpline for AI coding tools, delivered as an MCP server",
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "dev:web": "pnpm --filter web dev"
+  },
+  "packageManager": "pnpm@10.33.2"
+}
