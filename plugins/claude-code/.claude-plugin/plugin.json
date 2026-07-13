@@ -1,7 +1,7 @@
 {
   "name": "get-an-expert",
   "description": "Offers expert help when a coding session gets stuck. Detects repeated failed attempts and nudges Claude to offer Get An Expert — nothing is ever sent without your explicit consent.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": {
     "name": "Get An Expert"
   },
