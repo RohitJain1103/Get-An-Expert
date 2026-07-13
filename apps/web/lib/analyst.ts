@@ -15,6 +15,44 @@ const analysisSchema = z.object({
   expertise_area: z.string(),
 });
 
+/**
+ * Distinctive markers from SYSTEM_PROMPT that must never appear in model
+ * output. Their presence means a prompt-injection tried to make the model
+ * regurgitate the proprietary triage prompt — we fail safe instead of
+ * returning it. Chosen to be section tags and internal phrasing the model is
+ * NOT instructed to emit, so legitimate diagnoses never false-positive.
+ */
+const SYSTEM_PROMPT_MARKERS = [
+  "triage engine for get an expert",
+  "you think like a staff engineer who has watched",
+  "<suggested_prompt_rules>",
+  "<diagnosis>",
+  "<intro_rules>",
+  "<input_format>",
+  "<output_format>",
+  "<quality_bar>",
+  "banned outright",
+  "read-aloud test",
+];
+
+/** True if any output field leaks the system prompt (defense in depth). */
+export function leaksSystemPrompt(output: {
+  diagnosis: string;
+  suggested_prompt: string;
+  intro: string;
+  expertise_area: string;
+}): boolean {
+  const haystack = [
+    output.diagnosis,
+    output.suggested_prompt,
+    output.intro,
+    output.expertise_area,
+  ]
+    .join("\n")
+    .toLowerCase();
+  return SYSTEM_PROMPT_MARKERS.some((marker) => haystack.includes(marker));
+}
+
 let client: Anthropic | null = null;
 
 function getClient(): Anthropic {
@@ -80,6 +118,11 @@ export const analyzeStuckSession: Analyze = async (
   const parsed = response.parsed_output;
   if (!parsed) {
     throw new Error("Analysis returned no parseable output");
+  }
+  if (leaksSystemPrompt(parsed)) {
+    // A prompt-injection got the model to echo the system prompt; refuse to
+    // surface it. The route turns this into a generic error to the caller.
+    throw new Error("Analysis output failed safety check");
   }
   return { ...parsed, model: MODEL };
 };

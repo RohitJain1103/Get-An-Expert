@@ -12,13 +12,34 @@
  * tiny local state file under ~/.get-an-expert/nudges to avoid re-nudging.
  */
 import {
+  closeSync,
   existsSync,
   mkdirSync,
+  openSync,
   readFileSync,
+  readSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+
+/** Cap how much transcript we read each turn so long sessions stay O(1) I/O. */
+const MAX_TRANSCRIPT_BYTES = 4 * 1024 * 1024;
+
+/** Read the whole transcript, or just its last MAX_TRANSCRIPT_BYTES if huge. */
+function readTranscriptTail(path) {
+  const size = statSync(path).size;
+  if (size <= MAX_TRANSCRIPT_BYTES) return readFileSync(path, "utf8");
+  const fd = openSync(path, "r");
+  try {
+    const buf = Buffer.allocUnsafe(MAX_TRANSCRIPT_BYTES);
+    const bytes = readSync(fd, buf, 0, MAX_TRANSCRIPT_BYTES, size - MAX_TRANSCRIPT_BYTES);
+    return buf.toString("utf8", 0, bytes);
+  } finally {
+    closeSync(fd);
+  }
+}
 
 const MIN_USER_PROMPTS = envInt("GAE_MIN_PROMPTS", 10);
 const MIN_ERROR_SIGNALS = envInt("GAE_MIN_ERRORS", 3);
@@ -69,7 +90,7 @@ function main() {
 
   let raw;
   try {
-    raw = readFileSync(transcriptPath, "utf8");
+    raw = readTranscriptTail(transcriptPath);
   } catch {
     return;
   }
@@ -95,13 +116,14 @@ function main() {
   if (userPrompts < state.lastNudgePromptCount + RENUDGE_AFTER_PROMPTS) return;
 
   try {
-    mkdirSync(stateDir, { recursive: true });
+    mkdirSync(stateDir, { recursive: true, mode: 0o700 });
     writeFileSync(
       stateFile,
       JSON.stringify({
         lastNudgePromptCount: userPrompts,
         nudgeCount: state.nudgeCount + 1,
       }),
+      { mode: 0o600 },
     );
   } catch {
     // stateless fallback: still nudge this once

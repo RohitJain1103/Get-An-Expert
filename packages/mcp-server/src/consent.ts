@@ -37,3 +37,10 @@ export function buildConsentRequiredMessage(): string {
     "consent notice from offer_expert_help and only retry after they clearly agree."
   );
 }
+
+export function buildElicitationFailedMessage(): string {
+  return (
+    "Not sent: the confirmation step could not be completed, so nothing was " +
+    "transmitted. Please try again, and confirm when the prompt appears."
+  );
+}
