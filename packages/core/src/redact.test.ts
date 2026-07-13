@@ -4,7 +4,7 @@ import { redactObject, redactText } from "./redact.js";
 describe("redactText", () => {
   it("redacts Anthropic API keys", () => {
     const { text, redactions } = redactText(
-      "my key is sk-ant-api03-i2bL7fJC_Dan9zHAYaP8dNj9pg74nIROGlNCEDabc123 ok",
+      "my key is sk-ant-api03-FAKE-FAKE-FAKE-FAKE-FAKE-FAKE-0000-not-a-real-key ok",
     );
     expect(text).not.toContain("sk-ant-api03");
     expect(text).toContain("[REDACTED:anthropic-api-key]");
