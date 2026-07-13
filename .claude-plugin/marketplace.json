@@ -1,0 +1,13 @@
+{
+  "name": "get-an-expert",
+  "owner": {
+    "name": "Get An Expert"
+  },
+  "plugins": [
+    {
+      "name": "get-an-expert",
+      "description": "Offers expert help when a coding session gets stuck — consent-first, with deterministic stuck detection.",
+      "source": "./plugins/claude-code"
+    }
+  ]
+}
