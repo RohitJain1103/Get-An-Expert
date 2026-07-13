@@ -31,13 +31,13 @@
     "prepublishOnly": "pnpm test && pnpm build"
   },
   "devDependencies": {
+    "@get-an-expert/core": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@types/node": "^20.19.43",
     "tsup": "^8.5.1",
     "tsx": "^4.23.1",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.10"
-  },
-  "dependencies": {
-    "@get-an-expert/core": "workspace:*"
+    "vitest": "^4.1.10",
+    "zod": "^4.4.3"
   }
 }
