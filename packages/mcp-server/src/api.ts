@@ -30,7 +30,8 @@ export function buildRedactedPayload(input: ExpertHelpInput): RedactedPayload {
   return { payload: value as ExpertHelpInput, clientRedactions: redactions };
 }
 
-const REQUEST_TIMEOUT_MS = 150_000;
+/** Submission is a quick store-and-confirm — no long-running work behind it. */
+const REQUEST_TIMEOUT_MS = 30_000;
 
 export async function submitExpertRequest(
   input: ExpertHelpInput,

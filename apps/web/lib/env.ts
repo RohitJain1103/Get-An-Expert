@@ -3,8 +3,6 @@
  * values at request time and tests can stub process.env.
  */
 export const env = {
-  anthropicApiKey: (): string | null => process.env.ANTHROPIC_API_KEY ?? null,
-
   upstashUrl: (): string | null =>
     process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL ?? null,
 
