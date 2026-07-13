@@ -1,7 +1,16 @@
+import type {
+  NewThreadMessage,
+  ThreadMessage,
+} from "@get-an-expert/core";
 import type { Store, StoredRequest } from "./types";
 
 interface Entry {
   record: StoredRequest;
+  expiresAt: number;
+}
+
+interface MessageList {
+  messages: ThreadMessage[];
   expiresAt: number;
 }
 
@@ -12,6 +21,7 @@ interface Entry {
  */
 export class MemoryStore implements Store {
   private entries = new Map<string, Entry>();
+  private threads = new Map<string, MessageList>();
   private counters = new Map<string, { count: number; expiresAt: number }>();
 
   private now(): number {
@@ -61,7 +71,35 @@ export class MemoryStore implements Store {
   }
 
   async delete(id: string): Promise<boolean> {
+    this.threads.delete(id);
     return this.entries.delete(id);
+  }
+
+  async appendMessage(
+    id: string,
+    message: NewThreadMessage,
+    ttlSeconds: number,
+  ): Promise<number> {
+    const existing = this.threads.get(id);
+    const list: MessageList =
+      existing && existing.expiresAt > this.now()
+        ? existing
+        : { messages: [], expiresAt: this.now() + ttlSeconds * 1000 };
+    const next: ThreadMessage = {
+      ...structuredClone(message),
+      seq: list.messages.length + 1,
+    };
+    this.threads.set(id, {
+      ...list,
+      messages: [...list.messages, next],
+    });
+    return next.seq;
+  }
+
+  async listMessages(id: string, afterSeq: number): Promise<ThreadMessage[]> {
+    const list = this.threads.get(id);
+    if (!list || list.expiresAt <= this.now()) return [];
+    return structuredClone(list.messages.filter((m) => m.seq > afterSeq));
   }
 
   async incrWindow(key: string, windowSeconds: number): Promise<number> {

@@ -62,3 +62,39 @@ export async function checkLoginRateLimit(
   if (count > 10) return { allowed: false, retryAfterSeconds: windowSeconds };
   return { allowed: true };
 }
+
+/**
+ * Posting on a thread: chattier than opening requests, but a human
+ * conversation never needs more than a message every few seconds.
+ */
+export async function checkThreadWriteRateLimit(
+  store: Store,
+  ip: string,
+  requestId: string,
+): Promise<RateLimitDecision> {
+  const rules: LimitRule[] = [
+    { key: `msg-ip-min:${ip}`, windowSeconds: MINUTE, max: 20 },
+    { key: `msg-ip-hour:${ip}`, windowSeconds: HOUR, max: 120 },
+    { key: `msg-thread-hour:${requestId}`, windowSeconds: HOUR, max: 60 },
+  ];
+  for (const rule of rules) {
+    const count = await store.incrWindow(rule.key, rule.windowSeconds);
+    if (count > rule.max) {
+      return { allowed: false, retryAfterSeconds: rule.windowSeconds };
+    }
+  }
+  return { allowed: true };
+}
+
+/**
+ * Reading a thread: sized for the companion plugin's poll (~1/min per
+ * session) with headroom for manual checks.
+ */
+export async function checkThreadReadRateLimit(
+  store: Store,
+  ip: string,
+): Promise<RateLimitDecision> {
+  const count = await store.incrWindow(`msg-read-ip-min:${ip}`, MINUTE);
+  if (count > 30) return { allowed: false, retryAfterSeconds: MINUTE };
+  return { allowed: true };
+}
