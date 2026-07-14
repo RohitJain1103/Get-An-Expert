@@ -89,6 +89,9 @@ export async function POST(
     authorName: actor.role === "expert" ? env.expertDisplayName() : undefined,
     text: parsed.data.text,
   });
+  if (result.outcome === "unavailable") {
+    return fail(409, "Live chat is not available for this request.");
+  }
   if (result.outcome === "ended") {
     // 410 is the contract for the hard stop: the session is gone for good.
     return fail(410, "This chat has ended. Nothing is shared anymore.");

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChatMessage } from "@get-an-expert/core";
+import { redactText, type ChatMessage } from "@get-an-expert/core";
 
 interface ChatData {
   messages: ChatMessage[];
@@ -59,21 +59,32 @@ export function ChatPanel({ requestId }: { requestId: string }) {
   }, [poll]);
 
   async function send() {
-    const text = draft.trim();
-    if (!text) return;
-    setDraft("");
-    const res = await fetch(`/api/v1/requests/${requestId}/messages`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
-    if (!res.ok) {
-      setError(
-        res.status === 410 ? "This chat has ended." : "Message failed to send.",
-      );
-      return;
+    const raw = draft.trim();
+    if (!raw) return;
+    // Local redaction before the network call — same defense-in-depth
+    // contract as the CLI; the server redacts again.
+    const text = redactText(raw).text;
+    try {
+      const res = await fetch(`/api/v1/requests/${requestId}/messages`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) {
+        setError(
+          res.status === 410
+            ? "This chat has ended."
+            : "Message failed to send.",
+        );
+        return;
+      }
+      setDraft("");
+      setError(null);
+      await poll();
+    } catch {
+      // Keep the draft so nothing typed is lost.
+      setError("Message failed to send — check your connection.");
     }
-    await poll();
   }
 
   async function endSession() {
@@ -81,9 +92,21 @@ export function ChatPanel({ requestId }: { requestId: string }) {
       setConfirmingEnd(true);
       return;
     }
-    await fetch(`/api/v1/requests/${requestId}/end`, { method: "POST" });
-    setConfirmingEnd(false);
-    await poll();
+    try {
+      const res = await fetch(`/api/v1/requests/${requestId}/end`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        setError("Ending the session failed — try again.");
+        return;
+      }
+      setError(null);
+      await poll();
+    } catch {
+      setError("Ending the session failed — check your connection.");
+    } finally {
+      setConfirmingEnd(false);
+    }
   }
 
   if (status === "none" && messages.length === 0) {

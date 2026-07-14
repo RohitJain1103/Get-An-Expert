@@ -10,7 +10,8 @@ import { THIRTY_DAYS_SECONDS } from "./store/types";
 
 export type PostChatResult =
   | { outcome: "ok"; seq: number }
-  | { outcome: "ended" };
+  | { outcome: "ended" }
+  | { outcome: "unavailable" };
 
 /** Constant-time check of a presented chat token against the stored hash. */
 export function verifyChatToken(record: StoredRequest, token: string): boolean {
@@ -31,9 +32,16 @@ export async function postChatMessage(opts: {
   authorName?: string;
   now?: Date;
 }): Promise<PostChatResult> {
-  const { store, record, from, authorName } = opts;
+  const { store, from, authorName } = opts;
   const now = opts.now ?? new Date();
-  if (record.chat?.status !== "active") return { outcome: "ended" };
+  // Re-read at write time: the caller's record was fetched for auth and may
+  // be stale — the other side can end the chat in between (hard-stop TOCTOU).
+  // A tiny get→append window remains, but any post STARTING after an end
+  // completes is refused.
+  const record = await store.get(opts.record.id);
+  if (!record) return { outcome: "ended" };
+  if (!record.chat) return { outcome: "unavailable" };
+  if (record.chat.status !== "active") return { outcome: "ended" };
 
   // First expert message: record the join and emit a one-time join notice.
   if (from === "expert" && !record.chat.expertJoinedAt) {
@@ -93,8 +101,10 @@ export async function endChatSession(opts: {
   by: ChatRole;
   now?: Date;
 }): Promise<"ended" | "already_ended"> {
-  const { store, record, by } = opts;
+  const { store, by } = opts;
   const now = opts.now ?? new Date();
+  // Fresh read so a concurrent end keeps the first ender's attribution.
+  const record = (await store.get(opts.record.id)) ?? opts.record;
   if (!record.chat || record.chat.status === "ended") return "already_ended";
 
   const ended: StoredRequest = {

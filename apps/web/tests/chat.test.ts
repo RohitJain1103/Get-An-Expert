@@ -153,8 +153,37 @@ describe("postChatMessage", () => {
     expect((await listChatMessages(store, "req_a", 0)).messages).toEqual([]);
   });
 
-  it("refuses when the record has no chat state (pre-feature record)", async () => {
+  it("distinguishes pre-feature records without chat state", async () => {
     const { store, record } = await seeded({ chat: undefined });
+    const result = await postChatMessage({
+      store,
+      record,
+      from: "user",
+      text: "hi",
+      now: NOW,
+    });
+    expect(result).toEqual({ outcome: "unavailable" });
+  });
+
+  it("refuses a post carrying a STALE active record after the chat ended (TOCTOU)", async () => {
+    const { store, record } = await seeded();
+    // Another actor ends the chat after our caller fetched `record`.
+    await endChatSession({ store, record, by: "expert", now: NOW });
+    const result = await postChatMessage({
+      store,
+      record, // stale snapshot still says active
+      from: "user",
+      text: "squeezed past the hard stop?",
+      now: NOW,
+    });
+    expect(result).toEqual({ outcome: "ended" });
+    const { messages } = await listChatMessages(store, "req_a", 0);
+    expect(messages.filter((m) => m.kind === "message")).toEqual([]);
+  });
+
+  it("refuses when the record was deleted between auth and post", async () => {
+    const { store, record } = await seeded();
+    await store.delete("req_a");
     const result = await postChatMessage({
       store,
       record,
@@ -192,14 +221,9 @@ describe("endChatSession", () => {
   it("is idempotent — ending twice stays ended by the first ender", async () => {
     const { store, record } = await seeded();
     await endChatSession({ store, record, by: "expert", now: NOW });
-    const fresh = await store.get("req_a");
-    expect(fresh).not.toBeNull();
-    const result = await endChatSession({
-      store,
-      record: fresh as StoredRequest,
-      by: "user",
-      now: NOW,
-    });
+    // Second end reuses the ORIGINAL (stale, still-active) record: the fresh
+    // read inside endChatSession must still see it as already ended.
+    const result = await endChatSession({ store, record, by: "user", now: NOW });
     expect(result).toBe("already_ended");
     expect((await store.get("req_a"))?.chat?.endedBy).toBe("expert");
   });

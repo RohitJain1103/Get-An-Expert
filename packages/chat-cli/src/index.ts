@@ -159,7 +159,15 @@ async function main(): Promise<void> {
           break;
         }
         case "end": {
-          await client.endChat();
+          const ended = await client.endChat();
+          if (!ended.ok) {
+            // Never claim the session is over when the server didn't confirm.
+            printAbove(
+              rl,
+              `! Could not end the chat: ${ended.error ?? "unknown error"} — still open; try /end again.`,
+            );
+            break;
+          }
           clearOwnRelayFlag();
           shutdown(
             "— you ended the chat. Nothing is shared anymore. Your data auto-deletes in 30 days. —",
