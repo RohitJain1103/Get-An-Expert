@@ -10,6 +10,9 @@ export const newRequestId = (): string => `req_${randomUUID()}`;
 export const newDeleteToken = (): string =>
   randomBytes(24).toString("base64url");
 
+export const newChatToken = (): string =>
+  randomBytes(24).toString("base64url");
+
 /** Only the hash is stored; the raw token is returned to the client once. */
 export const hashToken = (token: string): string =>
   createHash("sha256").update(token).digest("hex");

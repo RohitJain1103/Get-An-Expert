@@ -101,5 +101,7 @@ export interface ExpertRequestRecord {
   /** What the server-side re-redaction pass removed. */
   serverRedactions: RedactionSummary[];
   consent: ConsentRecord;
+  /** Live-chat state; present once a chat-capable request is created. */
+  chat?: ChatState;
   response?: ExpertResponse;
 }
