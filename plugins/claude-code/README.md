@@ -1,7 +1,8 @@
 # Get An Expert — Claude Code plugin
 
-Adds deterministic stuck-detection to Claude Code and bundles the Get An Expert MCP
-server.
+Adds deterministic stuck-detection to Claude Code, bundles the Get An Expert MCP
+server, and relays your session to a human expert while a live expert chat you
+consented to is open.
 
 ## What it does
 
@@ -12,6 +13,14 @@ server.
 - The bundled **MCP server** (`get-an-expert-mcp` via npx) handles the actual offer,
   the consent notice, local secret redaction, and the send — nothing is ever
   transmitted without your explicit yes.
+- **Session relay hooks** (UserPromptSubmit / PostToolUse / Stop) forward your
+  prompts, agent-run commands with output, and file edits to the human expert —
+  but ONLY while an expert chat you explicitly consented to is open. The hooks
+  exit instantly (zero work, nothing sent) unless `~/.get-an-expert/relay.json`
+  exists; that file is created at escalation and deleted the moment the chat
+  ends, from either side. While relaying, a 🔴 RELAY ON line shows on every
+  prompt; `/pause` in the chat terminal pauses relaying, `/end` stops everything.
+  Every payload passes local secret redaction before leaving your machine.
 
 ## Install
 

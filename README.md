@@ -12,7 +12,7 @@ triage today (honestly disclosed), human experts in the loop next.
 
 ```
 packages/core/         Shared types + secret redaction (runs client- AND server-side)
-packages/chat-cli/     Terminal chat with a human expert (npx get-an-expert chat <id>)
+packages/chat-cli/     Terminal chat + session-relay script (npx get-an-expert chat|init)
 packages/mcp-server/   The stdio MCP server published to npm as get-an-expert-mcp
 apps/web/              Next.js API + triage engine + dashboard + privacy/terms (Vercel)
 plugins/claude-code/   Claude Code plugin: deterministic stuck-detection Stop hook + MCP bundle
@@ -33,8 +33,15 @@ plugins/claude-code/   Claude Code plugin: deterministic stuck-detection Stop ho
 4. **Triage.** The API re-redacts, stores with a 30-day TTL, runs the Claude-powered
    analysis (Opus 4.8, frozen cached system prompt, structured outputs), and returns a
    humanized, honestly-labeled response with a deletion link.
-5. **Review.** Requests land in the passcode-gated dashboard at `/dashboard` for the
-   (future) human-expert loop.
+5. **Live expert chat + relay.** Escalation mints a chat token, opens Terminal A
+   (`npx get-an-expert chat <id>` — direct human↔human, no AI in the middle) and
+   arms the session relay: while the chat is open, prompts, agent-run commands
+   with output, and file edits stream to the expert's dashboard view via host
+   hooks (Claude Code plugin; `init cursor` / `init windsurf` for the others).
+   Either side can end it — the server then refuses further events (410) and the
+   local relay flag self-clears.
+6. **Review.** Requests land in the passcode-gated dashboard at `/dashboard`,
+   where the expert chats and watches relayed events inline.
 
 ## Development
 

@@ -31,7 +31,7 @@ export default function PrivacyPage() {
         Privacy Policy
       </h1>
       <p className="mt-2 text-sm text-zinc-500">
-        Effective date: July 13, 2026 · Version 1.0
+        Effective date: July 14, 2026 · Version 1.1
       </p>
 
       <Section title="1. Who we are">
@@ -76,10 +76,11 @@ export default function PrivacyPage() {
         </ul>
         <p>
           <strong>What we never collect:</strong> your source files or
-          repository contents; your full conversation transcript; environment
-          variables, API keys, or other secrets; anything in the background or
-          without your explicit per-request consent. The software sends zero
-          bytes to us until you say yes to a specific request.
+          repository contents; environment variables, API keys, or other
+          secrets; anything in the background or without your explicit
+          consent. Outside an active expert chat session (section 5), nothing
+          is collected passively — the software sends zero bytes to us until
+          you say yes.
         </p>
       </Section>
 
@@ -90,7 +91,38 @@ export default function PrivacyPage() {
         </p>
       </Section>
 
-      <Section title="5. Why we use it, and our legal basis">
+      <Section title="5. Live expert chat &amp; session relay">
+        <p>
+          When you escalate to a human expert, you consent once, up front, to
+          two additional flows — both start only after your explicit
+          &quot;proceed&quot; and both stop the instant the chat ends:
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            <strong>Chat messages</strong> you and the expert exchange in the
+            chat terminal. The chat is human-to-human: no AI model ever reads
+            it. The only automation touching it is secret redaction, which
+            runs on your machine before sending and again on our servers — in
+            both directions, expert messages included.
+          </li>
+          <li>
+            <strong>Relayed session activity</strong>: the prompts you type to
+            your coding agent, the commands it runs with their output, and the
+            file edits it makes — so the expert can watch real attempts. This
+            relay is active only while the chat is open, a RELAY ON indicator
+            shows in your session, and you can pause it (/pause) or end
+            everything (/end) at any moment. Either side ending the chat is a
+            hard stop: our servers refuse any further relayed event.
+          </li>
+        </ul>
+        <p>
+          Chat messages and relayed events are stored with the request they
+          belong to: they share its 30-day auto-deletion and are removed by
+          its private deletion link.
+        </p>
+      </Section>
+
+      <Section title="6. Why we use it, and our legal basis">
         <ul className="list-disc space-y-1 pl-5">
           <li>
             Generating your unstuck suggestion — <em>consent</em> (GDPR Art.
@@ -114,7 +146,7 @@ export default function PrivacyPage() {
         </p>
       </Section>
 
-      <Section title="6. AI processing disclosure">
+      <Section title="7. AI processing disclosure">
         <p>
           Your session summary is processed by Anthropic&apos;s Claude API to
           generate the suggestion you receive. Responses are AI-generated and
@@ -122,11 +154,12 @@ export default function PrivacyPage() {
           API inputs or outputs by default, and we never permit our data to be
           used for model training. The AI suggestion is informational only —
           it is not an automated decision with legal or similarly significant
-          effect (GDPR Art. 22 does not apply).
+          effect (GDPR Art. 22 does not apply). The live expert chat and relayed
+          session events are never processed by any AI model.
         </p>
       </Section>
 
-      <Section title="7. Who we share data with">
+      <Section title="8. Who we share data with">
         <p>
           We use three subprocessors, strictly to run the service: Vercel
           (hosting), Anthropic (AI processing), and Upstash (storage). We do
@@ -137,7 +170,7 @@ export default function PrivacyPage() {
         </p>
       </Section>
 
-      <Section title="8. International transfers">
+      <Section title="9. International transfers">
         <p>
           Data is processed in the United States. For transfers from the
           EU/UK, we rely on our subprocessors&apos; safeguards — Standard
@@ -146,7 +179,7 @@ export default function PrivacyPage() {
         </p>
       </Section>
 
-      <Section title="9. Retention and deletion">
+      <Section title="10. Retention and deletion">
         <ul className="list-disc space-y-1 pl-5">
           <li>
             Session summaries and generated suggestions{" "}
@@ -164,7 +197,7 @@ export default function PrivacyPage() {
         </ul>
       </Section>
 
-      <Section title="10. Your rights">
+      <Section title="11. Your rights">
         <p>
           Under the GDPR you have the right to access, rectify, erase,
           restrict, or object to processing of your personal data, the right
@@ -180,7 +213,7 @@ export default function PrivacyPage() {
         </p>
       </Section>
 
-      <Section title="11. Security">
+      <Section title="12. Security">
         <p>
           TLS for all data in transit, encryption at rest with our storage
           provider, client-side secret redaction before transmission plus a
@@ -189,14 +222,14 @@ export default function PrivacyPage() {
         </p>
       </Section>
 
-      <Section title="12. Children">
+      <Section title="13. Children">
         <p>
           The service is for developers and is not directed at children under
           16. We do not knowingly collect data from children.
         </p>
       </Section>
 
-      <Section title="13. Changes">
+      <Section title="14. Changes">
         <p>
           We&apos;ll post any changes here with a new effective date and
           version number. Material changes will also be noted in the
