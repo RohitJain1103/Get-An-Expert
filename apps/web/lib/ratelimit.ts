@@ -62,3 +62,27 @@ export async function checkLoginRateLimit(
   if (count > 10) return { allowed: false, retryAfterSeconds: windowSeconds };
   return { allowed: true };
 }
+
+/**
+ * Chat endpoints. IP-gated BEFORE any token verification (cheap rejection of
+ * floods). Posts: a fast human typist tops out well under 30 lines/minute.
+ * Polls: clients poll every ~2s (30/min); 240/min leaves room for a dashboard
+ * tab and a CLI on one NAT'd office IP without letting scrapers hammer us.
+ */
+export async function checkChatPostRateLimit(
+  store: Store,
+  ip: string,
+): Promise<RateLimitDecision> {
+  const count = await store.incrWindow(`chat-post:${ip}`, MINUTE);
+  if (count > 30) return { allowed: false, retryAfterSeconds: MINUTE };
+  return { allowed: true };
+}
+
+export async function checkChatPollRateLimit(
+  store: Store,
+  ip: string,
+): Promise<RateLimitDecision> {
+  const count = await store.incrWindow(`chat-poll:${ip}`, MINUTE);
+  if (count > 240) return { allowed: false, retryAfterSeconds: MINUTE };
+  return { allowed: true };
+}
