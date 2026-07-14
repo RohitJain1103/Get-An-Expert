@@ -47,6 +47,42 @@ export interface ExpertResponse {
 
 export type ExpertRequestStatus = "new" | "answered" | "escalated" | "failed";
 
+/** Who authored a chat message or action. */
+export type ChatRole = "user" | "expert";
+
+/** A single line in the live user↔expert chat. */
+export interface ChatMessage {
+  /** 1-based position in the request's message list; assigned by the store. */
+  seq: number;
+  /** ISO timestamp. */
+  at: string;
+  from: ChatRole;
+  /** Display name for expert messages (e.g. "Priya"); absent for the user. */
+  authorName?: string;
+  /** "system" lines are join/end notices rendered differently by clients. */
+  kind: "message" | "system";
+  text: string;
+}
+
+/** A ChatMessage before the store assigns its seq. */
+export type NewChatMessage = Omit<ChatMessage, "seq">;
+
+export type ChatSessionStatus = "active" | "ended";
+
+/**
+ * Live-chat state carried on the request record. "ended" is a hard stop:
+ * the server refuses further messages (HTTP 410) and it can never restart.
+ */
+export interface ChatState {
+  status: ChatSessionStatus;
+  startedAt: string;
+  /** Set when the expert first posts; drives the one-time join notice. */
+  expertJoinedAt?: string;
+  expertName?: string;
+  endedAt?: string;
+  endedBy?: ChatRole;
+}
+
 /** Consent metadata recorded with every request. */
 export interface ConsentRecord {
   agreed: boolean;

@@ -43,7 +43,7 @@ There's also a companion Claude Code plugin that adds deterministic stuck-detect
 command = "npx"
 args = ["-y", "get-an-expert-mcp"]
 startup_timeout_sec = 30  # first npx run downloads the package
-tool_timeout_sec = 180    # analysis can take a couple of minutes
+tool_timeout_sec = 320    # high-effort analysis can take up to 5 minutes
 ```
 
 ### Cursor (`~/.cursor/mcp.json`) / Windsurf (`~/.codeium/windsurf/mcp_config.json`)
@@ -119,8 +119,6 @@ Full policy: https://get-an-expert.vercel.app/privacy · Terms: https://get-an-e
   data, no advertising use, no model training on your data.
 - **Retention:** requests auto-delete after 30 days. Every response includes a private
   deletion link that removes it immediately.
-- **Contact:** 
-
 ## License
 
 MIT
