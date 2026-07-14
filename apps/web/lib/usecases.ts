@@ -94,13 +94,24 @@ function threadOpenedMessage(
 
 export type ThreadFailure = "not_found" | "forbidden";
 
+/**
+ * Hard ceiling on messages per thread. Far above any real conversation
+ * (write limits allow 60/hour), it bounds storage and keeps full-thread
+ * reads cheap enough to skip pagination.
+ */
+export const MAX_THREAD_MESSAGES = 400;
+
 export interface ThreadView {
   status: ExpertRequestStatus;
   expertName?: string;
   messages: ThreadMessage[];
 }
 
-async function authThread(
+/**
+ * Exported so routes can authenticate BEFORE consuming any per-thread
+ * budget (rate limits, quotas) — never the other way around.
+ */
+export async function verifyThreadToken(
   store: Store,
   id: string,
   token: string,
@@ -137,12 +148,15 @@ export async function postUserMessage(opts: {
   now?: Date;
 }): Promise<
   | { ok: true; seq: number; status: ExpertRequestStatus }
-  | { ok: false; reason: ThreadFailure }
+  | { ok: false; reason: ThreadFailure | "thread_full" }
 > {
   const { store, id, token } = opts;
   const now = opts.now ?? new Date();
-  const record = await authThread(store, id, token);
+  const record = await verifyThreadToken(store, id, token);
   if (typeof record === "string") return { ok: false, reason: record };
+  if ((await store.countMessages(id)) >= MAX_THREAD_MESSAGES) {
+    return { ok: false, reason: "thread_full" };
+  }
 
   // Same defense-in-depth redaction as the original payload.
   const { value } = redactObject({ text: opts.text, progress: opts.progress });
@@ -166,11 +180,15 @@ export async function postUserMessage(opts: {
     );
   }
 
-  // A message on a solved thread reopens it for the expert.
+  // A message on a solved thread reopens it for the expert. Re-read right
+  // before writing: record updates are last-writer-wins, and the fresh read
+  // shrinks the race window against a concurrent expert action to ~zero.
+  // (Messages themselves are append-only — a race can never lose one.)
+  const fresh = (await store.get(id)) ?? record;
   const status: ExpertRequestStatus =
-    record.status === "solved" ? "live" : record.status;
+    fresh.status === "solved" ? "live" : fresh.status;
   await store.put(
-    { ...record, status, lastActivityAt: at },
+    { ...fresh, status, lastActivityAt: at },
     THIRTY_DAYS_SECONDS,
   );
   return { ok: true, seq, status };
@@ -187,7 +205,7 @@ export async function listThreadMessages(opts: {
   | { ok: false; reason: ThreadFailure }
 > {
   const { store, id, token, afterSeq } = opts;
-  const record = await authThread(store, id, token);
+  const record = await verifyThreadToken(store, id, token);
   if (typeof record === "string") return { ok: false, reason: record };
   const messages = await store.listMessages(id, afterSeq);
   return {
@@ -211,17 +229,23 @@ export async function claimThread(
 ): Promise<boolean> {
   const record = await store.get(id);
   if (!record) return false;
+  // The name reaches the user's session verbatim — redact it like any
+  // other expert-supplied text (a pasted token in this field must not leak).
+  const { value } = redactObject({ name: expertName });
+  const cleanName = (value as { name: string }).name;
   const at = now.toISOString();
   await store.appendMessage(
     id,
-    { from: "expert", kind: "activity", text: `${expertName} joined the thread`, at },
+    { from: "expert", kind: "activity", text: `${cleanName} joined the thread`, at },
     THIRTY_DAYS_SECONDS,
   );
+  // Fresh read before the last-writer-wins put — see postUserMessage.
+  const fresh = (await store.get(id)) ?? record;
   await store.put(
     {
-      ...record,
+      ...fresh,
       status: "live",
-      expertName: record.expertName ?? expertName,
+      expertName: fresh.expertName ?? cleanName,
       lastActivityAt: at,
     },
     THIRTY_DAYS_SECONDS,
@@ -237,6 +261,9 @@ export async function postExpertMessage(
 ): Promise<{ ok: boolean; seq?: number }> {
   const record = await store.get(id);
   if (!record) return { ok: false };
+  if ((await store.countMessages(id)) >= MAX_THREAD_MESSAGES) {
+    return { ok: false };
+  }
   // Experts can paste secrets by accident too.
   const { value } = redactObject({ text });
   const at = now.toISOString();
@@ -245,8 +272,9 @@ export async function postExpertMessage(
     { from: "expert", kind: "message", text: (value as { text: string }).text, at },
     THIRTY_DAYS_SECONDS,
   );
+  const fresh = (await store.get(id)) ?? record;
   await store.put(
-    { ...record, status: "live", lastActivityAt: at },
+    { ...fresh, status: "live", lastActivityAt: at },
     THIRTY_DAYS_SECONDS,
   );
   return { ok: true, seq };
@@ -270,8 +298,9 @@ export async function markThreadSolved(
     },
     THIRTY_DAYS_SECONDS,
   );
+  const fresh = (await store.get(id)) ?? record;
   await store.put(
-    { ...record, status: "solved", lastActivityAt: at },
+    { ...fresh, status: "solved", lastActivityAt: at },
     THIRTY_DAYS_SECONDS,
   );
   return true;

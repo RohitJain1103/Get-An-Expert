@@ -102,6 +102,12 @@ export class MemoryStore implements Store {
     return structuredClone(list.messages.filter((m) => m.seq > afterSeq));
   }
 
+  async countMessages(id: string): Promise<number> {
+    const list = this.threads.get(id);
+    if (!list || list.expiresAt <= this.now()) return 0;
+    return list.messages.length;
+  }
+
   async incrWindow(key: string, windowSeconds: number): Promise<number> {
     const windowStart = Math.floor(this.now() / 1000 / windowSeconds);
     const fullKey = `${key}:${windowStart}`;

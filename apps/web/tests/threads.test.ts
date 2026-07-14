@@ -6,6 +6,7 @@ import {
   deleteExpertRequest,
   listThreadMessages,
   markThreadSolved,
+  MAX_THREAD_MESSAGES,
   postExpertMessage,
   postUserMessage,
 } from "../lib/usecases";
@@ -231,5 +232,46 @@ describe("deletion", () => {
       await deleteExpertRequest(store, created.requestId, created.deleteToken),
     ).toBe("deleted");
     expect(await store.listMessages(created.requestId, 0)).toHaveLength(0);
+  });
+});
+
+describe("review hardening", () => {
+  it("redacts secrets in the expert display name", async () => {
+    const store = new MemoryStore();
+    const created = await openThread(store);
+
+    await claimThread(
+      store,
+      created.requestId,
+      "sk-ant-api03-supersecretsecret123456",
+    );
+    const record = await store.get(created.requestId);
+    expect(record?.expertName).not.toContain("supersecretsecret");
+    const messages = await store.listMessages(created.requestId, 0);
+    expect(messages[0].text).not.toContain("supersecretsecret");
+  });
+
+  it("refuses messages once the thread cap is reached", async () => {
+    const store = new MemoryStore();
+    const created = await openThread(store);
+    const at = new Date().toISOString();
+    for (let i = 0; i < MAX_THREAD_MESSAGES; i += 1) {
+      await store.appendMessage(
+        created.requestId,
+        { from: "user", kind: "message", text: `m${i}`, at },
+        60,
+      );
+    }
+
+    const result = await postUserMessage({
+      store,
+      id: created.requestId,
+      token: created.threadToken,
+      text: "one more",
+    });
+    expect(result).toEqual({ ok: false, reason: "thread_full" });
+    expect(
+      (await postExpertMessage(store, created.requestId, "reply")).ok,
+    ).toBe(false);
   });
 });

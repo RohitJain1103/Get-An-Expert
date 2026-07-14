@@ -80,12 +80,12 @@ export class RedisStore implements Store {
     // RPUSH returns the new list length, which doubles as the appended
     // message's 1-based seq — concurrent appends get distinct seqs for free.
     const seq = await this.redis.rpush(messagesKey(id), message);
-    if (seq === 1) {
-      // First message: align the thread's lifetime with the record's
-      // remaining retention window so both expire together.
-      const ttl = await this.redis.ttl(RECORD_PREFIX + id);
-      await this.redis.expire(messagesKey(id), ttl > 0 ? ttl : ttlSeconds);
-    }
+    // Align the thread's lifetime with the record's remaining retention
+    // window so both expire together. NX + every-append: even if a crash
+    // skipped an earlier EXPIRE, the next append repairs it, so the key can
+    // never outlive the 30-day promise by more than one quiet thread.
+    const ttl = await this.redis.ttl(RECORD_PREFIX + id);
+    await this.redis.expire(messagesKey(id), ttl > 0 ? ttl : ttlSeconds, "nx");
     return seq;
   }
 
@@ -97,6 +97,10 @@ export class RedisStore implements Store {
     );
     // seq is positional: the element at list index i has seq i + 1.
     return items.map((m, i) => ({ ...m, seq: afterSeq + i + 1 }));
+  }
+
+  async countMessages(id: string): Promise<number> {
+    return this.redis.llen(messagesKey(id));
   }
 
   async incrWindow(key: string, windowSeconds: number): Promise<number> {
