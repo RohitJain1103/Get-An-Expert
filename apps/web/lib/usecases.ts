@@ -3,7 +3,13 @@ import {
   type ExpertRequestPayload,
   type ExpertResponse,
 } from "@get-an-expert/core";
-import { hashToken, newDeleteToken, newRequestId, safeEqual } from "./id";
+import {
+  hashToken,
+  newChatToken,
+  newDeleteToken,
+  newRequestId,
+  safeEqual,
+} from "./id";
 import type { ExpertRequestInput } from "./schema";
 import type { Store, StoredRequest } from "./store/types";
 import { THIRTY_DAYS_SECONDS } from "./store/types";
@@ -24,6 +30,8 @@ export type Analyze = (
 export interface CreateExpertRequestResult {
   requestId: string;
   deleteToken: string;
+  /** Chat access token — returned once, only its hash is stored. */
+  chatToken: string;
   deleteUrl: string;
   status: "answered" | "new";
   /** Preformatted markdown the MCP client relays to the user verbatim. */
@@ -58,6 +66,7 @@ export async function createExpertRequest(opts: {
 
   const id = newRequestId();
   const deleteToken = newDeleteToken();
+  const chatToken = newChatToken();
   const record: StoredRequest = {
     id,
     createdAt: now.toISOString(),
@@ -66,6 +75,8 @@ export async function createExpertRequest(opts: {
     serverRedactions: redactions,
     consent,
     deleteTokenHash: hashToken(deleteToken),
+    chatTokenHash: hashToken(chatToken),
+    chat: { status: "active", startedAt: now.toISOString() },
   };
   await store.create(record, THIRTY_DAYS_SECONDS);
   const deleteUrl = `${baseUrl}/delete/${id}?token=${deleteToken}`;
@@ -93,6 +104,7 @@ export async function createExpertRequest(opts: {
     return {
       requestId: id,
       deleteToken,
+      chatToken,
       deleteUrl,
       status: "answered",
       message: formatExpertMessage(answered.payload.tool, response, deleteUrl),
@@ -103,6 +115,7 @@ export async function createExpertRequest(opts: {
     return {
       requestId: id,
       deleteToken,
+      chatToken,
       deleteUrl,
       status: "new",
       message: fallbackMessage(id, deleteUrl),
@@ -162,11 +175,13 @@ export async function deleteExpertRequest(
   return "deleted";
 }
 
-/** Dashboard listing without the token hash. */
+/** Dashboard listing without the token hashes. */
 export async function listExpertRequests(
   store: Store,
   limit: number,
-): Promise<Omit<StoredRequest, "deleteTokenHash">[]> {
+): Promise<Omit<StoredRequest, "deleteTokenHash" | "chatTokenHash">[]> {
   const records = await store.list(limit);
-  return records.map(({ deleteTokenHash: _hash, ...rest }) => rest);
+  return records.map(
+    ({ deleteTokenHash: _d, chatTokenHash: _c, ...rest }) => rest,
+  );
 }

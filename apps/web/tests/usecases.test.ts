@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ExpertRequestPayload } from "@get-an-expert/core";
+import { hashToken } from "../lib/id";
 import { MemoryStore } from "../lib/store/memory";
 import {
   createExpertRequest,
@@ -93,6 +94,36 @@ describe("createExpertRequest", () => {
     );
   });
 
+  it("mints a chat token: hash stored, raw returned once, chat active", async () => {
+    const store = new MemoryStore();
+    const result = await createExpertRequest({
+      store,
+      analyze: async () => analysis,
+      input: input(),
+      baseUrl: BASE,
+    });
+    expect(result.chatToken).toMatch(/^[A-Za-z0-9_-]{32}$/);
+    const stored = await store.get(result.requestId);
+    expect(stored?.chatTokenHash).toBe(hashToken(result.chatToken));
+    expect(stored?.chat).toMatchObject({ status: "active" });
+    expect(JSON.stringify(stored)).not.toContain(result.chatToken);
+  });
+
+  it("still returns the chat token on the analysis-failure path", async () => {
+    const store = new MemoryStore();
+    const result = await createExpertRequest({
+      store,
+      analyze: async () => {
+        throw new Error("api down");
+      },
+      input: input(),
+      baseUrl: BASE,
+    });
+    expect(result.chatToken).toMatch(/^[A-Za-z0-9_-]{32}$/);
+    const stored = await store.get(result.requestId);
+    expect(stored?.chatTokenHash).toBe(hashToken(result.chatToken));
+  });
+
   it("keeps the record and returns a fallback message when analysis fails", async () => {
     const store = new MemoryStore();
     const result = await createExpertRequest({
@@ -158,6 +189,9 @@ describe("listExpertRequests", () => {
     expect(listed[0].payload.goal).toBe("second");
     expect(
       listed.some((r) => Object.hasOwn(r, "deleteTokenHash")),
+    ).toBe(false);
+    expect(
+      listed.some((r) => Object.hasOwn(r, "chatTokenHash")),
     ).toBe(false);
   });
 });
