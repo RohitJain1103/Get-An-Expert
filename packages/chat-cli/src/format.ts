@@ -35,3 +35,20 @@ export function formatIncoming(message: ChatMessage): string {
   if (message.from === "user") return `[you] ${message.text}`;
   return `[${message.authorName ?? "expert"}] ${message.text}`;
 }
+
+const EVENT_LABELS: Record<string, string> = {
+  prompt: "prompt",
+  command: "last run",
+  output: "output",
+  edit: "file edit",
+  agent_reply: "assistant reply",
+};
+
+/** The spec's subtle confirmation: "⟢ your last run is visible to Priya". */
+export function formatEventConfirmation(
+  message: ChatMessage,
+  expertName: string | undefined,
+): string {
+  const label = EVENT_LABELS[message.eventType ?? ""] ?? "session activity";
+  return `⟢ your ${label} is visible to ${expertName ?? "the expert"}`;
+}

@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 import * as readline from "node:readline";
 import { ChatClient } from "./client";
-import { formatIncoming, parseInput } from "./format";
+import {
+  formatEventConfirmation,
+  formatIncoming,
+  parseInput,
+} from "./format";
 import {
   clearRelayFlag,
   readRelayFlag,
@@ -95,6 +99,7 @@ async function main(): Promise<void> {
   let pollInFlight = false;
   let historyReplayed = false;
   let closing = false;
+  let expertName: string | undefined;
 
   function shutdown(reason: string): never {
     closing = true;
@@ -115,8 +120,28 @@ async function main(): Promise<void> {
     try {
       const result = await client.fetchMessages(lastSeq);
       if (!result.ok) return; // transient; next tick retries
+      if (result.expertName && result.expertName !== expertName) {
+        expertName = result.expertName;
+        // Remember the name locally so the host's RELAY ON indicator can
+        // say who is watching.
+        const flag = readRelayFlag();
+        if (flag?.requestId === requestId) {
+          writeRelayFlag({ ...flag, expertName });
+        }
+      }
+      let replayedEvents = 0;
       for (const message of result.messages) {
         lastSeq = Math.max(lastSeq, message.seq);
+        if (message.kind === "event") {
+          // Live events get the subtle "⟢ visible to <expert>" confirmation;
+          // history replay compresses them into one count line below.
+          if (historyReplayed) {
+            printAbove(rl, formatEventConfirmation(message, expertName));
+          } else {
+            replayedEvents += 1;
+          }
+          continue;
+        }
         // Own lines are echoed locally at send time — skip them here, EXCEPT
         // during the initial history replay (rejoins must show both sides).
         if (
@@ -127,6 +152,12 @@ async function main(): Promise<void> {
           continue;
         }
         printAbove(rl, formatIncoming(message));
+      }
+      if (!historyReplayed && replayedEvents > 0) {
+        printAbove(
+          rl,
+          `· ${replayedEvents} session event${replayedEvents === 1 ? "" : "s"} already relayed to ${expertName ?? "the expert"}`,
+        );
       }
       historyReplayed = true;
       if (result.chatStatus === "ended") {

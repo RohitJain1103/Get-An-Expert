@@ -148,7 +148,20 @@ export function ChatPanel({ requestId }: { requestId: string }) {
           <p className="text-zinc-500">No messages yet.</p>
         )}
         {messages.map((m) =>
-          m.kind === "system" ? (
+          m.kind === "event" ? (
+            <div
+              key={m.seq}
+              className="rounded-lg bg-zinc-900 p-2 dark:bg-black"
+            >
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+                {(m.eventType ?? "event").replace("_", " ")} · relayed from
+                session
+              </span>
+              <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap font-mono text-xs text-zinc-100">
+                {m.text}
+              </pre>
+            </div>
+          ) : m.kind === "system" ? (
             <p key={m.seq} className="text-center text-xs italic text-zinc-500">
               {m.text}
             </p>

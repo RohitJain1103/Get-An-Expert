@@ -7,7 +7,12 @@ export interface ChatClientOptions {
 }
 
 export type FetchMessagesResult =
-  | { ok: true; messages: ChatMessage[]; chatStatus: "active" | "ended" }
+  | {
+      ok: true;
+      messages: ChatMessage[];
+      chatStatus: "active" | "ended";
+      expertName?: string;
+    }
   | { ok: false; error: string };
 
 export type PostMessageResult =
@@ -50,7 +55,7 @@ export class ChatClient {
     }
     const envelope = await this.parse<{
       messages: ChatMessage[];
-      chat: { status: "active" | "ended" } | null;
+      chat: { status: "active" | "ended"; expertName?: string | null } | null;
     }>(response);
     if (!envelope?.success || !envelope.data) {
       return {
@@ -62,6 +67,7 @@ export class ChatClient {
       ok: true,
       messages: envelope.data.messages,
       chatStatus: envelope.data.chat?.status ?? "ended",
+      expertName: envelope.data.chat?.expertName ?? undefined,
     };
   }
 

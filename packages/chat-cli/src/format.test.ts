@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChatMessage } from "@get-an-expert/core";
-import { formatIncoming, parseInput } from "./format";
+import { formatEventConfirmation, formatIncoming, parseInput } from "./format";
 
 const msg = (over: Partial<ChatMessage>): ChatMessage => ({
   seq: 1,
@@ -44,6 +44,29 @@ describe("parseInput", () => {
       type: "unknown-command",
       command: "/quit",
     });
+  });
+});
+
+describe("formatEventConfirmation", () => {
+  const event = (eventType: ChatMessage["eventType"]): ChatMessage =>
+    msg({ kind: "event", eventType, from: "user", text: "…" });
+
+  it("names the expert when known", () => {
+    expect(formatEventConfirmation(event("command"), "Priya")).toBe(
+      "⟢ your last run is visible to Priya",
+    );
+  });
+  it("falls back when the expert has not joined yet", () => {
+    expect(formatEventConfirmation(event("prompt"), undefined)).toBe(
+      "⟢ your prompt is visible to the expert",
+    );
+  });
+  it("labels each event type", () => {
+    expect(formatEventConfirmation(event("edit"), "P")).toContain("file edit");
+    expect(formatEventConfirmation(event("agent_reply"), "P")).toContain(
+      "assistant reply",
+    );
+    expect(formatEventConfirmation(event("output"), "P")).toContain("output");
   });
 });
 

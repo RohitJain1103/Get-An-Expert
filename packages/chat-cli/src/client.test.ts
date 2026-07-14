@@ -46,6 +46,7 @@ describe("ChatClient.fetchMessages", () => {
       ok: true,
       messages: [expect.objectContaining({ seq: 1, text: "hi" })],
       chatStatus: "active",
+      expertName: "Priya",
     });
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(String(url)).toBe(
