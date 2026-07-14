@@ -305,12 +305,14 @@ def main() -> None:
     runs_file = sweep_dir / "runs.jsonl"
     done = existing_keys(runs_file)
 
+    # run_index outermost: if the sweep is interrupted (usage window), every
+    # scenario has equal n instead of half at full depth and half untouched
     work = [
         (s, m, v, i)
+        for i in range(args.runs)
         for v in variants
         for m in models
         for s in scenarios
-        for i in range(args.runs)
         if (s["id"], m, v, i) not in done
     ]
     print(f"sweep {sweep_name}: {len(work)} runs to do ({len(done)} already recorded)")
