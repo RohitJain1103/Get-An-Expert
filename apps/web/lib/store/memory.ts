@@ -1,7 +1,9 @@
+import type { ChatMessage, NewChatMessage } from "@get-an-expert/core";
 import type { Store, StoredRequest } from "./types";
 
 interface Entry {
   record: StoredRequest;
+  messages: NewChatMessage[];
   expiresAt: number;
 }
 
@@ -31,6 +33,7 @@ export class MemoryStore implements Store {
   async create(record: StoredRequest, ttlSeconds: number): Promise<void> {
     this.entries.set(record.id, {
       record: structuredClone(record),
+      messages: [],
       expiresAt: this.now() + ttlSeconds * 1000,
     });
   }
@@ -44,6 +47,7 @@ export class MemoryStore implements Store {
     const existing = this.live(record.id);
     this.entries.set(record.id, {
       record: structuredClone(record),
+      messages: existing?.messages ?? [],
       // Keep the original expiry if the record already exists; put() must
       // not extend the retention window.
       expiresAt: existing?.expiresAt ?? this.now() + ttlSeconds * 1000,
@@ -62,6 +66,32 @@ export class MemoryStore implements Store {
 
   async delete(id: string): Promise<boolean> {
     return this.entries.delete(id);
+  }
+
+  async appendMessage(
+    requestId: string,
+    message: NewChatMessage,
+    _ttlSeconds: number,
+  ): Promise<number> {
+    const entry = this.live(requestId);
+    if (!entry) throw new Error(`appendMessage: unknown request ${requestId}`);
+    const next: Entry = {
+      ...entry,
+      messages: [...entry.messages, structuredClone(message)],
+    };
+    this.entries.set(requestId, next);
+    return next.messages.length;
+  }
+
+  async listMessages(
+    requestId: string,
+    afterSeq: number,
+  ): Promise<ChatMessage[]> {
+    const entry = this.live(requestId);
+    if (!entry) return [];
+    return entry.messages
+      .slice(afterSeq)
+      .map((m, i) => ({ ...structuredClone(m), seq: afterSeq + i + 1 }));
   }
 
   async incrWindow(key: string, windowSeconds: number): Promise<number> {

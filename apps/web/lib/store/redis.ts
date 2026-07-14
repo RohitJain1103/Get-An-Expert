@@ -1,8 +1,11 @@
 import { Redis } from "@upstash/redis";
+import type { ChatMessage, NewChatMessage } from "@get-an-expert/core";
 import type { Store, StoredRequest } from "./types";
 
 const RECORD_PREFIX = "gae:req:";
 const INDEX_KEY = "gae:req:index";
+
+const messagesKey = (id: string): string => `${RECORD_PREFIX}${id}:msgs`;
 
 /**
  * Upstash Redis store. Records live under gae:req:<id> with a TTL enforcing
@@ -61,9 +64,35 @@ export class RedisStore implements Store {
   }
 
   async delete(id: string): Promise<boolean> {
-    const removed = await this.redis.del(RECORD_PREFIX + id);
+    const removed = await this.redis.del(RECORD_PREFIX + id, messagesKey(id));
     await this.redis.zrem(INDEX_KEY, id);
     return removed > 0;
+  }
+
+  async appendMessage(
+    requestId: string,
+    message: NewChatMessage,
+    ttlSeconds: number,
+  ): Promise<number> {
+    const key = messagesKey(requestId);
+    const length = await this.redis.rpush(key, message);
+    // The list shares the record's remaining retention window so both expire
+    // together; fall back to the full TTL if the record key lost its TTL.
+    const recordTtl = await this.redis.ttl(RECORD_PREFIX + requestId);
+    await this.redis.expire(key, recordTtl > 0 ? recordTtl : ttlSeconds);
+    return length;
+  }
+
+  async listMessages(
+    requestId: string,
+    afterSeq: number,
+  ): Promise<ChatMessage[]> {
+    const raw = await this.redis.lrange<NewChatMessage>(
+      messagesKey(requestId),
+      afterSeq,
+      -1,
+    );
+    return raw.map((m, i) => ({ ...m, seq: afterSeq + i + 1 }));
   }
 
   async incrWindow(key: string, windowSeconds: number): Promise<number> {
