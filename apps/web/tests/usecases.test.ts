@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { ExpertRequestPayload } from "@get-an-expert/core";
 import { MemoryStore } from "../lib/store/memory";
 import {
   createExpertRequest,
@@ -80,14 +81,16 @@ describe("createExpertRequest", () => {
 
   it("passes the redacted payload (not the raw one) to the analyzer", async () => {
     const store = new MemoryStore();
-    const analyze = vi.fn(async () => analysis);
+    const analyze = vi.fn(async (_payload: ExpertRequestPayload) => analysis);
     await createExpertRequest({
       store,
       analyze,
       input: input({ goal: "key sk-ant-api03-supersecretsecret123456" }),
       baseUrl: BASE,
     });
-    expect(analyze.mock.calls[0][0].goal).not.toContain("supersecretsecret");
+    expect(analyze.mock.calls.at(0)?.[0]?.goal).not.toContain(
+      "supersecretsecret",
+    );
   });
 
   it("keeps the record and returns a fallback message when analysis fails", async () => {
