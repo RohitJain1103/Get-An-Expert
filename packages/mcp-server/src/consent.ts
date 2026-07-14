@@ -19,10 +19,11 @@ export function buildOfferMessage(expertiseArea: string): string {
       "The chat is human-to-human — no AI reads it.",
     "",
     "**While the chat is open:** from your \"proceed\" until the chat ends, this " +
-      "working session — your prompts, the commands your agent runs and their " +
-      "output, and file edits — is relayed live to the expert, so they can watch " +
-      "real attempts instead of retellings. Nothing else on your machine is read. " +
-      "A **RELAY ON** indicator shows while it's active.",
+      "working session — your prompts, your agent's replies, the commands your " +
+      "agent runs and their output, and file edits — is relayed live to the " +
+      "expert, so they can watch real attempts instead of retellings. Nothing " +
+      "else on your machine is read. A **RELAY ON** indicator shows while it's " +
+      "active.",
     "",
     "**Never sent:** your source files, environment variables, or anything outside " +
       "this session's activity — secrets are redacted on your machine before " +

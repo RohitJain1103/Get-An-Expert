@@ -169,8 +169,12 @@ export function runRelay(
   const relayEvent = normalizeForHost(host, event, payload);
   if (!relayEvent) return { stdout: banner, spoolPath: null };
 
-  // Local redaction before anything leaves the machine; server redacts again.
-  const text = truncate(redactText(relayEvent.text).text);
+  // Pre-truncate BEFORE redaction: this runs on the hook's blocking path,
+  // and regex-scanning a multi-MB build log would stall the user's session.
+  // A secret split at the truncation boundary is a useless fragment, and the
+  // server redacts everything again anyway. Re-truncate after: redaction
+  // placeholders can grow the text past the cap.
+  const text = truncate(redactText(truncate(relayEvent.text)).text);
   const baseUrl = (flag.apiBaseUrl ?? DEFAULT_API_URL).replace(/\/$/, "");
   const spool: Spool = {
     url: `${baseUrl}/api/v1/requests/${flag.requestId}/events`,
@@ -242,6 +246,8 @@ async function main(): Promise<void> {
     spawn(process.execPath, [process.argv[1], "--send", result.spoolPath], {
       detached: true,
       stdio: "ignore",
+      // Without this, Windows pops a console window on EVERY relayed event.
+      windowsHide: true,
     }).unref();
   }
   if (result.stdout) process.stdout.write(result.stdout);

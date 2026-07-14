@@ -28,8 +28,10 @@ describe("buildOfferMessage", () => {
     // scope: what relays, from when, until when
     expect(message).toContain("relayed live to the expert");
     expect(message.toLowerCase()).toContain("until the chat ends");
+    expect(message.toLowerCase()).toContain("your prompts");
+    expect(message.toLowerCase()).toContain("your agent's replies");
     expect(message.toLowerCase()).toContain(
-      "prompts, the commands your agent runs",
+      "commands your agent runs and their output",
     );
     expect(message.toLowerCase()).toContain("file edits");
     // local redaction before transmission

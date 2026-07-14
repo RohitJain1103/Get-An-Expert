@@ -107,8 +107,9 @@ export default function PrivacyPage() {
           </li>
           <li>
             <strong>Relayed session activity</strong>: the prompts you type to
-            your coding agent, the commands it runs with their output, and the
-            file edits it makes — so the expert can watch real attempts. This
+            your coding agent, the agent&apos;s replies, the commands it runs
+            with their output, and the file edits it makes — so the expert can
+            watch real attempts. This
             relay is active only while the chat is open, a RELAY ON indicator
             shows in your session, and you can pause it (/pause) or end
             everything (/end) at any moment. Either side ending the chat is a

@@ -10,6 +10,19 @@ import {
   writeRelayFlag,
 } from "@get-an-expert/core/relay";
 
+const REQUEST_ID_PATTERN = /^req_[A-Za-z0-9-]{1,80}$/;
+
+/**
+ * The join command is BUILT locally from a validated request id — never
+ * taken from the server response — because openTerminalA hands it to
+ * osascript / cmd /k / sh -c, where a hostile string would be command
+ * execution. Returns null for ids that don't match our own id format.
+ */
+export function buildJoinCommand(requestId: string): string | null {
+  if (!REQUEST_ID_PATTERN.test(requestId)) return null;
+  return `npx get-an-expert chat ${requestId}`;
+}
+
 /**
  * Arms the relay (hooks start relaying on their next firing) and records the
  * chat for post-session retrieval by check_expert_replies.
@@ -32,6 +45,7 @@ export function spawnRelayInstall(host: string): void {
     spawn("npx", ["-y", "get-an-expert", "init", host, "--quiet"], {
       detached: true,
       stdio: "ignore",
+      windowsHide: true,
     }).unref();
   } catch {
     // npx missing or spawn refused — relay hooks stay inert; chat still works.
@@ -104,9 +118,11 @@ export function buildChatFooter(
     "",
     opener,
     "",
-    "From now until that chat ends, this session (your prompts, agent-run " +
-      "commands and their output, file edits) is relayed live to the expert — " +
-      "you'll see a RELAY ON indicator while it's active. Type /end in the " +
-      "chat to stop everything, /pause to pause relaying.",
+    "From now until that chat ends, this session (your prompts, your agent's " +
+      "replies, agent-run commands and their output, file edits) relays live " +
+      "to the expert — a RELAY ON indicator confirms it's active. If you " +
+      "never see that indicator, relay wiring didn't install; the chat still " +
+      "works, and `npx get-an-expert init <your editor>` wires it up. Type " +
+      "/end in the chat to stop everything, /pause to pause relaying.",
   ].join("\n");
 }

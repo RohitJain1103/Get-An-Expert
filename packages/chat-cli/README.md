@@ -27,8 +27,9 @@ Point at a different backend with `GET_AN_EXPERT_API_URL`.
 
 ## Session relay
 
-While your chat is open, your working session (prompts, agent-run commands
-with their output, file edits) relays live to the expert so they can watch
+While your chat is open, your working session (prompts, your agent's replies,
+agent-run commands with their output, file edits) relays live to the expert so
+they can watch
 real attempts instead of retellings — that's what you consented to at
 escalation. Wiring per editor:
 

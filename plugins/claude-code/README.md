@@ -14,7 +14,8 @@ consented to is open.
   the consent notice, local secret redaction, and the send — nothing is ever
   transmitted without your explicit yes.
 - **Session relay hooks** (UserPromptSubmit / PostToolUse / Stop) forward your
-  prompts, agent-run commands with output, and file edits to the human expert —
+  prompts, Claude's replies, agent-run commands with output, and file edits to
+  the human expert —
   but ONLY while an expert chat you explicitly consented to is open. The hooks
   exit instantly (zero work, nothing sent) unless `~/.get-an-expert/relay.json`
   exists; that file is created at escalation and deleted the moment the chat
