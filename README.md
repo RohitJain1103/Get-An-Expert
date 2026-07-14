@@ -12,6 +12,7 @@ triage today (honestly disclosed), human experts in the loop next.
 
 ```
 packages/core/         Shared types + secret redaction (runs client- AND server-side)
+packages/chat-cli/     Terminal chat with a human expert (npx get-an-expert chat <id>)
 packages/mcp-server/   The stdio MCP server published to npm as get-an-expert-mcp
 apps/web/              Next.js API + triage engine + dashboard + privacy/terms (Vercel)
 plugins/claude-code/   Claude Code plugin: deterministic stuck-detection Stop hook + MCP bundle
