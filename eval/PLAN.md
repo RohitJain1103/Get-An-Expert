@@ -33,6 +33,8 @@
 | 5 | Synthetic Track B transcripts hand-authored in Claude Code JSONL shape rather than scripted live sessions. | Zero usage cost, deterministic labels; detector only reads `type:"user"` entries, `isMeta`, tool_result blocks, and error-pattern text. Real transcripts from Pulkit slot in later. |
 | 6 | Variant server is a self-contained JSON-RPC stdio implementation serving schemas extracted verbatim from the real server's own `tools/list` response, rather than importing `packages/mcp-server`. | The shipped entrypoint is a side-effectful script, not importable; serving its exact wire-format schemas is higher fidelity than re-deriving them, and zero deps means no workspace surgery. |
 | 7 | Tool-name mapping per Global Constraints (repo main vs npm 0.2.1). | Repo is ahead of npm. |
+| 8 | Added DISCOVERY cell (X1 to X8), scenario count 40 -> 48. | Pulkit 2026-07-14: the open-clause goal was unmeasured; probes design/architecture/UX/judgment escalations. Rates are read, not targeted. |
+| 9 | Detector v2 prototype + spec added under eval/trackB/ (shipped plugin untouched). | Replay findings justified a concrete proposal; harness doubles as its acceptance test. |
 
 ---
 

@@ -28,7 +28,7 @@ scenarios/ (40 conversations)          transcripts/ (real + synthetic sessions)
 |---|---|
 | `SPEC.md` | The build spec. Section numbers referenced everywhere. |
 | `PLAN.md` | Implementation plan + every deviation from the spec, with reasons. |
-| `scenarios/*.json` | 40 test conversations: LOOP 10, VERIFY 8, DELEGATE 6, NEGATIVE 16. Each ends on a user message; the model continues it. |
+| `scenarios/*.json` | 48 test conversations: LOOP 10, VERIFY 8, DELEGATE 6, NEGATIVE 16, DISCOVERY 8. Each ends on a user message; the model continues it. DISCOVERY (X1 to X8) probes whether open-ended instructions fire on use cases we never listed: design judgment, architecture calls, UX diagnosis, third-party evaluation, capacity planning, app review, schema smell, pricing. Read those rates, don't target them. |
 | `tool_defs.json` | The real server's tool schemas, captured verbatim from its own `tools/list` response, with source commit hash. |
 | `variants/A_current/` | Copy shipped today, verbatim. The control. |
 | `variants/B_trigger_desc/` | A's instructions + trigger-specific tool descriptions. |
@@ -42,6 +42,8 @@ scenarios/ (40 conversations)          transcripts/ (real + synthetic sessions)
 | `trackB/replay.py` | Steps each transcript turn by turn through the shipped detector. `--sweep` grids prompts {6,8,10,12} x errors {2,3,4}. |
 | `trackB/labels.csv` | Per transcript: the turn a reasonable person would call it stuck, or `none`. Real transcripts start as `TBD` until a human labels them. |
 | `trackB/thresholds_report.md` | Precision/recall for the current thresholds and the full grid, plus a recommended operating point (max recall with precision >= 0.9). |
+| `trackB/detector-v2/` + `trackB/DETECTOR_V2_SPEC.md` | Proposed detector rewrite (recurrence counting, recovery awareness, first-nudge fix) with replay evidence: precision 0.50 to 1.00 on the labeled set. Spec for Rohit; shipped plugin untouched. |
+| `gtm/` | Draft go-to-market kit: registry listings, README rewrite, launch content. Drafts for Pulkit/Rohit approval, not published anywhere. |
 
 ## How to rerun everything
 
