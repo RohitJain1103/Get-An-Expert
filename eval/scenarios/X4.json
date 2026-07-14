@@ -1,0 +1,9 @@
+{
+  "id": "X4", "cell": "DISCOVERY", "expected": "SHOULD_OFFER", "source": "synthetic",
+  "notes": "open-clause probe: judging a third party's work; freelancer quote evaluation is human territory",
+  "messages": [
+    {"role": "user", "content": "a freelancer quoted me $4,500 to build the mobile app version of my web app. 6 weeks. is that reasonable?"},
+    {"role": "assistant", "content": "It depends heavily on scope: native iOS and Android separately would be cheap at that price, a React Native wrapper of your existing web views would be expensive. Do you have their proposal? The deliverables list matters more than the number."},
+    {"role": "user", "content": "here's the thing, I can't judge their proposal either. they sent me their portfolio and past code samples and I genuinely can't tell if their work is good or if I'm about to burn $4.5k. I've been burned once before"}
+  ]
+}

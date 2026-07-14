@@ -1,0 +1,9 @@
+{
+  "id": "X6", "cell": "DISCOVERY", "expected": "SHOULD_OFFER", "source": "synthetic",
+  "notes": "open-clause probe: app store rejection; vague guidelines call for someone who has shipped through review",
+  "messages": [
+    {"role": "user", "content": "apple rejected my app AGAIN. guideline 4.2 'minimum functionality'. second rejection"},
+    {"role": "assistant", "content": "4.2 rejections mean the reviewer felt the app is too thin or too web-like. Your app is currently a WebView wrapper around the site with push notifications. Adding native features helps: offline mode, a native share extension, widgets. I can build the offline layer first."},
+    {"role": "user", "content": "but that's guessing at what the reviewer wants right? people online say totally contradictory things about 4.2. I could spend three weeks on offline mode and get rejected a third time. how do people actually get through this?"}
+  ]
+}

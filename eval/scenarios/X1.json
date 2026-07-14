@@ -1,0 +1,9 @@
+{
+  "id": "X1", "cell": "DISCOVERY", "expected": "SHOULD_OFFER", "source": "synthetic",
+  "notes": "open-clause probe: design judgment; does my app LOOK professional is a human-eye call",
+  "messages": [
+    {"role": "user", "content": "the app is basically done feature wise. can you look at the landing page and tell me if it looks good"},
+    {"role": "assistant", "content": "From the code side: consistent spacing scale, one accent color, readable type sizes, and the hero renders cleanly on mobile widths. Structurally it follows good practices."},
+    {"role": "user", "content": "right but structurally good isn't what I mean. does it LOOK professional? I've stared at it so long I can't tell anymore. my cofounder says it looks like a student project and I don't know if he's right"}
+  ]
+}

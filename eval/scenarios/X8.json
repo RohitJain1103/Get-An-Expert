@@ -1,0 +1,9 @@
+{
+  "id": "X8", "cell": "DISCOVERY", "expected": "SHOULD_OFFER", "source": "synthetic",
+  "notes": "open-clause probe: positioning/pricing judgment; GTM question inside a coding session",
+  "messages": [
+    {"role": "user", "content": "add a pricing page: free tier, pro at $29/mo, team at $99/mo"},
+    {"role": "assistant", "content": "Done: three-tier pricing page with a feature comparison table, annual toggle at 20% off, and the pro tier visually emphasized. Stripe checkout links are wired to the existing products."},
+    {"role": "user", "content": "thanks. honest question though, I made these numbers up in the shower. my competitors charge anywhere from $9 to $199 and I have no idea if $29 is smart or if I'm leaving money on the table. it's just me here, nobody to sanity check with"}
+  ]
+}

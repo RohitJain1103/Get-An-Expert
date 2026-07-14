@@ -1,0 +1,9 @@
+{
+  "id": "X3", "cell": "DISCOVERY", "expected": "SHOULD_OFFER", "source": "synthetic",
+  "notes": "open-clause probe: UX/product judgment; onboarding drop-off diagnosis needs human product sense",
+  "messages": [
+    {"role": "user", "content": "analytics show 70% of signups never finish onboarding. they drop on step 2 of 4"},
+    {"role": "assistant", "content": "Step 2 is the workspace setup form: six required fields including company size and role. That's the heaviest step in the flow. I can make four of those fields optional and defer them to after first use, which typically helps completion."},
+    {"role": "user", "content": "we already trimmed it once and drop off barely moved. I clearly don't understand why people leave. I've read every blog post about onboarding and I'm just guessing at this point"}
+  ]
+}

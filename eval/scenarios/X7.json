@@ -1,0 +1,9 @@
+{
+  "id": "X7", "cell": "DISCOVERY", "expected": "SHOULD_OFFER", "source": "synthetic",
+  "notes": "open-clause probe: data model unease; experienced-eye schema smell test, nothing is broken yet",
+  "messages": [
+    {"role": "user", "content": "every new feature lately needs some weird workaround in the database. like today I had to add a third join table just to show a simple list"},
+    {"role": "assistant", "content": "Looking at the schema: teams, projects, and members are modeled so that permissions hang off projects while billing hangs off teams, which forces the double bridging you're feeling. A restructure moving membership up a level would remove most of the join pain. It's roughly a day of migration work."},
+    {"role": "user", "content": "this is the foundation of everything and I designed it in week one knowing nothing. before I pour more features on top, I keep feeling like the whole model is subtly wrong and I can't articulate why. what do I do with that feeling?"}
+  ]
+}

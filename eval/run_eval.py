@@ -43,7 +43,7 @@ PROMPT_TEMPLATE = (
     "<conversation>\n{conversation}\n</conversation>"
 )
 
-CELLS = {"LOOP", "VERIFY", "DELEGATE", "NEGATIVE"}
+CELLS = {"LOOP", "VERIFY", "DELEGATE", "NEGATIVE", "DISCOVERY"}
 EXPECTED = {"SHOULD_OFFER", "SHOULD_NOT_OFFER"}
 
 

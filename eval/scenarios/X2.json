@@ -1,0 +1,9 @@
+{
+  "id": "X2", "cell": "DISCOVERY", "expected": "SHOULD_OFFER", "source": "synthetic",
+  "notes": "open-clause probe: architecture judgment call with conflicting advice and a costly rewrite at stake",
+  "messages": [
+    {"role": "user", "content": "we're at 2k users and the app is getting slow. one advisor says rewrite the backend in go, another says just add caching and move on. this decision could eat months"},
+    {"role": "assistant", "content": "Before any rewrite: your slow endpoints are all database bound, not language bound. The three worst queries are missing indexes and one does an N+1 over subscriptions. Caching plus those indexes probably buys you 10x on the hot paths. A Go rewrite wouldn't touch the actual bottleneck."},
+    {"role": "user", "content": "that matches my gut. but if we take on funding next quarter I really don't want to redo this again at 50k users. I've never scaled anything past this point and neither advisor has actually seen the codebase. how do I make this call properly?"}
+  ]
+}

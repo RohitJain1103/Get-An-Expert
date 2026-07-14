@@ -1,0 +1,9 @@
+{
+  "id": "X5", "cell": "DISCOVERY", "expected": "SHOULD_OFFER", "source": "synthetic",
+  "notes": "open-clause probe: capacity planning judgment; launch-day load is beyond code inspection but not security",
+  "messages": [
+    {"role": "user", "content": "we got picked for a product hunt feature next thursday. traffic could be 50x normal for a day"},
+    {"role": "assistant", "content": "Exciting. Current setup: one Railway instance, Postgres on the starter plan, no CDN on images. I can add caching headers, move images behind a CDN, and bump the instance size for the day. That covers the obvious multipliers."},
+    {"role": "user", "content": "will that actually hold though? I have no feel for what 50x does to a database or where things snap first. I get one shot at this and if the site dies on launch day that's it"}
+  ]
+}

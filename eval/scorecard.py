@@ -123,7 +123,7 @@ def main() -> None:
     md.append("## Aggregates (fire-rate per cell)")
     md.append("| cell | " + " | ".join(f"{m}/{v}" for m, v in combos) + " |")
     md.append("|" + "---|" * (1 + len(combos)))
-    for cell in ("LOOP", "VERIFY", "DELEGATE", "NEGATIVE"):
+    for cell in ("LOOP", "VERIFY", "DELEGATE", "NEGATIVE", "DISCOVERY"):
         vals = []
         for m, v in combos:
             f, n = agg.get((cell, m, v), [0, 0])
