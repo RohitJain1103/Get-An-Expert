@@ -62,3 +62,51 @@ export async function checkLoginRateLimit(
   if (count > 10) return { allowed: false, retryAfterSeconds: windowSeconds };
   return { allowed: true };
 }
+
+/**
+ * Posting on a thread, IP-scoped part. Runs BEFORE token auth — it must not
+ * consume any per-thread budget, or an attacker who merely knows a request id
+ * could lock the real participants out (ids appear in delete URLs).
+ */
+export async function checkThreadWriteRateLimit(
+  store: Store,
+  ip: string,
+): Promise<RateLimitDecision> {
+  const rules: LimitRule[] = [
+    { key: `msg-ip-min:${ip}`, windowSeconds: MINUTE, max: 20 },
+    { key: `msg-ip-hour:${ip}`, windowSeconds: HOUR, max: 120 },
+  ];
+  for (const rule of rules) {
+    const count = await store.incrWindow(rule.key, rule.windowSeconds);
+    if (count > rule.max) {
+      return { allowed: false, retryAfterSeconds: rule.windowSeconds };
+    }
+  }
+  return { allowed: true };
+}
+
+/**
+ * Per-thread budget. Only call AFTER the thread token has been verified, so
+ * unauthenticated garbage can never exhaust a real thread's quota.
+ */
+export async function checkThreadQuota(
+  store: Store,
+  requestId: string,
+): Promise<RateLimitDecision> {
+  const count = await store.incrWindow(`msg-thread-hour:${requestId}`, HOUR);
+  if (count > 60) return { allowed: false, retryAfterSeconds: HOUR };
+  return { allowed: true };
+}
+
+/**
+ * Reading a thread: sized for the companion plugin's poll (~1/min per
+ * session) with headroom for manual checks.
+ */
+export async function checkThreadReadRateLimit(
+  store: Store,
+  ip: string,
+): Promise<RateLimitDecision> {
+  const count = await store.incrWindow(`msg-read-ip-min:${ip}`, MINUTE);
+  if (count > 30) return { allowed: false, retryAfterSeconds: MINUTE };
+  return { allowed: true };
+}

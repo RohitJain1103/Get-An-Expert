@@ -19,7 +19,7 @@ function input(overrides: Partial<ExpertRequestInput> = {}): ExpertRequestInput 
     expertiseArea: "Next.js SSR & hydration",
     consent: {
       agreed: true,
-      textVersion: "2026-07-13.v2",
+      textVersion: "2026-07-13.v3",
       at: "2026-07-13T12:00:00Z",
     },
     ...overrides,
@@ -45,11 +45,15 @@ describe("createExpertRequest", () => {
     expect(result.message).toContain(RETENTION_LINE);
     expect(result.message).toContain(result.deleteUrl);
     expect(result.deleteUrl).toContain(result.requestId);
+    // The thread token authenticates messaging and is returned exactly once.
+    expect(result.threadToken).toMatch(/^[A-Za-z0-9_-]{20,}$/);
+    expect(result.threadToken).not.toBe(result.deleteToken);
 
     const stored = await store.get(result.requestId);
     expect(stored?.status).toBe("new");
-    expect(stored?.response).toBeUndefined();
     expect(stored?.consent.agreed).toBe(true);
+    expect(stored?.threadTokenHash).toBeTruthy();
+    expect(stored?.threadTokenHash).not.toContain(result.threadToken);
   });
 
   it("never promises an AI-generated answer", async () => {

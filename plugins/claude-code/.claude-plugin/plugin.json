@@ -1,7 +1,7 @@
 {
   "name": "get-an-expert",
-  "description": "Offers expert help when a coding session gets stuck. Detects repeated failed attempts and nudges Claude to offer Get An Expert — nothing is ever sent without your explicit consent.",
-  "version": "0.1.1",
+  "description": "Offers expert help when a coding session gets stuck. Detects repeated failed attempts, nudges Claude to offer Get An Expert, and pings you when your expert replies on an open thread — nothing is ever sent without your explicit consent.",
+  "version": "0.2.0",
   "author": {
     "name": "Get An Expert"
   },

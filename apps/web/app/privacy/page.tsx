@@ -31,7 +31,7 @@ export default function PrivacyPage() {
         Privacy Policy
       </h1>
       <p className="mt-2 text-sm text-zinc-500">
-        Effective date: July 13, 2026 · Version 1.1
+        Effective date: July 13, 2026 · Version 1.2
       </p>
 
       <Section title="1. Who we are">
@@ -54,7 +54,7 @@ export default function PrivacyPage() {
       </Section>
 
       <Section title="3. What we collect">
-        <p>We collect three things, and only these:</p>
+        <p>We collect four things, and only these:</p>
         <ul className="list-disc space-y-1 pl-5">
           <li>
             <strong>The session summary you explicitly send</strong> when you
@@ -62,6 +62,15 @@ export default function PrivacyPage() {
             messages, a short summary of the stuck session, and your tech
             stack. Secret redaction runs on your machine before this is
             transmitted, and again on our servers when it arrives.
+          </li>
+          <li>
+            <strong>Thread messages you choose to send</strong> after a
+            request opens an expert thread: your messages to the expert and
+            optional progress updates (what you tried since their last reply,
+            new errors). Each one is sent only when you ask to send it, passes
+            the same two-stage secret redaction, and is stored on the thread
+            with the same retention as the request. Nothing is sent in the
+            background.
           </li>
           <li>
             <strong>A random install ID</strong> (a UUID generated on your
@@ -145,12 +154,14 @@ export default function PrivacyPage() {
       <Section title="9. Retention and deletion">
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            Session summaries and expert responses{" "}
-            <strong>auto-delete 30 days</strong> after submission.
+            Session summaries, thread messages, and expert responses{" "}
+            <strong>auto-delete 30 days</strong> after the request was
+            submitted.
           </li>
           <li>
-            Every response includes a private deletion link — use it to delete
-            that request immediately, no account or email needed.
+            Every request comes with a private deletion link — use it to
+            delete the request and its entire thread immediately, no account
+            or email needed.
           </li>
           <li>Rate-limit counters expire within 24 hours.</li>
           <li>
@@ -180,8 +191,9 @@ export default function PrivacyPage() {
         <p>
           TLS for all data in transit, encryption at rest with our storage
           provider, client-side secret redaction before transmission plus a
-          second server-side redaction pass, deletion tokens stored only as
-          hashes, and access limited to what operating the service requires.
+          second server-side redaction pass (for summaries and every thread
+          message), deletion and thread tokens stored only as hashes, and
+          access limited to what operating the service requires.
         </p>
       </Section>
 

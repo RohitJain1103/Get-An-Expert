@@ -30,11 +30,9 @@ function PasscodeGate() {
 }
 
 const STATUS_STYLES: Record<string, string> = {
-  answered:
-    "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300",
   new: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
-  escalated: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300",
-  failed: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
+  live: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300",
+  solved: "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
 };
 
 export default async function DashboardPage() {
@@ -77,7 +75,9 @@ export default async function DashboardPage() {
                     via {request.payload.tool}
                   </span>
                   <span className="ml-auto text-sm text-zinc-500">
-                    {new Date(request.createdAt).toLocaleString()}
+                    {new Date(
+                      request.lastActivityAt ?? request.createdAt,
+                    ).toLocaleString()}
                   </span>
                 </div>
                 <p className="truncate text-sm text-zinc-600 dark:text-zinc-400">

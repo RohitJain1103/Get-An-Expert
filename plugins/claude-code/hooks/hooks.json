@@ -7,6 +7,11 @@
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/detect-stuck.mjs\"",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/check-expert-replies.mjs\"",
+            "timeout": 10
           }
         ]
       }

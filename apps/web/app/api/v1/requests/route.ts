@@ -75,6 +75,7 @@ export async function POST(request: NextRequest) {
         message: result.message,
         deleteUrl: result.deleteUrl,
         deleteToken: result.deleteToken,
+        threadToken: result.threadToken,
       },
       error: null,
     });
