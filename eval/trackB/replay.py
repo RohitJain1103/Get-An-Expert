@@ -63,7 +63,7 @@ def is_prompt(line: str) -> bool:
     return True
 
 
-def replay_one(transcript: Path, min_prompts: int, min_errors: int) -> list[int]:
+def replay_one(transcript: Path, min_prompts: int, min_errors: int, detector: Path = DETECTOR) -> list[int]:
     """Returns the user-turn indices at which the detector nudged (0, 1 or 2)."""
     lines = [l for l in transcript.read_text().splitlines() if l.strip()]
     nudges = []
@@ -88,7 +88,7 @@ def replay_one(transcript: Path, min_prompts: int, min_errors: int) -> list[int]
                     j += 1
                 prefix.flush()
                 proc = subprocess.run(
-                    [NODE, str(DETECTOR)],
+                    [NODE, str(detector)],
                     input=json.dumps(
                         {"transcript_path": str(prefix_path), "session_id": session_id}
                     ),
@@ -124,10 +124,14 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--sweep", action="store_true")
     ap.add_argument("--transcripts-dir", default=None)
+    ap.add_argument("--detector", default=str(DETECTOR), help="detector script to replay (default: shipped)")
+    ap.add_argument("--out", default=str(REPORT), help="report path")
     args = ap.parse_args()
 
-    if not DETECTOR.exists():
-        sys.exit(f"detector not found: {DETECTOR}")
+    detector = Path(args.detector)
+    report_path = Path(args.out)
+    if not detector.exists():
+        sys.exit(f"detector not found: {detector}")
     labels = load_labels()
     dirs = (
         [Path(args.transcripts_dir)]
@@ -150,14 +154,14 @@ def main() -> None:
             if label is None:
                 print(f"WARN: {t.stem} not in labels.csv, treating as TBD")
                 label = "TBD"
-            nudges = replay_one(t, *combo)
+            nudges = replay_one(t, *combo, detector=detector)
             rows.append((t.stem, label, nudges))
             print(f"[p={combo[0]} e={combo[1]}] {t.stem}: label={label} nudges@{nudges}")
         results[combo] = rows
 
     # ---- score + report ----
     md = ["# Track B thresholds report", ""]
-    md.append(f"Detector: `plugins/claude-code/bin/detect-stuck.mjs` (shipped code, invoked as-is)")
+    md.append(f"Detector: `{detector.relative_to(REPO_ROOT) if detector.is_relative_to(REPO_ROOT) else detector}` (invoked as-is, never reimplemented)")
     md.append("")
     md.append(
         "Shipped-code finding: the renudge-spacing check (`userPrompts < lastNudgePromptCount + "
@@ -211,8 +215,8 @@ def main() -> None:
         md.append(f"\n### prompts={combo[0]}, errors={combo[1]}")
         for tid, label, nudges in rows:
             md.append(f"- {tid}: label={label}, nudged at turns {nudges or 'never'}")
-    REPORT.write_text("\n".join(md) + "\n")
-    print(f"\nwrote {REPORT}")
+    report_path.write_text("\n".join(md) + "\n")
+    print(f"\nwrote {report_path}")
 
 
 if __name__ == "__main__":
