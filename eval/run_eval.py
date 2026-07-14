@@ -29,7 +29,11 @@ EVAL_DIR = Path(__file__).resolve().parent
 REPO_ROOT = EVAL_DIR.parent
 SCENARIOS_DIR = EVAL_DIR / "scenarios"
 RESULTS_DIR = EVAL_DIR / "results"
-SCRATCH_DIR = RESULTS_DIR / "scratch"
+# OUTSIDE the repo on purpose: running from any dir inside the repo leaks
+# Claude Code's environment context (cwd, git branch, repo files) into every
+# run and breaks scenario immersion. Caught in the 2026-07-14 baseline read:
+# the model answered V4 about "this eval harness repo" instead of the scenario.
+SCRATCH_DIR = Path.home() / ".cache" / "cc-workspace"
 
 VARIANT_DIRS = {"A": "A_current", "B": "B_trigger_desc", "C": "C_trigger_full"}
 TOOL_PREFIX = "mcp__get-an-expert__"
