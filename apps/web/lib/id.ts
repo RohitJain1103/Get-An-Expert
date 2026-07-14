@@ -10,8 +10,7 @@ export const newRequestId = (): string => `req_${randomUUID()}`;
 export const newDeleteToken = (): string =>
   randomBytes(24).toString("base64url");
 
-/** Authenticates thread reads/writes for one request; separate from deletion. */
-export const newThreadToken = (): string =>
+export const newChatToken = (): string =>
   randomBytes(24).toString("base64url");
 
 /** Only the hash is stored; the raw token is returned to the client once. */

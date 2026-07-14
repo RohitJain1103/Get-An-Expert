@@ -1,16 +1,9 @@
-import type {
-  NewThreadMessage,
-  ThreadMessage,
-} from "@get-an-expert/core";
+import type { ChatMessage, NewChatMessage } from "@get-an-expert/core";
 import type { Store, StoredRequest } from "./types";
 
 interface Entry {
   record: StoredRequest;
-  expiresAt: number;
-}
-
-interface MessageList {
-  messages: ThreadMessage[];
+  messages: NewChatMessage[];
   expiresAt: number;
 }
 
@@ -21,7 +14,6 @@ interface MessageList {
  */
 export class MemoryStore implements Store {
   private entries = new Map<string, Entry>();
-  private threads = new Map<string, MessageList>();
   private counters = new Map<string, { count: number; expiresAt: number }>();
 
   private now(): number {
@@ -41,6 +33,7 @@ export class MemoryStore implements Store {
   async create(record: StoredRequest, ttlSeconds: number): Promise<void> {
     this.entries.set(record.id, {
       record: structuredClone(record),
+      messages: [],
       expiresAt: this.now() + ttlSeconds * 1000,
     });
   }
@@ -54,6 +47,7 @@ export class MemoryStore implements Store {
     const existing = this.live(record.id);
     this.entries.set(record.id, {
       record: structuredClone(record),
+      messages: existing?.messages ?? [],
       // Keep the original expiry if the record already exists; put() must
       // not extend the retention window.
       expiresAt: existing?.expiresAt ?? this.now() + ttlSeconds * 1000,
@@ -71,41 +65,33 @@ export class MemoryStore implements Store {
   }
 
   async delete(id: string): Promise<boolean> {
-    this.threads.delete(id);
     return this.entries.delete(id);
   }
 
   async appendMessage(
-    id: string,
-    message: NewThreadMessage,
-    ttlSeconds: number,
+    requestId: string,
+    message: NewChatMessage,
+    _ttlSeconds: number,
   ): Promise<number> {
-    const existing = this.threads.get(id);
-    const list: MessageList =
-      existing && existing.expiresAt > this.now()
-        ? existing
-        : { messages: [], expiresAt: this.now() + ttlSeconds * 1000 };
-    const next: ThreadMessage = {
-      ...structuredClone(message),
-      seq: list.messages.length + 1,
+    const entry = this.live(requestId);
+    if (!entry) throw new Error(`appendMessage: unknown request ${requestId}`);
+    const next: Entry = {
+      ...entry,
+      messages: [...entry.messages, structuredClone(message)],
     };
-    this.threads.set(id, {
-      ...list,
-      messages: [...list.messages, next],
-    });
-    return next.seq;
+    this.entries.set(requestId, next);
+    return next.messages.length;
   }
 
-  async listMessages(id: string, afterSeq: number): Promise<ThreadMessage[]> {
-    const list = this.threads.get(id);
-    if (!list || list.expiresAt <= this.now()) return [];
-    return structuredClone(list.messages.filter((m) => m.seq > afterSeq));
-  }
-
-  async countMessages(id: string): Promise<number> {
-    const list = this.threads.get(id);
-    if (!list || list.expiresAt <= this.now()) return 0;
-    return list.messages.length;
+  async listMessages(
+    requestId: string,
+    afterSeq: number,
+  ): Promise<ChatMessage[]> {
+    const entry = this.live(requestId);
+    if (!entry) return [];
+    return entry.messages
+      .slice(afterSeq)
+      .map((m, i) => ({ ...structuredClone(m), seq: afterSeq + i + 1 }));
   }
 
   async incrWindow(key: string, windowSeconds: number): Promise<number> {

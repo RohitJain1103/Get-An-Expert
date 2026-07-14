@@ -3,30 +3,40 @@ import { privacyUrl } from "./config";
 /**
  * The consent notice shown to the user before anything can be sent.
  * This copy is load-bearing for compliance (explicit opt-in, "what we
- * send / never send" pairing, retention + deletion) —
+ * send / never send" pairing, AI disclosure, retention + deletion) —
  * bump CONSENT_TEXT_VERSION in config.ts whenever it changes.
  */
 export function buildOfferMessage(expertiseArea: string): string {
   return [
-    `✨ **Looks like you're stuck. Want an expert eye on this ${expertiseArea} problem?**`,
+    `✨ **Looks like you're stuck. Want a human expert on this ${expertiseArea} problem?**`,
     "",
-    "Here's the deal: with your OK, Get An Expert sends **one structured summary** of " +
-      "where this session is stuck to its API. That opens a private thread with a " +
-      "real human expert, who replies with a diagnosis plus the exact next steps — " +
-      "and you can keep talking to them from right here (\"tell the expert …\") " +
-      "until it's solved.",
+    "Here's exactly how it works — this is the only time we ask, so it's all here:",
     "",
-    "**What gets sent (only if you say yes):** your goal, what's been tried, error " +
-      "messages, a short session summary, and your tech stack. Later messages and " +
-      "progress updates go to the expert only when you choose to send them, and " +
-      "you see each one before it goes.",
-    "**Never sent:** your source files, the full conversation, environment variables, " +
-      "or secrets — redaction runs on your machine before anything leaves it.",
+    "**What gets sent (only if you proceed):** one structured summary — your goal, " +
+      "what's been tried, error messages, a short session summary, and your tech " +
+      "stack — reviewed by a real person, never by an AI pipeline. A **live chat " +
+      "terminal opens where a human expert joins you**; the chat is human-to-human " +
+      "— no AI reads it.",
     "",
-    `The thread and everything on it auto-deletes after 30 days, and the ` +
-      `confirmation includes a private deletion link. Privacy policy: ${privacyUrl()}`,
+    "**While the chat is open:** from your \"proceed\" until the chat ends, this " +
+      "working session — your prompts, your agent's replies, the commands your " +
+      "agent runs and their output, and file edits — is relayed live to the " +
+      "expert, so they can watch real attempts instead of retellings. Nothing " +
+      "else on your machine is read. A **RELAY ON** indicator shows while it's " +
+      "active.",
     "",
-    "**Send it? (yes / no)**",
+    "**Never sent:** your source files, environment variables, or anything outside " +
+      "this session's activity — secrets are redacted on your machine before " +
+      "anything leaves it (and again server-side).",
+    "",
+    "**You stay in control:** you or the expert can end it anytime — type /end in " +
+      "the chat terminal or just ask here; the moment it ends, nothing relays " +
+      "anymore. /pause pauses relaying without ending the chat.",
+    "",
+    `Everything auto-deletes after 30 days, and you get a private deletion link. ` +
+      `Privacy policy: ${privacyUrl()}`,
+    "",
+    "**Proceed? (yes / no)**",
   ].join("\n");
 }
 

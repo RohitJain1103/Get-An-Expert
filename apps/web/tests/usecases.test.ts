@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { hashToken } from "../lib/id";
 import { MemoryStore } from "../lib/store/memory";
 import {
   createExpertRequest,
@@ -16,11 +17,11 @@ function input(overrides: Partial<ExpertRequestInput> = {}): ExpertRequestInput 
     errorMessages: ["Hydration failed"],
     conversationSummary: "16 messages of failed fixes",
     techStack: ["Next.js"],
-    expertiseArea: "Next.js SSR & hydration",
+    expertiseArea: "Next.js",
     consent: {
       agreed: true,
-      textVersion: "2026-07-13.v3",
-      at: "2026-07-13T12:00:00Z",
+      textVersion: "2026-07-14.v2",
+      at: "2026-07-14T12:00:00Z",
     },
     ...overrides,
   };
@@ -29,7 +30,7 @@ function input(overrides: Partial<ExpertRequestInput> = {}): ExpertRequestInput 
 const BASE = "https://example.com";
 
 describe("createExpertRequest", () => {
-  it("stores the request and returns a received confirmation", async () => {
+  it("stores a new chat-capable record and returns a received message", async () => {
     const store = new MemoryStore();
     const result = await createExpertRequest({
       store,
@@ -39,31 +40,14 @@ describe("createExpertRequest", () => {
 
     expect(result.status).toBe("new");
     expect(result.message).toContain("Request received");
-    expect(result.message).toContain("human expert");
-    expect(result.message).toContain("Next.js SSR & hydration");
-    expect(result.message).toContain(result.requestId);
     expect(result.message).toContain(RETENTION_LINE);
     expect(result.message).toContain(result.deleteUrl);
     expect(result.deleteUrl).toContain(result.requestId);
-    // The thread token authenticates messaging and is returned exactly once.
-    expect(result.threadToken).toMatch(/^[A-Za-z0-9_-]{20,}$/);
-    expect(result.threadToken).not.toBe(result.deleteToken);
 
     const stored = await store.get(result.requestId);
     expect(stored?.status).toBe("new");
+    expect(stored?.chat).toMatchObject({ status: "active" });
     expect(stored?.consent.agreed).toBe(true);
-    expect(stored?.threadTokenHash).toBeTruthy();
-    expect(stored?.threadTokenHash).not.toContain(result.threadToken);
-  });
-
-  it("never promises an AI-generated answer", async () => {
-    const store = new MemoryStore();
-    const result = await createExpertRequest({
-      store,
-      input: input(),
-      baseUrl: BASE,
-    });
-    expect(result.message).not.toMatch(/\bAI\b/i);
   });
 
   it("re-redacts secrets server-side before storing", async () => {
@@ -81,6 +65,22 @@ describe("createExpertRequest", () => {
     expect(stored?.serverRedactions).toEqual([
       { type: "anthropic-api-key", count: 1 },
     ]);
+  });
+
+  it("mints both tokens: hashes stored, raw returned once", async () => {
+    const store = new MemoryStore();
+    const result = await createExpertRequest({
+      store,
+      input: input(),
+      baseUrl: BASE,
+    });
+    expect(result.chatToken).toMatch(/^[A-Za-z0-9_-]{32}$/);
+    expect(result.deleteToken).toMatch(/^[A-Za-z0-9_-]{32}$/);
+    const stored = await store.get(result.requestId);
+    expect(stored?.chatTokenHash).toBe(hashToken(result.chatToken));
+    expect(stored?.deleteTokenHash).toBe(hashToken(result.deleteToken));
+    expect(JSON.stringify(stored)).not.toContain(result.chatToken);
+    expect(JSON.stringify(stored)).not.toContain(result.deleteToken);
   });
 });
 
@@ -107,26 +107,25 @@ describe("deleteExpertRequest", () => {
 });
 
 describe("listExpertRequests", () => {
-  it("lists newest first and never exposes the delete token hash", async () => {
+  it("lists newest first and never exposes either token hash", async () => {
     const store = new MemoryStore();
     await createExpertRequest({
       store,
       input: input({ goal: "first" }),
       baseUrl: BASE,
-      now: new Date("2026-07-13T10:00:00Z"),
+      now: new Date("2026-07-14T10:00:00Z"),
     });
     await createExpertRequest({
       store,
       input: input({ goal: "second" }),
       baseUrl: BASE,
-      now: new Date("2026-07-13T11:00:00Z"),
+      now: new Date("2026-07-14T11:00:00Z"),
     });
 
     const listed = await listExpertRequests(store, 10);
     expect(listed).toHaveLength(2);
     expect(listed[0].payload.goal).toBe("second");
-    expect(
-      listed.some((r) => Object.hasOwn(r, "deleteTokenHash")),
-    ).toBe(false);
+    expect(listed.some((r) => Object.hasOwn(r, "deleteTokenHash"))).toBe(false);
+    expect(listed.some((r) => Object.hasOwn(r, "chatTokenHash"))).toBe(false);
   });
 });

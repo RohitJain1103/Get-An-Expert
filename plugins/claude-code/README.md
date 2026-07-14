@@ -1,7 +1,8 @@
 # Get An Expert — Claude Code plugin
 
-Adds deterministic stuck-detection to Claude Code and bundles the Get An Expert MCP
-server.
+Adds deterministic stuck-detection to Claude Code, bundles the Get An Expert MCP
+server, and relays your session to a human expert while a live expert chat you
+consented to is open.
 
 ## What it does
 
@@ -9,13 +10,18 @@ server.
   (locally — nothing is transmitted). When it sees a genuinely stuck session
   (default: 10+ real user prompts AND 3+ recent failure signals) it nudges Claude to
   consider offering Get An Expert. At most 2 nudges per session, spaced out.
-- A second **reply-ping hook** watches your open expert thread (at most one poll
-  per 45s, using only the thread credentials the MCP server stored after your
-  consent) and tells Claude when the expert has replied, so the reply is relayed
-  to you without asking.
 - The bundled **MCP server** (`get-an-expert-mcp` via npx) handles the actual offer,
-  the consent notice, local secret redaction, the send, and the expert thread —
-  nothing is ever transmitted without your explicit yes.
+  the consent notice, local secret redaction, the send, and opening the live expert
+  chat — nothing is ever transmitted without your explicit yes.
+- **Session relay hooks** (UserPromptSubmit / PostToolUse / Stop) forward your
+  prompts, Claude's replies, agent-run commands with output, and file edits to
+  the human expert — but ONLY while an expert chat you explicitly consented to is
+  open. The hooks exit instantly (zero work, nothing sent) unless
+  `~/.get-an-expert/relay.json` exists; that file is created at escalation and
+  deleted the moment the chat ends, from either side. While relaying, a 🔴 RELAY ON
+  line shows on every prompt; `/pause` in the chat terminal pauses relaying, `/end`
+  stops everything. Every payload passes local secret redaction before leaving
+  your machine.
 
 ## Install
 
@@ -32,10 +38,9 @@ server.
 | `GAE_MIN_ERRORS` | 3 | Failure signals (recent transcript) required |
 | `GAE_RENUDGE_AFTER` | 10 | Additional prompts before a second nudge |
 | `GAE_MAX_NUDGES` | 2 | Max nudges per session |
-| `GAE_REPLY_POLL_SECONDS` | 45 | Minimum seconds between expert-reply polls |
 
 Privacy: the stuck-detector reads only the local transcript file Claude Code hands to
-hooks; the reply-ping polls only your own thread using credentials created after your
-explicit consent. Both keep tiny state files under `~/.get-an-expert/nudges`. Data
-leaves your machine only through the MCP consent flow.
+hooks and writes a tiny nudge-state file under `~/.get-an-expert/nudges`. The relay
+hooks send data only while your consented expert chat is open, always through the
+local secret redactor. Data leaves your machine only through the MCP consent flow.
 Policy: https://get-an-expert.vercel.app/privacy
