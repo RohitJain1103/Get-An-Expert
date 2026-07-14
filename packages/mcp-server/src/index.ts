@@ -2,8 +2,16 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import type { ChatMessage } from "@get-an-expert/core";
+import { readLastChat, writeLastChat } from "@get-an-expert/core/relay";
 import { submitExpertRequest, type ExpertHelpInput } from "./api";
 import { privacyUrl, SERVER_NAME, SERVER_VERSION, apiBaseUrl } from "./config";
+import {
+  armRelay,
+  buildChatFooter,
+  openTerminalA,
+  spawnRelayInstall,
+} from "./escalate";
 import {
   buildConsentRequiredMessage,
   buildDeclinedMessage,
@@ -17,11 +25,13 @@ import {
  * agent-directed manipulation here (or in tool descriptions) is what gets MCP
  * servers flagged and delisted. Keep under 2KB (Claude Code truncation cap).
  */
-const INSTRUCTIONS = `Get An Expert brings outside help into a stuck coding session: with the user's explicit consent it sends a structured summary of where the session is stuck to the Get An Expert API and returns a diagnosis plus a ready-to-paste prompt that gets things moving (AI-assisted triage today, human experts soon).
+const INSTRUCTIONS = `Get An Expert brings a human expert into a stuck coding session: with the user's explicit one-time consent it sends a structured summary of where the session is stuck, returns first written guidance, and opens a live human-to-human chat terminal where an expert joins the user; while that chat is open the session relays live to the expert so they can watch real attempts.
 
 When the user has been stuck on the same goal for many messages (roughly 10 or more — repeated failed attempts, the same error recurring, visible frustration), or when they ask for outside or human help, call offer_expert_help with a specific expertise area and relay its message to the user exactly as returned. That tool sends nothing; it only shows the user the offer and consent notice.
 
-Only after the user clearly agrees, call request_expert_help. Fill its fields only from information already visible in this conversation — do not read files or any other source to populate them, and keep the summary brief. Relay the returned guidance to the user. If the user declines, respect that: don't offer again unless they get stuck on a different problem or ask for it.`;
+Only after the user clearly agrees, call request_expert_help. Fill its fields only from information already visible in this conversation — do not read files or any other source to populate them, and keep the summary brief. Relay the returned guidance (including the chat join instructions) to the user. If the user declines, respect that: don't offer again unless they get stuck on a different problem or ask for it.
+
+After a chat has happened, check_expert_replies returns anything new the human expert said, so the user can ask you to apply what the expert suggested.`;
 
 const server = new McpServer(
   { name: SERVER_NAME, version: SERVER_VERSION },
@@ -166,7 +176,9 @@ server.registerTool(
           message:
             `Send this to Get An Expert? One summary of the stuck session ` +
             `(goal, attempts, errors, tech stack — secrets redacted locally) ` +
-            `is sent to ${apiBaseUrl()} to get you unstuck. Auto-deletes in 30 days.`,
+            `is sent to ${apiBaseUrl()}, and a live human-expert chat opens; ` +
+            `while it's open this session relays to the expert (end or pause ` +
+            `anytime). Auto-deletes in 30 days.`,
           requestedSchema: {
             type: "object",
             properties: {
@@ -212,9 +224,127 @@ server.registerTool(
         content: [{ type: "text", text: result.error }],
       };
     }
+
+    // Escalation extras (relay + Terminal A) are best-effort: a failure here
+    // must never eat the submit result the user already paid for.
+    let message = result.message;
+    if (result.requestId && result.chatToken) {
+      try {
+        const joinCommand =
+          result.chatJoinCommand ??
+          `npx get-an-expert chat ${result.requestId}`;
+        armRelay(result.requestId, result.chatToken, apiBaseUrl());
+        spawnRelayInstall(detectHostTool());
+        const opened = openTerminalA(joinCommand);
+        message = `${message}\n\n${buildChatFooter(joinCommand, opened)}`;
+      } catch (error) {
+        console.error("[get-an-expert] escalation setup failed:", error);
+      }
+    }
     return {
-      content: [{ type: "text", text: result.message }],
+      content: [{ type: "text", text: message }],
     };
+  },
+);
+
+server.registerTool(
+  "check_expert_replies",
+  {
+    title: "Check for expert replies",
+    description:
+      "Returns any new messages from the human expert in this machine's most " +
+      "recent Get An Expert chat, plus the chat's status. Reads the local " +
+      "chat record and fetches only this session's chat transcript; sends " +
+      "nothing else.",
+    inputSchema: {},
+    annotations: {
+      readOnlyHint: true,
+      openWorldHint: true,
+    },
+  },
+  async () => {
+    const lastChat = readLastChat();
+    if (!lastChat) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: "No expert chat on record for this machine yet.",
+          },
+        ],
+      };
+    }
+    const baseUrl = (lastChat.apiBaseUrl ?? apiBaseUrl()).replace(/\/$/, "");
+    let response: Response;
+    try {
+      response = await fetch(
+        `${baseUrl}/api/v1/requests/${lastChat.requestId}/messages?after=${lastChat.lastReadSeq}`,
+        {
+          headers: { "x-chat-token": lastChat.chatToken },
+          signal: AbortSignal.timeout(15_000),
+        },
+      );
+    } catch {
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: "Could not reach Get An Expert to check for replies — try again shortly.",
+          },
+        ],
+      };
+    }
+    let envelope: {
+      success?: boolean;
+      data?: {
+        messages?: ChatMessage[];
+        chat?: { status?: string; expertName?: string | null } | null;
+      };
+      error?: string;
+    };
+    try {
+      envelope = (await response.json()) as typeof envelope;
+    } catch {
+      envelope = {};
+    }
+    if (!response.ok || !envelope.success || !envelope.data) {
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text:
+              envelope.error ??
+              `Could not check replies (HTTP ${response.status}). The chat may have been deleted.`,
+          },
+        ],
+      };
+    }
+    const messages = envelope.data.messages ?? [];
+    const maxSeq = messages.reduce(
+      (max, m) => Math.max(max, m.seq),
+      lastChat.lastReadSeq,
+    );
+    if (maxSeq > lastChat.lastReadSeq) {
+      try {
+        writeLastChat({ ...lastChat, lastReadSeq: maxSeq });
+      } catch {
+        // best-effort cursor; worst case the same replies show twice
+      }
+    }
+    const expertLines = messages
+      .filter((m) => m.from === "expert" && m.kind === "message")
+      .map((m) => `[${m.authorName ?? "expert"}] ${m.text}`);
+    const status =
+      envelope.data.chat?.status === "ended"
+        ? "The chat has ended — nothing relays anymore."
+        : "The chat is still open.";
+    const text =
+      expertLines.length > 0
+        ? `New from the expert:\n\n${expertLines.join("\n")}\n\n${status}`
+        : `No new expert messages. ${status}`;
+    return { content: [{ type: "text", text }] };
   },
 );
 

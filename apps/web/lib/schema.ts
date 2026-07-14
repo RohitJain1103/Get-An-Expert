@@ -3,9 +3,9 @@ import { z } from "zod";
 /**
  * Version of the consent text shown to users in the MCP flow. Bump whenever
  * the consent wording changes; stored with every request as proof of what the
- * user agreed to.
+ * user agreed to. 2026-07-14.v1 added the live-chat + session-relay terms.
  */
-export const CONSENT_TEXT_VERSION = "2026-07-13.v1";
+export const CONSENT_TEXT_VERSION = "2026-07-14.v1";
 
 /** Hard size limits: fail fast, keep payloads minimal (data minimization). */
 export const expertRequestSchema = z.object({

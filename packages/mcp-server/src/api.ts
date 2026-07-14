@@ -18,7 +18,14 @@ export interface RedactedPayload {
 }
 
 export type SubmitResult =
-  | { ok: true; message: string }
+  | {
+      ok: true;
+      message: string;
+      /** Present when the server supports live expert chat (>= 0.2). */
+      requestId?: string;
+      chatToken?: string;
+      chatJoinCommand?: string;
+    }
   | { ok: false; error: string };
 
 /**
@@ -77,7 +84,16 @@ export async function submitExpertRequest(
     };
   }
 
-  let envelope: { success?: boolean; data?: { message?: string }; error?: string };
+  let envelope: {
+    success?: boolean;
+    data?: {
+      message?: string;
+      requestId?: string;
+      chatToken?: string;
+      chatJoinCommand?: string;
+    };
+    error?: string;
+  };
   try {
     envelope = (await response.json()) as typeof envelope;
   } catch {
@@ -103,5 +119,11 @@ export async function submitExpertRequest(
         `The Get An Expert API returned HTTP ${response.status}. Try again shortly.`,
     };
   }
-  return { ok: true, message: envelope.data.message };
+  return {
+    ok: true,
+    message: envelope.data.message,
+    requestId: envelope.data.requestId,
+    chatToken: envelope.data.chatToken,
+    chatJoinCommand: envelope.data.chatJoinCommand,
+  };
 }

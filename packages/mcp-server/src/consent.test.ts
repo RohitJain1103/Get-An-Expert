@@ -11,16 +11,36 @@ describe("buildOfferMessage", () => {
 
   it("contains the compliance-required elements", () => {
     // explicit opt-in ask
-    expect(message).toContain("Send it? (yes / no)");
+    expect(message).toContain("Proceed? (yes / no)");
     // what-we-send / never-send pairing
     expect(message).toContain("What gets sent");
     expect(message).toContain("Never sent:");
-    // AI disclosure travels with the offer
+    // AI disclosure travels with the offer (first written pass is AI triage)
     expect(message.toLowerCase()).toContain("ai-assisted");
     // retention + deletion
     expect(message).toContain("30 days");
     expect(message.toLowerCase()).toContain("deletion");
     // privacy policy link
     expect(message).toContain("/privacy");
+  });
+
+  it("discloses the session relay in full (the one-time consent)", () => {
+    // scope: what relays, from when, until when
+    expect(message).toContain("relayed live to the expert");
+    expect(message.toLowerCase()).toContain("until the chat ends");
+    expect(message.toLowerCase()).toContain(
+      "prompts, the commands your agent runs",
+    );
+    expect(message.toLowerCase()).toContain("file edits");
+    // local redaction before transmission
+    expect(message.toLowerCase()).toContain("redact");
+    // hard stop + pause + visibility
+    expect(message.toLowerCase()).toContain("end it anytime");
+    expect(message.toLowerCase()).toContain("/pause");
+    expect(message).toContain("RELAY ON");
+    // the chat itself is human-to-human
+    expect(message.toLowerCase()).toContain("no ai reads");
+    // this is the only consent ask
+    expect(message.toLowerCase()).toContain("only time we ask");
   });
 });

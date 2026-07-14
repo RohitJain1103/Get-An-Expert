@@ -77,6 +77,35 @@ describe("submitExpertRequest", () => {
     expect(sent.clientRedactions.length).toBeGreaterThan(0);
   });
 
+  it("passes through the chat escalation fields when the server sends them", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            success: true,
+            data: {
+              message: "Advice.",
+              requestId: "req_1",
+              chatToken: "tok_1",
+              chatJoinCommand: "npx get-an-expert chat req_1",
+            },
+            error: null,
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+    const result = await submitExpertRequest(input, new Date());
+    expect(result).toEqual({
+      ok: true,
+      message: "Advice.",
+      requestId: "req_1",
+      chatToken: "tok_1",
+      chatJoinCommand: "npx get-an-expert chat req_1",
+    });
+  });
+
   it("returns an actionable error on rate limiting", async () => {
     vi.stubGlobal(
       "fetch",
