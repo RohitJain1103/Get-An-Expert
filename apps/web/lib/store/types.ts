@@ -33,6 +33,8 @@ export interface Store {
   ): Promise<number>;
   /** Thread messages with seq > afterSeq, in order. */
   listMessages(id: string, afterSeq: number): Promise<ThreadMessage[]>;
+  /** O(1) message count, for enforcing the per-thread cap before appending. */
+  countMessages(id: string): Promise<number>;
   /**
    * Fixed-window counter for rate limiting. Increments the counter for the
    * current window and returns the new count. The key should already encode

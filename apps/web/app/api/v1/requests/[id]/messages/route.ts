@@ -1,12 +1,17 @@
 import type { NextRequest } from "next/server";
 import { clientIp } from "@/lib/client-ip";
 import {
+  checkThreadQuota,
   checkThreadReadRateLimit,
   checkThreadWriteRateLimit,
 } from "@/lib/ratelimit";
 import { threadMessageSchema } from "@/lib/schema";
 import { getStore } from "@/lib/store";
-import { listThreadMessages, postUserMessage } from "@/lib/usecases";
+import {
+  listThreadMessages,
+  postUserMessage,
+  verifyThreadToken,
+} from "@/lib/usecases";
 
 /** Reject oversized bodies before buffering/parsing (defense in depth). */
 const MAX_BODY_BYTES = 100_000;
@@ -120,12 +125,11 @@ export async function POST(
   }
 
   const store = getStore();
-  const rate = await checkThreadWriteRateLimit(
-    store,
-    clientIp(request.headers),
-    id,
-  );
-  if (!rate.allowed) {
+  // Order matters: IP limits gate unauthenticated traffic, then the token is
+  // verified, and only THEN is the per-thread quota consumed — so someone who
+  // merely knows a request id can never exhaust a real thread's budget.
+  const ipRate = await checkThreadWriteRateLimit(store, clientIp(request.headers));
+  if (!ipRate.allowed) {
     return Response.json(
       {
         success: false,
@@ -134,7 +138,25 @@ export async function POST(
       },
       {
         status: 429,
-        headers: { "Retry-After": String(rate.retryAfterSeconds ?? 3600) },
+        headers: { "Retry-After": String(ipRate.retryAfterSeconds ?? 3600) },
+      },
+    );
+  }
+
+  const record = await verifyThreadToken(store, id, token);
+  if (typeof record === "string") return failure(record);
+
+  const quota = await checkThreadQuota(store, id);
+  if (!quota.allowed) {
+    return Response.json(
+      {
+        success: false,
+        data: null,
+        error: "This thread hit its hourly message limit — give it a little time.",
+      },
+      {
+        status: 429,
+        headers: { "Retry-After": String(quota.retryAfterSeconds ?? 3600) },
       },
     );
   }
@@ -147,7 +169,20 @@ export async function POST(
       text: parsed.data.text,
       progress: parsed.data.progress,
     });
-    if (!result.ok) return failure(result.reason);
+    if (!result.ok) {
+      if (result.reason === "thread_full") {
+        return Response.json(
+          {
+            success: false,
+            data: null,
+            error:
+              "This thread has reached its message limit. Open a fresh request to keep going.",
+          },
+          { status: 409 },
+        );
+      }
+      return failure(result.reason);
+    }
     return Response.json({
       success: true,
       data: { seq: result.seq, status: result.status },

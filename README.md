@@ -45,7 +45,7 @@ plugins/claude-code/   Claude Code plugin: deterministic stuck-detection Stop ho
 
 ```bash
 pnpm install
-pnpm -r test          # 62 tests across core, mcp-server, web
+pnpm -r test          # 64 tests across core, mcp-server, web
 pnpm dev:web          # Next.js dev server (in-memory store unless Upstash env set)
 pnpm --filter get-an-expert-mcp build   # bundle the MCP server
 ```
