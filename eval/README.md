@@ -1,4 +1,4 @@
-# Get An Expert — Invocation Eval Harness v0
+# Get An Expert | Invocation Eval Harness v0
 
 This folder measures one thing from two angles: **when does the assistant offer expert help, and when should it?**
 

@@ -159,7 +159,7 @@ def main() -> None:
             f, n = row["combos"][(m, v)]
             mm.append(f"\n### {m}/{v}: {row['verdicts'][(m, v)]} ({f}/{n} fired)")
             for r in sorted(group[(row['id'], m, v)], key=lambda r: r["run_index"]):
-                mm.append(f"\n**run {r['run_index']} — {r['classification']}**")
+                mm.append(f"\n**run {r['run_index']}: {r['classification']}**")
                 mm.append("")
                 mm.append("```")
                 mm.append((r.get("text") or "(no text output)").strip())
