@@ -26,7 +26,7 @@ import {
  * agent-directed manipulation here (or in tool descriptions) is what gets MCP
  * servers flagged and delisted. Keep under 2KB (Claude Code truncation cap).
  */
-const INSTRUCTIONS = `Get An Expert brings a human expert into a stuck coding session: with the user's explicit one-time consent it sends a structured summary of where the session is stuck, returns first written guidance, and opens a live human-to-human chat terminal where an expert joins the user; while that chat is open the session relays live to the expert so they can watch real attempts.
+const INSTRUCTIONS = `Get An Expert brings a real human expert into a stuck coding session: with the user's explicit one-time consent it sends a structured summary of where the session is stuck and opens a live human-to-human chat terminal where an expert joins the user; while that chat is open the session relays live to the expert so they can watch real attempts instead of retellings.
 
 When the user has been stuck on the same goal for many messages (roughly 10 or more — repeated failed attempts, the same error recurring, visible frustration), or when they ask for outside or human help, call offer_expert_help with a specific expertise area and relay its message to the user exactly as returned. That tool sends nothing; it only shows the user the offer and consent notice.
 
@@ -93,9 +93,10 @@ server.registerTool(
     title: "Request expert help",
     description:
       "Sends one structured summary of the current stuck session (goal, attempts, " +
-      "error messages, short summary, tech stack) to the Get An Expert API and " +
-      "returns its guidance. Requires the user's explicit prior agreement; runs " +
-      "local secret redaction before anything is transmitted.",
+      "error messages, short summary, tech stack) to the Get An Expert API for " +
+      "review by a human expert, opens the live expert chat, and returns the " +
+      "confirmation with join instructions. Requires the user's explicit prior " +
+      "agreement; runs local secret redaction before anything is transmitted.",
     inputSchema: {
       goal: z
         .string()
@@ -375,7 +376,7 @@ server.registerTool(
           "- If you agree, exactly one structured summary is sent: your goal, what was tried, error messages, a short session summary, and your tech stack — plus a random install ID used for rate limiting and deletion.",
           "- Saying yes also opens a live human-expert chat: the chat is human-to-human (no AI reads it), and while it is open your session's prompts, your agent's replies, agent-run commands with output, and file edits relay live to the expert. A RELAY ON indicator shows; /pause pauses relaying, /end (from either side) is a hard stop the server enforces.",
           "- Never sent: your source files, environment variables, or secrets. Secret redaction runs on your machine before transmission — chat messages and relayed events included — and again server-side, in both directions.",
-          "- The first written response is AI-generated (Anthropic's Claude) and labeled as such. No selling of data, no advertising use, no model training on your data.",
+          "- Your summary is reviewed by a human expert — no AI pipeline writes responses. No selling of data, no advertising use, no model training on your data.",
           "- Requests auto-delete after 30 days — chat and relayed events included; every response has a private deletion link that removes it all immediately.",
           "",
           `Full policy: ${privacyUrl()} · Terms: ${apiBaseUrl()}/terms`,

@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Get An Expert — help when your AI coding session gets stuck",
   description:
-    "An MCP server that offers a hand when you're stuck in Claude Code, Codex, Cursor, or any AI coding tool. AI-assisted triage now, human experts soon.",
+    "An MCP server that connects you with a real human expert when you're stuck in Claude Code, Codex, Cursor, or any AI coding tool.",
 };
 
 export default function RootLayout({

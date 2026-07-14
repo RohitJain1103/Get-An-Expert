@@ -44,10 +44,14 @@ export async function postChatMessage(opts: {
   if (!record.chat) return { outcome: "unavailable" };
   if (record.chat.status !== "active") return { outcome: "ended" };
 
-  // First expert message: record the join and emit a one-time join notice.
+  // First expert message: record the join, flip the request live, and emit
+  // a one-time join notice.
   if (from === "expert" && !record.chat.expertJoinedAt) {
     const joined: StoredRequest = {
       ...record,
+      status: "live",
+      expertName: record.expertName ?? authorName,
+      lastActivityAt: now.toISOString(),
       chat: {
         ...record.chat,
         expertJoinedAt: now.toISOString(),
@@ -144,6 +148,7 @@ export async function endChatSession(opts: {
 
   const ended: StoredRequest = {
     ...record,
+    lastActivityAt: now.toISOString(),
     chat: {
       ...record.chat,
       status: "ended",

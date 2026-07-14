@@ -69,7 +69,7 @@ describe("store chat messages", () => {
     const store = new MemoryStore();
     await store.create(record("req_a"), 3600);
     await store.appendMessage("req_a", msg("one"), 3600);
-    await store.put({ ...record("req_a"), status: "escalated" }, 3600);
+    await store.put({ ...record("req_a"), status: "live" }, 3600);
     const all = await store.listMessages("req_a", 0);
     expect(all.map((m) => m.text)).toEqual(["one"]);
   });

@@ -37,16 +37,8 @@ export function buildRedactedPayload(input: ExpertHelpInput): RedactedPayload {
   return { payload: value as ExpertHelpInput, clientRedactions: redactions };
 }
 
-/**
- * Must stay >= the web route's `maxDuration` (300s, see
- * apps/web/app/api/v1/requests/route.ts) plus a network buffer. High-effort
- * analysis routinely runs past 150s; a shorter client timeout aborts the
- * fetch while the server is still working, so the answer gets generated and
- * stored but the customer never sees it (there is no retrieval path — the
- * request is a one-shot). 310s gives the full 300s server budget plus 10s
- * of slack for the response to travel back.
- */
-export const REQUEST_TIMEOUT_MS = 310_000;
+/** Submission is a quick store-and-confirm — no long-running work behind it. */
+export const REQUEST_TIMEOUT_MS = 30_000;
 
 export async function submitExpertRequest(
   input: ExpertHelpInput,

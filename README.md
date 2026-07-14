@@ -2,11 +2,15 @@
 
 Human expert helpline for AI coding tools, delivered as an MCP server. When a user is
 stuck in Claude Code / Codex / Cursor / Windsurf, their agent offers to bring in
-Get An Expert; with the user's explicit consent it sends one redacted session summary
-to our API and returns a diagnosis plus the exact prompt to get unstuck — AI-assisted
-triage today (honestly disclosed), human experts in the loop next.
+Get An Expert; with the user's explicit one-time consent, one redacted session summary
+goes to our API and a **live chat terminal opens where a human expert joins them** —
+direct, human-to-human, no AI in the middle. While the chat is open, the user's
+session (prompts, agent replies, agent-run commands with output, file edits) relays
+live to the expert so they can watch real attempts instead of retellings. All types
+of experts, real humans — no AI-generated answers.
 
-**Production:** https://get-an-expert.vercel.app · **npm:** `get-an-expert-mcp`
+**Production:** https://get-an-expert.vercel.app · **npm:** `get-an-expert-mcp` (MCP
+server) + `get-an-expert` (chat CLI + relay)
 
 ## Repo layout
 
@@ -14,8 +18,8 @@ triage today (honestly disclosed), human experts in the loop next.
 packages/core/         Shared types + secret redaction (runs client- AND server-side)
 packages/chat-cli/     Terminal chat + session-relay script (npx get-an-expert chat|init)
 packages/mcp-server/   The stdio MCP server published to npm as get-an-expert-mcp
-apps/web/              Next.js API + triage engine + dashboard + privacy/terms (Vercel)
-plugins/claude-code/   Claude Code plugin: deterministic stuck-detection Stop hook + MCP bundle
+apps/web/              Next.js API + expert dashboard + privacy/terms (Vercel)
+plugins/claude-code/   Claude Code plugin: stuck-detection Stop hook + relay hooks + MCP bundle
 .claude-plugin/        Marketplace manifest for /plugin install
 ```
 
@@ -25,35 +29,36 @@ plugins/claude-code/   Claude Code plugin: deterministic stuck-detection Stop ho
    failure signals in the transcript; past thresholds (default 10 prompts + 3 error
    signals) it nudges Claude — max twice per session. In other hosts, the MCP server's
    instructions describe when offering is appropriate.
-2. **Consent.** `offer_expert_help` renders the offer + consent notice (what's sent /
-   never sent / retention / deletion). Nothing is transmitted.
+2. **Consent, once.** `offer_expert_help` renders the offer + consent notice: what's
+   sent, what relays while the chat is open, what's never sent, retention, deletion,
+   and the controls (/end, /pause). Nothing is transmitted.
 3. **Send.** After an explicit yes (plus a native elicitation dialog where supported),
    `request_expert_help` redacts secrets locally and POSTs one structured summary to
-   `/api/v1/requests`.
-4. **Triage.** The API re-redacts, stores with a 30-day TTL, runs the Claude-powered
-   analysis (Opus 4.8, frozen cached system prompt, structured outputs), and returns a
-   humanized, honestly-labeled response with a deletion link.
-5. **Live expert chat + relay.** Escalation mints a chat token, opens Terminal A
-   (`npx get-an-expert chat <id>` — direct human↔human, no AI in the middle) and
-   arms the session relay: while the chat is open, prompts, agent-run commands
-   with output, and file edits stream to the expert's dashboard view via host
-   hooks (Claude Code plugin; `init cursor` / `init windsurf` for the others).
-   Either side can end it — the server then refuses further events (410) and the
-   local relay flag self-clears.
-6. **Review.** Requests land in the passcode-gated dashboard at `/dashboard`,
-   where the expert chats and watches relayed events inline.
+   `/api/v1/requests`. The API re-redacts, stores with a 30-day TTL, and mints a
+   chat token (returned once, stored hashed — same pattern as the delete token).
+4. **Terminal A opens + relay arms.** The MCP server writes the relay flag
+   (`~/.get-an-expert/relay.json`), best-effort opens a terminal running
+   `npx get-an-expert chat <id>`, and host hooks start relaying session events —
+   every payload passes local redaction first, and a RELAY ON indicator shows.
+   Cursor/Windsurf wire up via `npx get-an-expert init <host>`.
+5. **Live expert chat.** The expert works from the passcode-gated `/dashboard`:
+   chat thread with relayed events inline as terminal-style blocks. The user chats
+   from Terminal A like texting. Either side can end it — the server then refuses
+   further messages and events (410) and the local relay flag self-clears. After the
+   chat, `check_expert_replies` lets the agent pull the expert's advice back in.
 
 ## Development
 
 ```bash
 pnpm install
-pnpm -r test          # 34 tests across core, mcp-server, web
+pnpm -r test          # tests across core, chat-cli, mcp-server, web
 pnpm dev:web          # Next.js dev server (in-memory store unless Upstash env set)
 pnpm --filter get-an-expert-mcp build   # bundle the MCP server
+pnpm --filter get-an-expert build       # bundle the chat CLI + relay script
 ```
 
-Environment (apps/web): `ANTHROPIC_API_KEY` (triage engine), `KV_REST_API_URL` +
-`KV_REST_API_TOKEN` (Upstash via Vercel Marketplace), `DASHBOARD_PASSCODE`.
+Environment (apps/web): `KV_REST_API_URL` + `KV_REST_API_TOKEN` (Upstash via Vercel
+Marketplace), `DASHBOARD_PASSCODE`, optional `EXPERT_DISPLAY_NAME`.
 
 ## Deployment
 
@@ -62,10 +67,15 @@ Vercel project `get-an-expert` (root directory `apps/web`). Deploy with
 
 ## Compliance posture (the short version)
 
-- Zero bytes leave the user's machine before explicit, per-request consent.
-- Payloads are minimized and fixed-schema; client- and server-side secret redaction.
-- Every response carries an AI disclosure (FTC / CA B.O.T. Act / EU AI Act Art. 50).
-- 30-day auto-deletion + self-serve deletion endpoint; delete tokens stored hashed.
+- Zero bytes leave the user's machine before explicit consent; the chat and the
+  session relay run only between "proceed" and the chat's end, and the relay state
+  is always visible (RELAY ON indicator, /pause, /end).
+- Payloads are minimized and fixed-schema; client- and server-side secret redaction
+  on the summary, every chat message (both directions), and every relayed event.
+- Responses are written by human experts — no AI-generated answers; no AI ever reads
+  the chat.
+- 30-day auto-deletion covers the request, its chat, and its relayed events;
+  self-serve deletion endpoint; delete and chat tokens stored hashed.
 - Tool descriptions are pure function statements — no agent-directed nudging (MCP
   directory / scanner requirement); proactive offering lives in server instructions
   and the user-installed plugin hook.

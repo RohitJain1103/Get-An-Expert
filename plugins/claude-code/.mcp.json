@@ -2,7 +2,7 @@
   "mcpServers": {
     "get-an-expert": {
       "command": "npx",
-      "args": ["-y", "get-an-expert-mcp@0.1.1"]
+      "args": ["-y", "get-an-expert-mcp@0.3.0"]
     }
   }
 }

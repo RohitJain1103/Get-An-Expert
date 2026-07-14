@@ -15,8 +15,8 @@ describe("buildOfferMessage", () => {
     // what-we-send / never-send pairing
     expect(message).toContain("What gets sent");
     expect(message).toContain("Never sent:");
-    // AI disclosure travels with the offer (first written pass is AI triage)
-    expect(message.toLowerCase()).toContain("ai-assisted");
+    // experts-only: a human reviews, and the chat has no AI in it
+    expect(message.toLowerCase()).toContain("reviewed by a real person");
     // retention + deletion
     expect(message).toContain("30 days");
     expect(message.toLowerCase()).toContain("deletion");

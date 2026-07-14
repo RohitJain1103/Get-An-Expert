@@ -23,6 +23,12 @@ function Field({
   );
 }
 
+const STATUS_STYLES: Record<string, string> = {
+  new: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
+  live: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300",
+  solved: "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
+};
+
 export default async function RequestDetailPage({
   params,
 }: {
@@ -36,19 +42,26 @@ export default async function RequestDetailPage({
   const request = await getStore().get(id);
   if (!request) notFound();
 
-  const { payload, response } = request;
+  const { payload } = request;
 
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-12">
       <Link href="/dashboard" className="text-sm text-zinc-500 underline">
         ← All requests
       </Link>
-      <h1 className="mt-4 text-2xl font-semibold">{payload.expertiseArea}</h1>
+      <div className="mt-4 flex items-center gap-3">
+        <h1 className="text-2xl font-semibold">{payload.expertiseArea}</h1>
+        <span
+          className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[request.status] ?? ""}`}
+        >
+          {request.status}
+        </span>
+      </div>
       <p className="mt-1 text-sm text-zinc-500">
         {request.id} · {payload.tool} ·{" "}
-        {new Date(request.createdAt).toLocaleString()} · status:{" "}
-        {request.status} · consent {request.consent.textVersion} at{" "}
-        {request.consent.at}
+        {new Date(request.createdAt).toLocaleString()} ·{" "}
+        {request.expertName ? `expert: ${request.expertName}` : "unclaimed"} ·
+        consent {request.consent.textVersion}
       </p>
 
       <Field label="Goal">{payload.goal}</Field>
@@ -100,19 +113,6 @@ export default async function RequestDetailPage({
             .map((r) => `${r.type}×${r.count}`)
             .join(", ") || "none"}
         </Field>
-      )}
-
-      {response && (
-        <div className="mt-8 rounded-xl border border-zinc-200 p-5 dark:border-zinc-800">
-          <h2 className="font-semibold">Response sent ({response.model})</h2>
-          <Field label="Intro">{response.intro}</Field>
-          <Field label="Diagnosis">{response.diagnosis}</Field>
-          <Field label="Suggested prompt">
-            <pre className="overflow-x-auto whitespace-pre-wrap rounded-lg bg-zinc-100 p-3 font-mono text-xs dark:bg-zinc-900">
-              {response.suggestedPrompt}
-            </pre>
-          </Field>
-        </div>
       )}
 
       <ChatPanel requestId={request.id} />

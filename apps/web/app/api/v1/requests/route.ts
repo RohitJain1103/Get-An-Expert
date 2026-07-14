@@ -1,14 +1,10 @@
 import type { NextRequest } from "next/server";
-import { analyzeStuckSession } from "@/lib/analyst";
 import { clientIp } from "@/lib/client-ip";
 import { env } from "@/lib/env";
 import { checkRateLimit } from "@/lib/ratelimit";
 import { expertRequestSchema } from "@/lib/schema";
 import { getStore } from "@/lib/store";
 import { createExpertRequest } from "@/lib/usecases";
-
-/** Analysis at high effort can take a couple of minutes. */
-export const maxDuration = 300;
 
 /** Reject oversized bodies before buffering/parsing (defense in depth). */
 const MAX_BODY_BYTES = 300_000;
@@ -68,7 +64,6 @@ export async function POST(request: NextRequest) {
   try {
     const result = await createExpertRequest({
       store,
-      analyze: analyzeStuckSession,
       input: parsed.data,
       baseUrl: env.publicBaseUrl(),
     });

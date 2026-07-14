@@ -1,7 +1,7 @@
 {
   "name": "get-an-expert-mcp",
-  "version": "0.1.1",
-  "description": "Stuck in your AI coding session? Get An Expert offers a hand at the right moment — with your explicit consent, it sends a redacted summary of where you're stuck to Get An Expert and returns tailored advice on the best next prompt. Human experts in the loop coming soon.",
+  "version": "0.3.0",
+  "description": "Stuck in your AI coding session? Get An Expert connects you with a real human expert — with your explicit consent, it opens a live chat where an expert joins you and watches your real attempts (relayed from your session) until you're unstuck.",
   "keywords": [
     "mcp",
     "modelcontextprotocol",

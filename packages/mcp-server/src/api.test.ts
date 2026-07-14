@@ -1,13 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildRedactedPayload, REQUEST_TIMEOUT_MS, submitExpertRequest } from "./api";
-
-/**
- * Web route's `maxDuration` (apps/web/app/api/v1/requests/route.ts). Not
- * imported directly — mcp-server and apps/web are separate deployables —
- * but the two MUST stay in this relationship or completed analyses get
- * orphaned server-side while the customer sees a false "timed out" error.
- */
-const SERVER_MAX_DURATION_MS = 300_000;
+import { buildRedactedPayload, submitExpertRequest } from "./api";
 
 const input = {
   tool: "claude-code",
@@ -28,15 +20,6 @@ describe("buildRedactedPayload", () => {
     expect(clientRedactions.map((r) => r.type)).toContain("anthropic-api-key");
     // input untouched (immutability)
     expect(input.errorMessages[0]).toContain("verysecretkey");
-  });
-});
-
-describe("REQUEST_TIMEOUT_MS", () => {
-  it("stays >= the server's analysis budget so completed answers are never orphaned", () => {
-    // Regression guard: this was 150_000 (< server's 300_000 budget), which
-    // let the client abort mid-analysis while the server kept working,
-    // stored a real answer, and the customer never saw it.
-    expect(REQUEST_TIMEOUT_MS).toBeGreaterThanOrEqual(SERVER_MAX_DURATION_MS);
   });
 });
 

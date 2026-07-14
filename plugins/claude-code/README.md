@@ -11,17 +11,17 @@ consented to is open.
   (default: 10+ real user prompts AND 3+ recent failure signals) it nudges Claude to
   consider offering Get An Expert. At most 2 nudges per session, spaced out.
 - The bundled **MCP server** (`get-an-expert-mcp` via npx) handles the actual offer,
-  the consent notice, local secret redaction, and the send — nothing is ever
-  transmitted without your explicit yes.
+  the consent notice, local secret redaction, the send, and opening the live expert
+  chat — nothing is ever transmitted without your explicit yes.
 - **Session relay hooks** (UserPromptSubmit / PostToolUse / Stop) forward your
   prompts, Claude's replies, agent-run commands with output, and file edits to
-  the human expert —
-  but ONLY while an expert chat you explicitly consented to is open. The hooks
-  exit instantly (zero work, nothing sent) unless `~/.get-an-expert/relay.json`
-  exists; that file is created at escalation and deleted the moment the chat
-  ends, from either side. While relaying, a 🔴 RELAY ON line shows on every
-  prompt; `/pause` in the chat terminal pauses relaying, `/end` stops everything.
-  Every payload passes local secret redaction before leaving your machine.
+  the human expert — but ONLY while an expert chat you explicitly consented to is
+  open. The hooks exit instantly (zero work, nothing sent) unless
+  `~/.get-an-expert/relay.json` exists; that file is created at escalation and
+  deleted the moment the chat ends, from either side. While relaying, a 🔴 RELAY ON
+  line shows on every prompt; `/pause` in the chat terminal pauses relaying, `/end`
+  stops everything. Every payload passes local secret redaction before leaving
+  your machine.
 
 ## Install
 
@@ -39,6 +39,8 @@ consented to is open.
 | `GAE_RENUDGE_AFTER` | 10 | Additional prompts before a second nudge |
 | `GAE_MAX_NUDGES` | 2 | Max nudges per session |
 
-Privacy: the hook reads only the local transcript file Claude Code hands to hooks and
-writes a tiny nudge-state file under `~/.get-an-expert/nudges`. Data leaves your
-machine only through the MCP consent flow. Policy: https://get-an-expert.vercel.app/privacy
+Privacy: the stuck-detector reads only the local transcript file Claude Code hands to
+hooks and writes a tiny nudge-state file under `~/.get-an-expert/nudges`. The relay
+hooks send data only while your consented expert chat is open, always through the
+local secret redactor. Data leaves your machine only through the MCP consent flow.
+Policy: https://get-an-expert.vercel.app/privacy

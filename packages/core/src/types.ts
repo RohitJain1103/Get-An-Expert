@@ -31,21 +31,12 @@ export interface ExpertRequestPayload {
   clientRedactions?: RedactionSummary[];
 }
 
-/** The guidance returned to the stuck user. */
-export interface ExpertResponse {
-  /** Warm 2-3 sentence human-voiced opener. */
-  intro: string;
-  /** Why they're stuck, in plain words. */
-  diagnosis: string;
-  /** The ready-to-paste prompt that should get them unstuck. */
-  suggestedPrompt: string;
-  /** Honest one-liner that this first pass is AI-assisted. */
-  disclosure: string;
-  model?: string;
-  generatedAt: string;
-}
-
-export type ExpertRequestStatus = "new" | "answered" | "escalated" | "failed";
+/**
+ * new      → submitted, no expert engaged yet
+ * live     → an expert has joined the chat
+ * solved   → the expert marked it resolved (reserved for the dashboard flow)
+ */
+export type ExpertRequestStatus = "new" | "live" | "solved";
 
 /** Who authored a chat message or action. */
 export type ChatRole = "user" | "expert";
@@ -84,7 +75,8 @@ export type ChatSessionStatus = "active" | "ended";
 
 /**
  * Live-chat state carried on the request record. "ended" is a hard stop:
- * the server refuses further messages (HTTP 410) and it can never restart.
+ * the server refuses further messages and relayed events (HTTP 410) and it
+ * can never restart.
  */
 export interface ChatState {
   status: ChatSessionStatus;
@@ -105,7 +97,7 @@ export interface ConsentRecord {
   at: string;
 }
 
-/** What the backend stores. */
+/** What the backend stores. Chat messages live beside it, keyed by id. */
 export interface ExpertRequestRecord {
   id: string;
   createdAt: string;
@@ -116,5 +108,8 @@ export interface ExpertRequestRecord {
   consent: ConsentRecord;
   /** Live-chat state; present once a chat-capable request is created. */
   chat?: ChatState;
-  response?: ExpertResponse;
+  /** Display name of the expert who joined the chat (dashboard listing). */
+  expertName?: string;
+  /** ISO timestamp of the latest chat activity (createdAt until then). */
+  lastActivityAt?: string;
 }

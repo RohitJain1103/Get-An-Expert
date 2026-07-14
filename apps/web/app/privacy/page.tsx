@@ -31,7 +31,7 @@ export default function PrivacyPage() {
         Privacy Policy
       </h1>
       <p className="mt-2 text-sm text-zinc-500">
-        Effective date: July 14, 2026 · Version 1.1
+        Effective date: July 14, 2026 · Version 1.3
       </p>
 
       <Section title="1. Who we are">
@@ -54,7 +54,7 @@ export default function PrivacyPage() {
       </Section>
 
       <Section title="3. What we collect">
-        <p>We collect three things, and only these:</p>
+        <p>We collect four things, and only these:</p>
         <ul className="list-disc space-y-1 pl-5">
           <li>
             <strong>The session summary you explicitly send</strong> when you
@@ -62,6 +62,12 @@ export default function PrivacyPage() {
             messages, a short summary of the stuck session, and your tech
             stack. Secret redaction runs on your machine before this is
             transmitted, and again on our servers when it arrives.
+          </li>
+          <li>
+            <strong>Live chat messages and relayed session activity</strong>{" "}
+            once you escalate to an expert — described in full in section 5.
+            Both flows start only after your explicit consent and stop the
+            instant the chat ends.
           </li>
           <li>
             <strong>A random install ID</strong> (a UUID generated on your
@@ -76,11 +82,10 @@ export default function PrivacyPage() {
         </ul>
         <p>
           <strong>What we never collect:</strong> your source files or
-          repository contents; environment variables, API keys, or other
-          secrets; anything in the background or without your explicit
-          consent. Outside an active expert chat session (section 5), nothing
-          is collected passively — the software sends zero bytes to us until
-          you say yes.
+          repository contents; your full conversation transcript; environment
+          variables, API keys, or other secrets; anything in the background or
+          without your explicit per-request consent. The software sends zero
+          bytes to us until you say yes to a specific request.
         </p>
       </Section>
 
@@ -109,11 +114,11 @@ export default function PrivacyPage() {
             <strong>Relayed session activity</strong>: the prompts you type to
             your coding agent, the agent&apos;s replies, the commands it runs
             with their output, and the file edits it makes — so the expert can
-            watch real attempts. This
-            relay is active only while the chat is open, a RELAY ON indicator
-            shows in your session, and you can pause it (/pause) or end
-            everything (/end) at any moment. Either side ending the chat is a
-            hard stop: our servers refuse any further relayed event.
+            watch real attempts. This relay is active only while the chat is
+            open, a RELAY ON indicator shows in your session, and you can
+            pause it (/pause) or end everything (/end) at any moment. Either
+            side ending the chat is a hard stop: our servers refuse any
+            further relayed event.
           </li>
         </ul>
         <p>
@@ -126,12 +131,9 @@ export default function PrivacyPage() {
       <Section title="6. Why we use it, and our legal basis">
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            Generating your unstuck suggestion — <em>consent</em> (GDPR Art.
-            6(1)(a)), given per request.
-          </li>
-          <li>
-            Optional human-expert follow-up (when available) —{" "}
-            <em>consent</em>.
+            Sharing your session summary with a human expert who reviews it
+            and writes your response — <em>consent</em> (GDPR Art. 6(1)(a)),
+            given per request.
           </li>
           <li>
             Service security, rate limiting, and abuse prevention —{" "}
@@ -147,27 +149,27 @@ export default function PrivacyPage() {
         </p>
       </Section>
 
-      <Section title="7. AI processing disclosure">
+      <Section title="7. Human review">
         <p>
-          Your session summary is processed by Anthropic&apos;s Claude API to
-          generate the suggestion you receive. Responses are AI-generated and
-          labeled as such in every reply. Anthropic does not train models on
-          API inputs or outputs by default, and we never permit our data to be
-          used for model training. The AI suggestion is informational only —
-          it is not an automated decision with legal or similarly significant
-          effect (GDPR Art. 22 does not apply). The live expert chat and relayed
-          session events are never processed by any AI model.
+          Your session summary is reviewed by a human expert at Get An
+          Expert, who writes the response you receive. We do not use your
+          data to generate automated responses, we never permit it to be used
+          for model training, and no decision with legal or similarly
+          significant effect is made about you (GDPR Art. 22 does not apply).
+          The live expert chat and relayed session events are never processed
+          by any AI model.
         </p>
       </Section>
 
       <Section title="8. Who we share data with">
         <p>
-          We use three subprocessors, strictly to run the service: Vercel
-          (hosting), Anthropic (AI processing), and Upstash (storage). We do
-          not sell your data, do not share it for advertising, and do not
-          allow anyone to train models on it. Because we do not sell or share
-          personal information as defined by the CCPA/CPRA, no &quot;Do Not
-          Sell or Share&quot; mechanism is needed.
+          We use two subprocessors, strictly to run the service: Vercel
+          (hosting) and Upstash (storage). Your summary is visible to the
+          vetted expert who answers it. We do not sell your data, do not
+          share it for advertising, and do not allow anyone to train models
+          on it. Because we do not sell or share personal information as
+          defined by the CCPA/CPRA, no &quot;Do Not Sell or Share&quot;
+          mechanism is needed.
         </p>
       </Section>
 
@@ -183,12 +185,14 @@ export default function PrivacyPage() {
       <Section title="10. Retention and deletion">
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            Session summaries and generated suggestions{" "}
-            <strong>auto-delete 30 days</strong> after submission.
+            Session summaries, thread messages, and expert responses{" "}
+            <strong>auto-delete 30 days</strong> after the request was
+            submitted.
           </li>
           <li>
-            Every response includes a private deletion link — use it to delete
-            that request immediately, no account or email needed.
+            Every request comes with a private deletion link — use it to
+            delete the request and its entire thread immediately, no account
+            or email needed.
           </li>
           <li>Rate-limit counters expire within 24 hours.</li>
           <li>
@@ -218,8 +222,9 @@ export default function PrivacyPage() {
         <p>
           TLS for all data in transit, encryption at rest with our storage
           provider, client-side secret redaction before transmission plus a
-          second server-side redaction pass, deletion tokens stored only as
-          hashes, and access limited to what operating the service requires.
+          second server-side redaction pass (for summaries and every thread
+          message), deletion and thread tokens stored only as hashes, and
+          access limited to what operating the service requires.
         </p>
       </Section>
 

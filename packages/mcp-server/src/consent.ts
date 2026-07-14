@@ -14,9 +14,9 @@ export function buildOfferMessage(expertiseArea: string): string {
     "",
     "**What gets sent (only if you proceed):** one structured summary — your goal, " +
       "what's been tried, error messages, a short session summary, and your tech " +
-      "stack. You get back a first written suggestion (AI-assisted triage, labeled " +
-      "as such) and a **live chat terminal opens where a human expert joins you**. " +
-      "The chat is human-to-human — no AI reads it.",
+      "stack — reviewed by a real person, never by an AI pipeline. A **live chat " +
+      "terminal opens where a human expert joins you**; the chat is human-to-human " +
+      "— no AI reads it.",
     "",
     "**While the chat is open:** from your \"proceed\" until the chat ends, this " +
       "working session — your prompts, your agent's replies, the commands your " +

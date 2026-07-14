@@ -4,10 +4,10 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 export const SERVER_NAME = "get-an-expert";
-export const SERVER_VERSION = "0.1.1";
+export const SERVER_VERSION = "0.3.0";
 
 /** Must match the consent text in consent.ts; bump both together. */
-export const CONSENT_TEXT_VERSION = "2026-07-14.v1";
+export const CONSENT_TEXT_VERSION = "2026-07-14.v2";
 
 const DEFAULT_API_URL = "https://get-an-expert.vercel.app";
 
