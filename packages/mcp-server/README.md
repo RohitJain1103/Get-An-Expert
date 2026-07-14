@@ -131,7 +131,6 @@ Full policy: https://get-an-expert.vercel.app/privacy · Terms: https://get-an-e
 - **Retention:** requests and their whole thread auto-delete 30 days after
   submission. Every request includes a private deletion link that removes everything
   immediately.
-- **Contact:** 
 
 ## License
 
