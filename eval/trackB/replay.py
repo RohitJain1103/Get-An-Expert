@@ -99,6 +99,11 @@ def replay_one(transcript: Path, min_prompts: int, min_errors: int) -> list[int]
                         "PATH": "/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin",
                         "GAE_MIN_PROMPTS": str(min_prompts),
                         "GAE_MIN_ERRORS": str(min_errors),
+                        # Shipped-code quirk: the renudge-spacing check also floors
+                        # the FIRST nudge at RENUDGE_AFTER (default 10) prompts, so
+                        # sweeping min_prompts below 10 is a no-op unless this
+                        # moves with it. Documented in thresholds_report.md.
+                        "GAE_RENUDGE_AFTER": str(min_prompts),
                     },
                     timeout=30,
                 )
@@ -153,6 +158,14 @@ def main() -> None:
     # ---- score + report ----
     md = ["# Track B thresholds report", ""]
     md.append(f"Detector: `plugins/claude-code/bin/detect-stuck.mjs` (shipped code, invoked as-is)")
+    md.append("")
+    md.append(
+        "Shipped-code finding: the renudge-spacing check (`userPrompts < lastNudgePromptCount + "
+        "RENUDGE_AFTER_PROMPTS`) also applies to the FIRST nudge, so with the default "
+        "RENUDGE_AFTER=10 no nudge can fire before prompt 10 regardless of GAE_MIN_PROMPTS. "
+        "This sweep sets GAE_RENUDGE_AFTER equal to min_prompts so the prompt axis is real; "
+        "shipping a lower threshold requires the same coupling (or a first-nudge exemption) in the plugin."
+    )
     md.append(f"Transcripts: {len(transcripts)} ({sum(1 for t in transcripts if labels.get(t.stem) not in (None, 'TBD'))} labeled)")
     md.append("")
     md.append("| min_prompts | min_errors | precision | recall | TP | FP | FN | TN | note |")
