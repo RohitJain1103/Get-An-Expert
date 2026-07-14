@@ -15,6 +15,12 @@ import {
 const POLL_MS = 2000;
 const DEFAULT_API_URL = "https://get-an-expert.vercel.app";
 
+const USAGE = [
+  "Usage:",
+  "  npx get-an-expert chat <requestId> [--token <chatToken>]   join the live expert chat",
+  "  npx get-an-expert init <claude-code|cursor|windsurf>       wire session relay for your editor",
+].join("\n");
+
 interface CliArgs {
   requestId: string;
   tokenFlag?: string;
@@ -60,11 +66,24 @@ function printAbove(rl: readline.Interface, line: string): void {
 }
 
 async function main(): Promise<void> {
-  const args = parseArgs(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  if (argv[0] === "init") {
+    const host = argv[1];
+    if (host !== "claude-code" && host !== "cursor" && host !== "windsurf") {
+      console.log(USAGE);
+      process.exit(1);
+    }
+    const { runInit } = await import("./init");
+    const quiet = argv.includes("--quiet");
+    for (const line of runInit(host)) {
+      if (!quiet) console.log(line);
+    }
+    process.exit(0);
+  }
+
+  const args = parseArgs(argv);
   if (!args) {
-    console.log(
-      "Usage: npx get-an-expert chat <requestId> [--token <chatToken>]",
-    );
+    console.log(USAGE);
     process.exit(1);
   }
   const token = resolveToken(args);
