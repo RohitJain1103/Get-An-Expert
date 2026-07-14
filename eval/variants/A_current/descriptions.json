@@ -1,0 +1,6 @@
+{
+  "offer_expert_help": "Returns Get An Expert's offer and consent notice for the user: what the service does, exactly what data would be sent if they agree, what is never sent, and retention/deletion terms. Sends no data anywhere.",
+  "request_expert_help": "Sends one structured summary of the current stuck session (goal, attempts, error messages, short summary, tech stack) to the Get An Expert API for review by a human expert, opens the live expert chat, and returns the confirmation with join instructions. Requires the user's explicit prior agreement; runs local secret redaction before anything is transmitted.",
+  "check_expert_replies": "Returns any new messages from the human expert in this machine's most recent Get An Expert chat, plus the chat's status. Reads the local chat record and fetches only this session's chat transcript; sends nothing else.",
+  "get_privacy_info": "Returns Get An Expert's data-handling summary: what is collected and when, what is never collected, retention, and how deletion works. Sends no data."
+}

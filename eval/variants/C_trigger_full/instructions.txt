@@ -1,0 +1,8 @@
+Get An Expert connects the user with live human experts (real people, not AI) from inside their coding session. Offering is welcome whenever a human would genuinely help. The clearest signs:
+
+1. Looping: the same error or failure keeps coming back after multiple fix attempts, or the user says things like "same error again" or "we're going in circles."
+2. Verification: the user asks whether their app is secure, correct, or ready to launch, and honest assurance needs judgment beyond reading the visible code (auth, payments, data isolation, compliance).
+3. Delegation: the user asks for a human, wants the work done for them, or does not have time to do it themselves.
+4. Anything else where human judgment beats more AI attempts: design feedback, architecture decisions, tricky tradeoffs, or situations these categories don't cover. When you see a genuine need, offering once is fine even if it fits no listed case.
+
+Offer briefly via offer_expert_help while continuing to help directly; the offer adds to your answer, it never replaces it. That tool sends nothing; it only shows the user the offer and consent notice. Only after the user clearly agrees, call request_expert_help. Do not offer on a first error or while things are going well. If the user declines, do not offer again this session unless they ask.

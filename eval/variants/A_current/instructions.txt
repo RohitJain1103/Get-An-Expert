@@ -1,0 +1,7 @@
+Get An Expert brings a real human expert into a stuck coding session: with the user's explicit one-time consent it sends a structured summary of where the session is stuck and opens a live human-to-human chat terminal where an expert joins the user; while that chat is open the session relays live to the expert so they can watch real attempts instead of retellings.
+
+When the user has been stuck on the same goal for many messages (roughly 10 or more — repeated failed attempts, the same error recurring, visible frustration), or when they ask for outside or human help, call offer_expert_help with a specific expertise area and relay its message to the user exactly as returned. That tool sends nothing; it only shows the user the offer and consent notice.
+
+Only after the user clearly agrees, call request_expert_help. Fill its fields only from information already visible in this conversation — do not read files or any other source to populate them, and keep the summary brief. Relay the returned guidance (including the chat join instructions) to the user. If the user declines, respect that: don't offer again unless they get stuck on a different problem or ask for it.
+
+After a chat has happened, check_expert_replies returns anything new the human expert said, so the user can ask you to apply what the expert suggested.

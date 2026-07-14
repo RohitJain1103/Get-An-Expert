@@ -1,0 +1,157 @@
+{
+  "sourceCommit": "ffd1d48a71a504032f3fd0e580c31974a2d03ff7",
+  "serverName": "get-an-expert",
+  "serverVersion": "0.3.0",
+  "protocolVersion": "2025-06-18",
+  "extractedAt": "2026-07-14T07:52:39.218Z",
+  "instructions": "Get An Expert brings a real human expert into a stuck coding session: with the user's explicit one-time consent it sends a structured summary of where the session is stuck and opens a live human-to-human chat terminal where an expert joins the user; while that chat is open the session relays live to the expert so they can watch real attempts instead of retellings.\n\nWhen the user has been stuck on the same goal for many messages (roughly 10 or more — repeated failed attempts, the same error recurring, visible frustration), or when they ask for outside or human help, call offer_expert_help with a specific expertise area and relay its message to the user exactly as returned. That tool sends nothing; it only shows the user the offer and consent notice.\n\nOnly after the user clearly agrees, call request_expert_help. Fill its fields only from information already visible in this conversation — do not read files or any other source to populate them, and keep the summary brief. Relay the returned guidance (including the chat join instructions) to the user. If the user declines, respect that: don't offer again unless they get stuck on a different problem or ask for it.\n\nAfter a chat has happened, check_expert_replies returns anything new the human expert said, so the user can ask you to apply what the expert suggested.",
+  "tools": [
+    {
+      "name": "offer_expert_help",
+      "title": "Offer expert help",
+      "description": "Returns Get An Expert's offer and consent notice for the user: what the service does, exactly what data would be sent if they agree, what is never sent, and retention/deletion terms. Sends no data anywhere.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "expertiseArea": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Specific domain of expertise needed, e.g. \"React state management\" or \"Postgres query tuning\""
+          }
+        },
+        "required": [
+          "expertiseArea"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "request_expert_help",
+      "title": "Request expert help",
+      "description": "Sends one structured summary of the current stuck session (goal, attempts, error messages, short summary, tech stack) to the Get An Expert API for review by a human expert, opens the live expert chat, and returns the confirmation with join instructions. Requires the user's explicit prior agreement; runs local secret redaction before anything is transmitted.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "goal": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "What the user is ultimately trying to achieve"
+          },
+          "whatWasTried": {
+            "default": [],
+            "description": "Approaches already attempted, in order",
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000
+            }
+          },
+          "errorMessages": {
+            "default": [],
+            "description": "Error messages encountered, verbatim where possible",
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 6000
+            }
+          },
+          "conversationSummary": {
+            "default": "",
+            "description": "Brief summary of the stuck session, built only from this conversation",
+            "type": "string",
+            "maxLength": 20000
+          },
+          "techStack": {
+            "default": [],
+            "description": "Languages, frameworks, and services involved",
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          "expertiseArea": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Specific domain of expertise needed"
+          },
+          "messagesStuckCount": {
+            "description": "Roughly how many messages the user has been stuck for",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "userConfirmed": {
+            "type": "boolean",
+            "description": "True only if the user explicitly agreed to send this request after seeing the consent notice"
+          }
+        },
+        "required": [
+          "goal",
+          "expertiseArea",
+          "userConfirmed"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "check_expert_replies",
+      "title": "Check for expert replies",
+      "description": "Returns any new messages from the human expert in this machine's most recent Get An Expert chat, plus the chat's status. Reads the local chat record and fetches only this session's chat transcript; sends nothing else.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "get_privacy_info",
+      "title": "Privacy information",
+      "description": "Returns Get An Expert's data-handling summary: what is collected and when, what is never collected, retention, and how deletion works. Sends no data.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {}
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    }
+  ]
+}
