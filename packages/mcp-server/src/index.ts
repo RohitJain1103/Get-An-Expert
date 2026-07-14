@@ -17,11 +17,11 @@ import {
  * agent-directed manipulation here (or in tool descriptions) is what gets MCP
  * servers flagged and delisted. Keep under 2KB (Claude Code truncation cap).
  */
-const INSTRUCTIONS = `Get An Expert brings outside help into a stuck coding session: with the user's explicit consent it sends a structured summary of where the session is stuck to the Get An Expert API and returns a diagnosis plus a ready-to-paste prompt that gets things moving (AI-assisted triage today, human experts soon).
+const INSTRUCTIONS = `Get An Expert brings a real human expert into a stuck coding session: with the user's explicit consent it sends a structured summary of where the session is stuck to the Get An Expert API, where a human expert reviews it and responds with a diagnosis plus the exact next steps.
 
 When the user has been stuck on the same goal for many messages (roughly 10 or more — repeated failed attempts, the same error recurring, visible frustration), or when they ask for outside or human help, call offer_expert_help with a specific expertise area and relay its message to the user exactly as returned. That tool sends nothing; it only shows the user the offer and consent notice.
 
-Only after the user clearly agrees, call request_expert_help. Fill its fields only from information already visible in this conversation — do not read files or any other source to populate them, and keep the summary brief. Relay the returned guidance to the user. If the user declines, respect that: don't offer again unless they get stuck on a different problem or ask for it.`;
+Only after the user clearly agrees, call request_expert_help. Fill its fields only from information already visible in this conversation — do not read files or any other source to populate them, and keep the summary brief. Relay the returned confirmation to the user. If the user declines, respect that: don't offer again unless they get stuck on a different problem or ask for it.`;
 
 const server = new McpServer(
   { name: SERVER_NAME, version: SERVER_VERSION },
@@ -82,9 +82,10 @@ server.registerTool(
     title: "Request expert help",
     description:
       "Sends one structured summary of the current stuck session (goal, attempts, " +
-      "error messages, short summary, tech stack) to the Get An Expert API and " +
-      "returns its guidance. Requires the user's explicit prior agreement; runs " +
-      "local secret redaction before anything is transmitted.",
+      "error messages, short summary, tech stack) to the Get An Expert API for " +
+      "review by a human expert, and returns the submission confirmation. Requires " +
+      "the user's explicit prior agreement; runs local secret redaction before " +
+      "anything is transmitted.",
     inputSchema: {
       goal: z
         .string()
@@ -166,7 +167,8 @@ server.registerTool(
           message:
             `Send this to Get An Expert? One summary of the stuck session ` +
             `(goal, attempts, errors, tech stack — secrets redacted locally) ` +
-            `is sent to ${apiBaseUrl()} to get you unstuck. Auto-deletes in 30 days.`,
+            `is sent to ${apiBaseUrl()} for a human expert to review. ` +
+            `Auto-deletes in 30 days.`,
           requestedSchema: {
             type: "object",
             properties: {
@@ -241,7 +243,7 @@ server.registerTool(
           "- Nothing is ever sent anywhere until you explicitly say yes to a specific request.",
           "- If you agree, exactly one structured summary is sent: your goal, what was tried, error messages, a short session summary, and your tech stack — plus a random install ID used for rate limiting and deletion.",
           "- Never sent: your source files, the full conversation transcript, environment variables, or secrets. Secret redaction runs on your machine before transmission, and again server-side.",
-          "- The first response is AI-generated (Anthropic's Claude) and labeled as such. No selling of data, no advertising use, no model training on your data.",
+          "- Your request is reviewed by a human expert who writes the response you receive. No selling of data, no advertising use, no model training on your data.",
           "- Requests auto-delete after 30 days; every response includes a private deletion link that removes it immediately.",
           "",
           `Full policy: ${privacyUrl()} · Terms: ${apiBaseUrl()}/terms`,

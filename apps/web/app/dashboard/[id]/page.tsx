@@ -103,7 +103,7 @@ export default async function RequestDetailPage({
 
       {response && (
         <div className="mt-8 rounded-xl border border-zinc-200 p-5 dark:border-zinc-800">
-          <h2 className="font-semibold">Response sent ({response.model})</h2>
+          <h2 className="font-semibold">Expert response</h2>
           <Field label="Intro">{response.intro}</Field>
           <Field label="Diagnosis">{response.diagnosis}</Field>
           <Field label="Suggested prompt">
