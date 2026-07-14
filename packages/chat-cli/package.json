@@ -1,0 +1,39 @@
+{
+  "name": "get-an-expert",
+  "version": "0.1.0",
+  "description": "Live terminal chat with a human expert from Get An Expert. Run: npx get-an-expert chat <requestId>",
+  "keywords": ["expert", "help", "chat", "claude-code", "cursor", "windsurf"],
+  "license": "MIT",
+  "author": "Get An Expert",
+  "homepage": "https://get-an-expert.vercel.app",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RohitJain1103/Get-An-Expert.git",
+    "directory": "packages/chat-cli"
+  },
+  "bugs": {
+    "url": "https://github.com/RohitJain1103/Get-An-Expert/issues"
+  },
+  "type": "module",
+  "bin": {
+    "get-an-expert": "dist/index.js"
+  },
+  "files": ["dist", "README.md"],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "prepublishOnly": "pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "@get-an-expert/core": "workspace:*",
+    "@types/node": "^20.19.43",
+    "tsup": "^8.5.1",
+    "tsx": "^4.23.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
+  }
+}
