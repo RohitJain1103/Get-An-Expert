@@ -3,6 +3,7 @@ import {
   endChatSession,
   listChatMessages,
   postChatMessage,
+  postRelayEvent,
   verifyChatToken,
 } from "../lib/chat";
 import { hashToken } from "../lib/id";
@@ -192,6 +193,55 @@ describe("postChatMessage", () => {
       now: NOW,
     });
     expect(result).toEqual({ outcome: "ended" });
+  });
+});
+
+describe("postRelayEvent", () => {
+  it("appends an event with kind event and its type, redacted", async () => {
+    const { store, record } = await seeded();
+    const result = await postRelayEvent({
+      store,
+      record,
+      type: "command",
+      text: "$ deploy --key sk-ant-api03-abcdefghijklmnopqrstuvwx\nok",
+      now: NOW,
+    });
+    expect(result.outcome).toBe("ok");
+    const { messages } = await listChatMessages(store, "req_a", 0);
+    expect(messages[0]).toMatchObject({
+      kind: "event",
+      eventType: "command",
+      from: "user",
+    });
+    expect(messages[0]?.text).toContain("[REDACTED:anthropic-api-key]");
+    expect(messages[0]?.text).not.toContain("sk-ant-");
+  });
+
+  it("refuses after end, even with a stale active record (TOCTOU)", async () => {
+    const { store, record } = await seeded();
+    await endChatSession({ store, record, by: "expert", now: NOW });
+    const result = await postRelayEvent({
+      store,
+      record,
+      type: "prompt",
+      text: "sneaky",
+      now: NOW,
+    });
+    expect(result).toEqual({ outcome: "ended" });
+    const { messages } = await listChatMessages(store, "req_a", 0);
+    expect(messages.filter((m) => m.kind === "event")).toEqual([]);
+  });
+
+  it("distinguishes records without chat state", async () => {
+    const { store, record } = await seeded({ chat: undefined });
+    const result = await postRelayEvent({
+      store,
+      record,
+      type: "edit",
+      text: "x",
+      now: NOW,
+    });
+    expect(result).toEqual({ outcome: "unavailable" });
   });
 });
 

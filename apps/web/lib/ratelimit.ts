@@ -86,3 +86,16 @@ export async function checkChatPollRateLimit(
   if (count > 240) return { allowed: false, retryAfterSeconds: MINUTE };
   return { allowed: true };
 }
+
+/**
+ * Relayed session events burst one per agent tool call, so this sits well
+ * above chat-post but still bounds a runaway hook loop.
+ */
+export async function checkEventRateLimit(
+  store: Store,
+  ip: string,
+): Promise<RateLimitDecision> {
+  const count = await store.incrWindow(`chat-event:${ip}`, MINUTE);
+  if (count > 120) return { allowed: false, retryAfterSeconds: MINUTE };
+  return { allowed: true };
+}

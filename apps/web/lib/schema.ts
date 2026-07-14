@@ -41,3 +41,12 @@ export type ExpertRequestInput = z.infer<typeof expertRequestSchema>;
 export const chatMessageBodySchema = z.object({
   text: z.string().min(1).max(4000),
 });
+
+/**
+ * One relayed session event. Clients fold command output into the command
+ * event's text and truncate locally; the cap here is the abuse backstop.
+ */
+export const relayEventBodySchema = z.object({
+  type: z.enum(["prompt", "command", "output", "edit", "agent_reply"]),
+  text: z.string().min(1).max(32000),
+});

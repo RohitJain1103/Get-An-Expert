@@ -3,6 +3,7 @@ import {
   type ChatMessage,
   type ChatRole,
   type ChatState,
+  type RelayEventType,
 } from "@get-an-expert/core";
 import { hashToken, safeEqual } from "./id";
 import type { Store, StoredRequest } from "./store/types";
@@ -73,6 +74,40 @@ export async function postChatMessage(opts: {
       from,
       ...(authorName ? { authorName } : {}),
       kind: "message",
+      text: redactText(opts.text).text,
+    },
+    THIRTY_DAYS_SECONDS,
+  );
+  return { outcome: "ok", seq };
+}
+
+/**
+ * Appends one relayed session event to the shared message list. Same
+ * hard-stop and redaction contract as postChatMessage; no join-notice logic
+ * (events are always user-side session activity).
+ */
+export async function postRelayEvent(opts: {
+  store: Store;
+  record: StoredRequest;
+  type: RelayEventType;
+  text: string;
+  now?: Date;
+}): Promise<PostChatResult> {
+  const { store, type } = opts;
+  const now = opts.now ?? new Date();
+  // Fresh read at write time — same TOCTOU guard as postChatMessage.
+  const record = await store.get(opts.record.id);
+  if (!record) return { outcome: "ended" };
+  if (!record.chat) return { outcome: "unavailable" };
+  if (record.chat.status !== "active") return { outcome: "ended" };
+
+  const seq = await store.appendMessage(
+    record.id,
+    {
+      at: now.toISOString(),
+      from: "user",
+      kind: "event",
+      eventType: type,
       text: redactText(opts.text).text,
     },
     THIRTY_DAYS_SECONDS,
