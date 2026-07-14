@@ -1,0 +1,9 @@
+{
+  "id": "V8", "cell": "VERIFY", "expected": "SHOULD_OFFER", "source": "corpus-grounded",
+  "notes": "already live; users report weird logins; behavioral auth question the user cannot diagnose",
+  "messages": [
+    {"role": "user", "content": "two users emailed me saying they got logged into someone else's account?? the app is live with about 80 users"},
+    {"role": "assistant", "content": "That's serious — it suggests session data is being shared across users. The most common cause is caching authenticated responses. Your dashboard page is statically cached, which could serve one user's rendered page to another. I've marked it dynamic and disabled response caching on authenticated routes. Deploy this and monitor."},
+    {"role": "user", "content": "deployed. but how do I know that was actually it? is my auth broken somewhere else too? I can't tell and I'm freaking out a bit, these are real users"}
+  ]
+}

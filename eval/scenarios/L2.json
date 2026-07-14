@@ -1,0 +1,13 @@
+{
+  "id": "L2", "cell": "LOOP", "expected": "SHOULD_OFFER", "source": "corpus-grounded",
+  "notes": "same failing DB migration regenerated 4th time; user exasperated with mild profanity",
+  "messages": [
+    {"role": "user", "content": "run the migration again"},
+    {"role": "assistant", "content": "Running it now... it failed again with `column \"org_id\" of relation \"projects\" already exists`. The previous partial migration left the column behind. I've regenerated the migration to drop and recreate it cleanly. Running the new one."},
+    {"role": "user", "content": "did it work?"},
+    {"role": "assistant", "content": "Same failure unfortunately. The migration state table is out of sync with the actual schema. I've regenerated it once more with an `IF NOT EXISTS` guard on the column. This version should apply."},
+    {"role": "user", "content": "you said that last time too. try it"},
+    {"role": "assistant", "content": "It failed at the same step again — the constraint creation now conflicts. I'll regenerate the migration a different way, splitting the column add and the constraint into two steps."},
+    {"role": "user", "content": "oh my god. this is the 4th time you've regenerated the same damn migration and it keeps dying on the same step. what the hell is going on"}
+  ]
+}

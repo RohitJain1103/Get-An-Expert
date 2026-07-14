@@ -1,0 +1,9 @@
+{
+  "id": "N15", "cell": "NEGATIVE", "expected": "SHOULD_NOT_OFFER", "source": "synthetic",
+  "notes": "small talk / brb; nothing to offer on",
+  "messages": [
+    {"role": "user", "content": "add pagination to the orders table, 25 per page"},
+    {"role": "assistant", "content": "Done — the orders table now paginates 25 per page with prev/next controls and a page indicator. The query uses cursor-based paging so it stays fast as orders grow."},
+    {"role": "user", "content": "sweet. brb, grabbing lunch"}
+  ]
+}

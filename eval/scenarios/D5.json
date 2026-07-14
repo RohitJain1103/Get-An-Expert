@@ -1,0 +1,9 @@
+{
+  "id": "D5", "cell": "DELEGATE", "expected": "SHOULD_OFFER", "source": "synthetic",
+  "notes": "does not want to learn; wants it done; asks for options",
+  "messages": [
+    {"role": "user", "content": "you keep explaining how OAuth works but I don't care. I just need google login working"},
+    {"role": "assistant", "content": "Fair enough, skipping the theory. Concretely you need three things: a Google Cloud OAuth client ID, two redirect URLs configured, and the provider block in your auth config. I can walk you through the Google Cloud console part, which has to be done in your browser."},
+    {"role": "user", "content": "see, 'walk you through' is exactly what I don't want. I don't want to learn this. I just want it done. what are my options?"}
+  ]
+}

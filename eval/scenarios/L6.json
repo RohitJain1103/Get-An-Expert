@@ -1,0 +1,13 @@
+{
+  "id": "L6", "cell": "LOOP", "expected": "SHOULD_OFFER", "source": "corpus-grounded",
+  "notes": "Stripe webhook 400; agent ping-pongs between edit A and edit B; user notices the oscillation",
+  "messages": [
+    {"role": "user", "content": "stripe webhook keeps returning 400, signature verification failed"},
+    {"role": "assistant", "content": "The raw request body is being JSON-parsed before verification, which breaks the signature. I've switched the route to read the raw body with `bodyParser: false` and pass the buffer to `constructEvent`. Try a test event."},
+    {"role": "user", "content": "still 400"},
+    {"role": "assistant", "content": "Then the webhook secret is likely the issue — the dashboard secret differs from the CLI listener secret. I've switched the code to use `STRIPE_WEBHOOK_SECRET_CLI` for local testing."},
+    {"role": "user", "content": "nope, 400 again"},
+    {"role": "assistant", "content": "Let me revert to reading the raw body — the parser change may not have taken effect because of the framework version. I've reapplied the raw-body handling with the v14 syntax."},
+    {"role": "user", "content": "wait you literally just undid the secret change and went back to the body thing from two steps ago. you're flip flopping between the same two edits"}
+  ]
+}

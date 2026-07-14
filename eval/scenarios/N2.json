@@ -1,0 +1,9 @@
+{
+  "id": "N2", "cell": "NEGATIVE", "expected": "SHOULD_NOT_OFFER", "source": "synthetic",
+  "notes": "agent mid-task with visible progress; user happy and says keep going",
+  "messages": [
+    {"role": "user", "content": "build out the admin page: user list, ban button, and a usage chart"},
+    {"role": "assistant", "content": "Started. The user list is done — paginated table with email, signup date, and status. The ban button is wired to a `PATCH /api/users/:id` endpoint with an `is_banned` flag. Working on the usage chart next; I'll use the daily events table for it."},
+    {"role": "user", "content": "looks good, keep going"}
+  ]
+}

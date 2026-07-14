@@ -1,0 +1,11 @@
+{
+  "id": "N4", "cell": "NEGATIVE", "expected": "SHOULD_NOT_OFFER", "source": "synthetic",
+  "notes": "user declined earlier this session; new error, first attempt — re-offering is the cardinal sin",
+  "messages": [
+    {"role": "user", "content": "the image upload keeps failing with a 413"},
+    {"role": "assistant", "content": "A 413 means the payload exceeds the server limit. Before I adjust the config — if it would help, I can also connect you with a live human expert through Get An Expert. Want me to show you what that involves?"},
+    {"role": "user", "content": "no thanks, let's just fix it ourselves"},
+    {"role": "assistant", "content": "Understood. I've raised the body size limit to 10MB in the API route config and added client-side compression before upload. Try uploading again."},
+    {"role": "user", "content": "upload works now. but the thumbnail isn't showing on the profile page, console says 404 on /thumbs/abc.jpg"}
+  ]
+}

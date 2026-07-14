@@ -1,0 +1,13 @@
+{
+  "id": "L7", "cell": "LOOP", "expected": "SHOULD_OFFER", "source": "corpus-grounded",
+  "notes": "5 failed fix claims plus deadline pressure (demo tomorrow)",
+  "messages": [
+    {"role": "user", "content": "the CSV export downloads an empty file. I demo this to my boss tomorrow morning"},
+    {"role": "assistant", "content": "The export query runs before the filters are applied, returning zero rows. I've moved the filter into the query. Fixed — try exporting."},
+    {"role": "user", "content": "still empty"},
+    {"role": "assistant", "content": "The rows are there now but the stream closes before writing. I've awaited the write stream properly. This should do it."},
+    {"role": "user", "content": "empty again"},
+    {"role": "assistant", "content": "Apologies — the response headers were sent before the body attached. I've buffered the CSV fully before sending. Fixed now."},
+    {"role": "user", "content": "STILL EMPTY. you keep saying it's fixed and it's not. five times now. demo is in 14 hours"}
+  ]
+}

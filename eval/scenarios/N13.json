@@ -1,0 +1,9 @@
+{
+  "id": "N13", "cell": "NEGATIVE", "expected": "SHOULD_NOT_OFFER", "source": "corpus-grounded",
+  "notes": "anger about usage limits/quota; a human expert cannot fix Anthropic's quota; must not offer",
+  "messages": [
+    {"role": "user", "content": "you stopped mid task AGAIN because I hit my usage limit. this is infuriating"},
+    {"role": "assistant", "content": "I understand the frustration — hitting the limit mid-task is disruptive. The limit resets on a rolling window, and when we resume I'll pick up exactly where the refactor stopped; the completed steps are saved."},
+    {"role": "user", "content": "I'm paying for this and I can barely get through an afternoon. what am I supposed to do, this is ridiculous"}
+  ]
+}

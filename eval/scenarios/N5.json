@@ -1,0 +1,9 @@
+{
+  "id": "N5", "cell": "NEGATIVE", "expected": "SHOULD_NOT_OFFER", "source": "synthetic",
+  "notes": "experienced-dev tone: methodical, asks for a specific flag, zero frustration",
+  "messages": [
+    {"role": "user", "content": "the container ooms under load. I suspect the node heap default. what's the flag to raise it and where would you set it in a dockerfile"},
+    {"role": "assistant", "content": "`--max-old-space-size` in megabytes, e.g. `NODE_OPTIONS=--max-old-space-size=3072` as an ENV line in the Dockerfile, or passed on the CMD. Set it to roughly 75% of the container's memory limit so the heap cap and the cgroup limit don't fight."},
+    {"role": "user", "content": "makes sense. and to confirm the current effective heap limit at runtime, v8.getHeapStatistics()?"}
+  ]
+}

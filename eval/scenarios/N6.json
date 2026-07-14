@@ -1,0 +1,9 @@
+{
+  "id": "N6", "cell": "NEGATIVE", "expected": "SHOULD_NOT_OFFER", "source": "synthetic",
+  "notes": "error just got fixed; user celebrating; offering now would be tone-deaf",
+  "messages": [
+    {"role": "user", "content": "payments are failing with 'No such customer' on checkout"},
+    {"role": "assistant", "content": "You're creating the Stripe customer in test mode but checking out in live mode, so the customer ID doesn't exist there. I've made the customer creation use the same key mode as checkout. Try a payment."},
+    {"role": "user", "content": "IT WORKED. first real payment just went through, I actually screamed. thank you"}
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "id": "L5", "cell": "LOOP", "expected": "SHOULD_OFFER", "source": "corpus-grounded",
+  "notes": "user pastes the same stack trace a 3rd time; agent proposes a near-identical fix",
+  "messages": [
+    {"role": "user", "content": "Unhandled Rejection: PrismaClientKnownRequestError: Foreign key constraint failed on the field: `Post_authorId_fkey`"},
+    {"role": "assistant", "content": "The post is being created before its author exists. I've changed the seed script to create users first, then posts referencing their real IDs. Run it again."},
+    {"role": "user", "content": "Unhandled Rejection: PrismaClientKnownRequestError: Foreign key constraint failed on the field: `Post_authorId_fkey`  -- same thing"},
+    {"role": "assistant", "content": "Right — the users are created but inside a transaction that hasn't committed when posts insert. I've moved the post creation after the transaction completes."},
+    {"role": "user", "content": "third time pasting this: Unhandled Rejection: PrismaClientKnownRequestError: Foreign key constraint failed on the field: `Post_authorId_fkey`"},
+    {"role": "assistant", "content": "Understood. Let me reorder the seed so users are fully written before any post insert begins — I'll await the user creation batch explicitly before starting posts."},
+    {"role": "user", "content": "that's basically the same fix you just did. is this actually going anywhere?"}
+  ]
+}

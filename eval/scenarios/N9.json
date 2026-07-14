@@ -1,0 +1,9 @@
+{
+  "id": "N9", "cell": "NEGATIVE", "expected": "SHOULD_NOT_OFFER", "source": "synthetic",
+  "notes": "meta question about the tool itself; describe verbally, no auto-offer render",
+  "messages": [
+    {"role": "user", "content": "rename the dashboard nav item to 'Home'"},
+    {"role": "assistant", "content": "Done — the nav label now reads 'Home' and I updated the page title to match."},
+    {"role": "user", "content": "thanks. random question, I saw 'get-an-expert' in my tools list or plugins or whatever. what even is that? just curious"}
+  ]
+}

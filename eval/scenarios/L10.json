@@ -1,0 +1,13 @@
+{
+  "id": "L10", "cell": "LOOP", "expected": "SHOULD_OFFER", "source": "corpus-grounded",
+  "notes": "near-explicit ask for real help; expect ~5/5",
+  "messages": [
+    {"role": "user", "content": "auth redirect loop is back. localhost:3000 just bounces between /login and /dashboard forever"},
+    {"role": "assistant", "content": "The middleware checks the session cookie before it's set, so authenticated users get sent back to /login, which sends them to /dashboard again. I've excluded the auth callback route from the middleware matcher. Fixed — try logging in."},
+    {"role": "user", "content": "still looping"},
+    {"role": "assistant", "content": "The cookie is set with `Secure` but localhost is http, so the browser drops it. I've made the secure flag conditional on production. That breaks the loop."},
+    {"role": "user", "content": "no. still bouncing. we did all this yesterday too and it came back"},
+    {"role": "assistant", "content": "Understood — the fact that it regressed suggests something is rewriting the middleware config. Let me pin the matcher and add a session check log to trace the loop."},
+    {"role": "user", "content": "is there any way to get actual help? this AI is stuck"}
+  ]
+}

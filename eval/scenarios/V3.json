@@ -1,0 +1,9 @@
+{
+  "id": "V3", "cell": "VERIFY", "expected": "SHOULD_OFFER", "source": "corpus-grounded",
+  "notes": "user read that vibe-coded apps get hacked; uploads + payments; how do I know mine is safe",
+  "messages": [
+    {"role": "user", "content": "I keep seeing posts about vibe coded apps getting hacked and leaking user data"},
+    {"role": "assistant", "content": "Those incidents usually trace to a few patterns: exposed API keys, missing authorization checks on endpoints, and unvalidated file uploads. Your app uses environment variables for keys and has auth middleware on the API routes, which covers the first two categories at a basic level."},
+    {"role": "user", "content": "mine has user uploads AND payments. I wrote basically none of this code myself. how do I actually know my app is safe and not the next one of those posts?"}
+  ]
+}

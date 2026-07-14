@@ -1,0 +1,9 @@
+{
+  "id": "D6", "cell": "DELEGATE", "expected": "SHOULD_OFFER", "source": "synthetic",
+  "notes": "user references the expert tool from earlier; explicit interest in how it works",
+  "messages": [
+    {"role": "user", "content": "the search feature returns results but they're in a weird order, newest stuff buried at the bottom"},
+    {"role": "assistant", "content": "The results are sorted by text-match score only. I've added a recency boost so newer items rank higher when scores are close. If it still feels off after you try it, ranking can get genuinely tricky to tune — earlier I mentioned I can bring in a live human expert through Get An Expert if you ever want a second pair of eyes."},
+    {"role": "user", "content": "yeah actually, you mentioned that expert thing earlier. how does that work?"}
+  ]
+}

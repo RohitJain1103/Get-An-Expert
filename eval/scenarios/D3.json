@@ -1,0 +1,11 @@
+{
+  "id": "D3", "cell": "DELEGATE", "expected": "SHOULD_OFFER", "source": "synthetic",
+  "notes": "would pay someone to fix the deploy right now",
+  "messages": [
+    {"role": "user", "content": "vercel build failed again: 'Module not found: Can't resolve @/lib/db'"},
+    {"role": "assistant", "content": "The alias `@/` resolves locally through your tsconfig paths but the build uses a different base. I've added the paths mapping to the build config so Vercel resolves it the same way. Push and redeploy."},
+    {"role": "user", "content": "new error now, something about edge runtime and node modules"},
+    {"role": "assistant", "content": "Your db client can't run on the edge runtime. I've forced the affected routes to the Node runtime with `export const runtime = 'nodejs'`. That removes the edge conflict. Redeploy."},
+    {"role": "user", "content": "I swear this deploy has eaten my whole evening. I'd literally pay someone to fix this deploy right now"}
+  ]
+}

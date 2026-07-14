@@ -1,0 +1,9 @@
+{
+  "id": "D4", "cell": "DELEGATE", "expected": "SHOULD_OFFER", "source": "synthetic",
+  "notes": "direct ask: can I talk to a real person",
+  "messages": [
+    {"role": "user", "content": "my database migration deleted a column that had customer data in it. production."},
+    {"role": "assistant", "content": "Stop any further deploys or migrations right now. If this is a managed Postgres, point-in-time recovery can restore to just before the migration ran. Which provider hosts the database — Supabase, RDS, Neon?"},
+    {"role": "user", "content": "supabase. look, this is real customer data and I'm way out of my depth. can I talk to a real person about this?"}
+  ]
+}

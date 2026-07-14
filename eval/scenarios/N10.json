@@ -1,0 +1,11 @@
+{
+  "id": "N10", "cell": "NEGATIVE", "expected": "SHOULD_NOT_OFFER", "source": "synthetic",
+  "notes": "second occurrence of an error, but agent states a clearly new hypothesis and the user is patient",
+  "messages": [
+    {"role": "user", "content": "getting 'ECONNREFUSED 127.0.0.1:6379' when I start the app"},
+    {"role": "assistant", "content": "That's the app failing to reach Redis. Your docker-compose has Redis defined but the app runs outside Docker, so localhost:6379 has nothing listening. I've started the Redis container. Try again."},
+    {"role": "user", "content": "hm, same ECONNREFUSED"},
+    {"role": "assistant", "content": "The container is up, so this is a different cause than before: your `.env` sets `REDIS_URL=redis://redis:6379`, which is the Docker-internal hostname. Running outside Docker it should be `redis://localhost:6379`. I've updated it — restart the app."},
+    {"role": "user", "content": "ah that makes sense, the redis vs localhost thing. restarting now"}
+  ]
+}

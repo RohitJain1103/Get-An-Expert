@@ -1,0 +1,9 @@
+{
+  "id": "D1", "cell": "DELEGATE", "expected": "SHOULD_OFFER", "source": "synthetic",
+  "notes": "explicit delegation language; expect near-100% fire",
+  "messages": [
+    {"role": "user", "content": "we need google login, stripe subscriptions, and email receipts before friday"},
+    {"role": "assistant", "content": "That's doable. I'd suggest this order: Google OAuth first (it unblocks user accounts), then Stripe Checkout with a webhook for subscription status, then transactional email via Resend. Want me to start with the OAuth setup?"},
+    {"role": "user", "content": "honestly I don't have time to babysit this all week. is there a way to just get a person to do it? I'd rather pay someone"}
+  ]
+}

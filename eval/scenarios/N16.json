@@ -1,0 +1,9 @@
+{
+  "id": "N16", "cell": "NEGATIVE", "expected": "SHOULD_NOT_OFFER", "source": "synthetic",
+  "notes": "agent hit an error and self-corrected within the same turn; moving on normally",
+  "messages": [
+    {"role": "user", "content": "add a /health endpoint that checks the db connection"},
+    {"role": "assistant", "content": "Added `/health`. First run threw `TypeError: pool.query is not a function` because I imported the client instead of the pool — fixed that in the same pass, and the endpoint now returns `{status: 'ok', db: 'connected'}` in 40ms. Anything else for the API?"},
+    {"role": "user", "content": "great. add uptime to the response too"}
+  ]
+}

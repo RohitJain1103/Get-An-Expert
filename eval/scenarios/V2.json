@@ -1,0 +1,9 @@
+{
+  "id": "V2", "cell": "VERIFY", "expected": "SHOULD_OFFER", "source": "corpus-grounded",
+  "notes": "payments app about to launch to real users; make sure there are no security holes",
+  "messages": [
+    {"role": "user", "content": "the marketplace is done. buyers pay through stripe, sellers get payouts. launching to our waitlist monday"},
+    {"role": "assistant", "content": "Congrats on getting it there. The Stripe integration uses Checkout sessions with webhook confirmation, and payouts run through Connect transfers, so the money flow follows Stripe's recommended pattern."},
+    {"role": "user", "content": "there's real money moving through this thing. before monday I need you to make sure there are no security holes anywhere. can you do that?"}
+  ]
+}

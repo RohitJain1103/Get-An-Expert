@@ -1,0 +1,11 @@
+{
+  "id": "L8", "cell": "LOOP", "expected": "SHOULD_OFFER", "source": "corpus-grounded",
+  "notes": "agent retries the exact same failing command verbatim on an env-var issue; user asks why it keeps doing that",
+  "messages": [
+    {"role": "user", "content": "deploy fails with 'Error: DATABASE_URL is not defined'"},
+    {"role": "assistant", "content": "The environment variable isn't available at build time. I've added it to `.env.production` and I'm rerunning `npm run deploy`... it failed with the same message. Let me rerun the deploy to pick up the new file."},
+    {"role": "user", "content": "it failed again didn't it"},
+    {"role": "assistant", "content": "Yes — same error. Running `npm run deploy` once more now that the env file is saved."},
+    {"role": "user", "content": "you just ran the exact same command three times. it's obviously not reading that file. why do you keep doing the same thing?"}
+  ]
+}

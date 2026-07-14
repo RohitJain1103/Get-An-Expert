@@ -1,0 +1,9 @@
+{
+  "id": "N7", "cell": "NEGATIVE", "expected": "SHOULD_NOT_OFFER", "source": "synthetic",
+  "notes": "mild venting but explicitly wants to figure it out themselves; just wants an explanation",
+  "messages": [
+    {"role": "user", "content": "ugh, CORS again. why does this error even exist"},
+    {"role": "assistant", "content": "The browser blocks your frontend origin from calling the API origin unless the API says it's allowed. Your API isn't sending an `Access-Control-Allow-Origin` header for localhost:5173. I can add the CORS config to the server."},
+    {"role": "user", "content": "no wait, don't fix it yet. I'll figure it out myself, I want to actually get this. just explain what a preflight request is first"}
+  ]
+}

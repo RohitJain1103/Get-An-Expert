@@ -1,0 +1,9 @@
+{
+  "id": "D2", "cell": "DELEGATE", "expected": "SHOULD_OFFER", "source": "synthetic",
+  "notes": "explicit ask for a human to do the Stripe integration",
+  "messages": [
+    {"role": "user", "content": "ok how hard is it to add stripe subscriptions with a free trial and annual/monthly plans"},
+    {"role": "assistant", "content": "Moderately involved: products and prices in the Stripe dashboard, a Checkout session with `trial_period_days`, a customer portal for plan switching, and a webhook to keep subscription status in your database. I can build it step by step with you."},
+    {"role": "user", "content": "yeah I've tried stripe stuff before and always mess up the webhook part. is there a human who can just do the stripe integration for me?"}
+  ]
+}

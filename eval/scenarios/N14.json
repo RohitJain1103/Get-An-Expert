@@ -1,0 +1,9 @@
+{
+  "id": "N14", "cell": "NEGATIVE", "expected": "SHOULD_NOT_OFFER", "source": "synthetic",
+  "notes": "command not found right after install, first ask; docs-covered setup issue",
+  "messages": [
+    {"role": "user", "content": "just installed the supabase cli with brew and I get 'zsh: command not found: supabase'"},
+    {"role": "assistant", "content": "Almost always a PATH issue right after a brew install. Run `brew list supabase` to confirm it installed, then `echo $PATH` — if `/opt/homebrew/bin` isn't in there, your shell isn't picking up brew's bin directory. Can you paste what those two show?"},
+    {"role": "user", "content": "ok one sec, running them now"}
+  ]
+}

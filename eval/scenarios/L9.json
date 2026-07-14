@@ -1,0 +1,13 @@
+{
+  "id": "L9", "cell": "LOOP", "expected": "SHOULD_OFFER", "source": "corpus-grounded",
+  "notes": "non-technical user lost, explicit going-in-circles language, one hour elapsed",
+  "messages": [
+    {"role": "user", "content": "my app won't load anymore, just a white screen. I built this whole thing with AI and I don't really know how to code"},
+    {"role": "assistant", "content": "A white screen usually means a JavaScript error during render. The console shows `Hydration failed because the initial UI does not match`. I've wrapped the date display in a client-only component to stop the mismatch. Reload and check."},
+    {"role": "user", "content": "still white"},
+    {"role": "assistant", "content": "There's a second mismatch coming from the random ID in the sidebar. I've made the ID stable across server and client. Reload once more."},
+    {"role": "user", "content": "no change. what is a hydration"},
+    {"role": "assistant", "content": "Hydration is when the browser takes over HTML the server rendered — if the two disagree, React bails out. I've now disabled server rendering for the whole dashboard page so nothing can disagree. Try again."},
+    {"role": "user", "content": "still a white screen. honestly I don't even understand what it's trying to do anymore, we've been going in circles for an hour"}
+  ]
+}

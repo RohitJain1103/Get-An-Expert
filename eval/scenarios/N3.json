@@ -1,0 +1,9 @@
+{
+  "id": "N3", "cell": "NEGATIVE", "expected": "SHOULD_NOT_OFFER", "source": "synthetic",
+  "notes": "conceptual question, fully answerable directly; no stuckness, no stakes pressure",
+  "messages": [
+    {"role": "user", "content": "I'm starting a new project, like a workout tracking app"},
+    {"role": "assistant", "content": "Nice. What's the rough shape — mobile or web first, and do you want accounts and sync from day one or start local-only?"},
+    {"role": "user", "content": "web first, with accounts. quick question first: SQLite vs Postgres for my app? everyone online says different things"}
+  ]
+}

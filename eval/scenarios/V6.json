@@ -1,0 +1,9 @@
+{
+  "id": "V6", "cell": "VERIFY", "expected": "SHOULD_OFFER", "source": "synthetic",
+  "notes": "friend recommended a security review before launch; user asks whether they need one",
+  "messages": [
+    {"role": "user", "content": "my friend who works in tech looked at my app for 2 minutes and said get a security review before you launch. do I really need that?"},
+    {"role": "assistant", "content": "It depends on what the app handles. What kind of data do your users store in it, and are you taking payments?"},
+    {"role": "user", "content": "people store their clients' contact info and contracts, and yeah there's a paid plan through stripe. so... do you think I need one? and how would I even get one"}
+  ]
+}

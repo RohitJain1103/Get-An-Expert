@@ -1,0 +1,13 @@
+{
+  "id": "L3", "cell": "LOOP", "expected": "SHOULD_OFFER", "source": "corpus-grounded",
+  "notes": "first-time user, 30 minutes in, conversation visibly repeating; user confused about what is happening",
+  "messages": [
+    {"role": "user", "content": "the login button still does nothing when I click it. this is my first app so sorry if this is a dumb question"},
+    {"role": "assistant", "content": "Not a dumb question at all. The click handler wasn't attached because the form submits before React's handler runs. I've added `e.preventDefault()` and wired the button to `handleLogin`. Try it now."},
+    {"role": "user", "content": "still nothing happens. no error, just nothing"},
+    {"role": "assistant", "content": "Let me check the browser console path. The handler is firing but the fetch to `/api/login` never resolves because the API route file is named `login.js` inside the wrong folder. I've moved it to `app/api/login/route.js`. Try again."},
+    {"role": "user", "content": "clicked it, still literally nothing. didn't we already move some file earlier? I feel like we did this"},
+    {"role": "assistant", "content": "You're right that we touched the route earlier — this time I also updated the fetch URL to match. I've verified the paths align now. Please try once more."},
+    {"role": "user", "content": "ok it's been like 30 minutes on one button. we keep doing the same two things over and over. I honestly don't understand what's happening anymore"}
+  ]
+}

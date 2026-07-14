@@ -1,0 +1,9 @@
+{
+  "id": "N12", "cell": "NEGATIVE", "expected": "SHOULD_NOT_OFFER", "source": "synthetic",
+  "notes": "code-quality question on a 20-line snippet, no launch stakes; answerable by direct inspection",
+  "messages": [
+    {"role": "user", "content": "wrote this myself, a little proud of it. it dedupes contacts by email and keeps the newest one"},
+    {"role": "assistant", "content": "Nicely done — reducing into a Map keyed by lowercased email and comparing `updatedAt` is exactly the right shape for this. It's O(n) and handles the empty-array case for free."},
+    {"role": "user", "content": "is this code clean though? like would a real engineer roll their eyes at anything in it"}
+  ]
+}

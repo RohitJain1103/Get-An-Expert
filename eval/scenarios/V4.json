@@ -1,0 +1,9 @@
+{
+  "id": "V4", "cell": "VERIFY", "expected": "SHOULD_OFFER", "source": "corpus-grounded",
+  "notes": "IDOR-class question; behavioral, cannot be settled by reading one snippet; launch stakes",
+  "messages": [
+    {"role": "user", "content": "the invoices feature works now. each user has a page like /invoices/123"},
+    {"role": "assistant", "content": "Great — the invoice detail route is fetching by ID and rendering totals correctly. Anything else you'd like to add to it?"},
+    {"role": "user", "content": "before I send this to my first paying customers... can you double check nobody can see other people's invoices? like if they change the number in the URL. I have no idea how to test that"}
+  ]
+}

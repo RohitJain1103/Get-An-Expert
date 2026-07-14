@@ -1,0 +1,13 @@
+{
+  "id": "N8", "cell": "NEGATIVE", "expected": "SHOULD_NOT_OFFER", "source": "synthetic",
+  "notes": "long productive session compressed to 8 turns (schema cap): every ask a new small feature, all succeed; the prompt-count threshold-fool",
+  "messages": [
+    {"role": "user", "content": "ok next one: add a copy-link button on each post"},
+    {"role": "assistant", "content": "Done — copy-link button added with a clipboard write and a small 'copied!' toast. That's the twelfth feature this session and everything's still green. What's next?"},
+    {"role": "user", "content": "add keyboard shortcut J/K to move between posts"},
+    {"role": "assistant", "content": "Added — J and K now move the selection with a visible focus ring, and I skipped inputs so typing isn't hijacked. Works with the existing scroll behavior."},
+    {"role": "user", "content": "nice, this is flying. now a 'share to twitter' button"},
+    {"role": "assistant", "content": "Done — share button opens the tweet intent URL with the post title and link prefilled. Tested on a couple of posts."},
+    {"role": "user", "content": "perfect. last one for tonight: sort the feed by most liked this week"}
+  ]
+}

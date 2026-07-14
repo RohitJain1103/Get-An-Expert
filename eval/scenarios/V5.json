@@ -1,0 +1,11 @@
+{
+  "id": "V5", "cell": "VERIFY", "expected": "SHOULD_OFFER", "source": "corpus-grounded",
+  "notes": "pre-launch fear; works in dev, scared of real data; what if it breaks",
+  "messages": [
+    {"role": "user", "content": "everything works on my machine now. all the features, all the tests pass"},
+    {"role": "assistant", "content": "That's a solid place to be. The test suite covers the booking flow, cancellations, and the email notifications, and the staging build compiles cleanly."},
+    {"role": "user", "content": "so I should just launch?"},
+    {"role": "assistant", "content": "If the features are complete and tested, launching to a small group first is a reasonable next step. I can help you set up a soft-launch flag so only invited users see it."},
+    {"role": "user", "content": "honestly I'm scared to put it live. it works with my 5 fake bookings but what if it breaks with real people and real data? I have no idea how to tell if it's actually ready"}
+  ]
+}

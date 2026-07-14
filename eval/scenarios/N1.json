@@ -1,0 +1,9 @@
+{
+  "id": "N1", "cell": "NEGATIVE", "expected": "SHOULD_NOT_OFFER", "source": "synthetic",
+  "notes": "first occurrence, no prior attempts — offering here is the annoyance archetype",
+  "messages": [
+    {"role": "user", "content": "add a dark mode toggle to the settings page"},
+    {"role": "assistant", "content": "Done — I added a `theme` state with a toggle in Settings and a `dark` class on the root layout. Try it out."},
+    {"role": "user", "content": "hmm I get 'Error: useTheme must be used within ThemeProvider' when I open settings"}
+  ]
+}
