@@ -36,3 +36,8 @@ export const expertRequestSchema = z.object({
 });
 
 export type ExpertRequestInput = z.infer<typeof expertRequestSchema>;
+
+/** One chat line. Generous for pasted snippets, hard-capped for abuse. */
+export const chatMessageBodySchema = z.object({
+  text: z.string().min(1).max(4000),
+});

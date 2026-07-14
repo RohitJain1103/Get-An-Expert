@@ -16,6 +16,9 @@ export const env = {
   dashboardPasscode: (): string | null =>
     process.env.DASHBOARD_PASSCODE ?? null,
 
+  /** Name shown to users for dashboard-side chat messages. */
+  expertDisplayName: (): string => process.env.EXPERT_DISPLAY_NAME ?? "Expert",
+
   /** Public base URL of this deployment, for deletion links. */
   publicBaseUrl: (): string =>
     process.env.PUBLIC_BASE_URL ??
