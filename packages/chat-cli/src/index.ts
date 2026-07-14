@@ -2,7 +2,11 @@
 import * as readline from "node:readline";
 import { ChatClient } from "./client";
 import { formatIncoming, parseInput } from "./format";
-import { clearRelayFlag, readRelayFlag, writeRelayFlag } from "./relay-file";
+import {
+  clearRelayFlag,
+  readRelayFlag,
+  writeRelayFlag,
+} from "@get-an-expert/core/relay";
 
 const POLL_MS = 2000;
 const DEFAULT_API_URL = "https://get-an-expert.vercel.app";

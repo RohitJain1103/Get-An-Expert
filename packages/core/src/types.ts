@@ -50,6 +50,14 @@ export type ExpertRequestStatus = "new" | "answered" | "escalated" | "failed";
 /** Who authored a chat message or action. */
 export type ChatRole = "user" | "expert";
 
+/** Session activity relayed from the user's working session. */
+export type RelayEventType =
+  | "prompt"
+  | "command"
+  | "output"
+  | "edit"
+  | "agent_reply";
+
 /** A single line in the live user↔expert chat. */
 export interface ChatMessage {
   /** 1-based position in the request's message list; assigned by the store. */
@@ -59,8 +67,13 @@ export interface ChatMessage {
   from: ChatRole;
   /** Display name for expert messages (e.g. "Priya"); absent for the user. */
   authorName?: string;
-  /** "system" lines are join/end notices rendered differently by clients. */
-  kind: "message" | "system";
+  /**
+   * "system" lines are join/end notices; "event" lines are relayed session
+   * activity — both rendered differently from plain messages by clients.
+   */
+  kind: "message" | "system" | "event";
+  /** Set only when kind === "event". */
+  eventType?: RelayEventType;
   text: string;
 }
 
