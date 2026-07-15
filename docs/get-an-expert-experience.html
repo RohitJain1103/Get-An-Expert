@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Get An Expert — Both Sides of a Session</title>
+<style>
+  :root {
+    --bg: #0A0A0E;
+    --surface: #131318;
+    --raised: #1C1C24;
+    --border: #282830;
+    --border-soft: #1F1F26;
+    --text: #E7E7EF;
+    --text2: #9394A1;
+    --text3: #595A64;
+    --amber: #F5A623;
+    --amber-soft: rgba(245, 166, 35, 0.12);
+    --green: #22C55E;
+    --green-soft: rgba(34, 197, 94, 0.10);
+    --red: #EF4444;
+    --blue: #60A5FA;
+    --purple: #A78BFA;
+    --mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+    --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: var(--sans);
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(245,166,35,0.05), transparent 60%),
+      var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* ── Top bar ── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 11px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .brand { display: flex; align-items: baseline; gap: 10px; }
+  .logo { font-weight: 750; font-size: 16px; letter-spacing: -0.4px; }
+  .logo b { color: var(--amber); }
+  .tagline {
+    font-size: 11.5px; color: var(--text2); letter-spacing: 0.1px;
+    padding-left: 10px; margin-left: 2px; border-left: 1px solid var(--border);
+  }
+  .steps { margin-left: auto; display: flex; align-items: center; gap: 5px; }
+  .steps .cap { font-size: 10.5px; color: var(--text3); font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.7px; }
+  .dot {
+    width: 26px; height: 26px; border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 11px; font-weight: 650; color: var(--text3);
+    background: var(--raised); border: 1.5px solid var(--border);
+    transition: all .45s ease;
+  }
+  .dot.active { color: var(--amber); border-color: var(--amber); background: var(--amber-soft);
+    box-shadow: 0 0 0 4px rgba(245,166,35,0.06); }
+  .dot.done { color: var(--green); border-color: rgba(34,197,94,0.5); background: var(--green-soft); }
+  .bar { width: 16px; height: 1.5px; background: var(--border); transition: background .45s; }
+  .bar.done { background: rgba(34,197,94,0.5); }
+
+  /* ── Main split ── */
+  .stage { flex: 1; display: flex; min-height: 0; }
+  .panel { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .panel-head {
+    display: flex; align-items: center; gap: 9px;
+    padding: 9px 15px; background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    font-size: 12px; font-weight: 600; flex-shrink: 0;
+  }
+  .panel-head .tag {
+    margin-left: auto; font-size: 9.5px; font-weight: 700; letter-spacing: 0.6px;
+    text-transform: uppercase; color: var(--text3);
+  }
+  .swatch { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .swatch.green { background: var(--green); box-shadow: 0 0 8px rgba(34,197,94,0.6); }
+  .swatch.amber { background: var(--amber); box-shadow: 0 0 8px rgba(245,166,35,0.6); }
+
+  /* ── Center rail ── */
+  .rail {
+    width: 96px; flex-shrink: 0;
+    background: linear-gradient(180deg, var(--surface), #101014);
+    border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; align-items: center;
+    padding: 16px 8px; gap: 10px; position: relative;
+  }
+  .rail .relay {
+    width: 100%; text-align: center; padding: 8px 4px;
+    border: 1px dashed var(--border); border-radius: 8px;
+    font-size: 9px; color: var(--text3); line-height: 1.5; font-weight: 600;
+  }
+  .rail .relay b { color: var(--text2); display: block; font-size: 10px; letter-spacing: 0.3px; }
+  .rail .pipe { flex: 1; width: 2px; background: var(--border); position: relative; border-radius: 2px; overflow: hidden; }
+  .rail .pipe .flow {
+    position: absolute; inset: 0; opacity: 0; transition: opacity .5s;
+    background: linear-gradient(180deg, transparent, var(--amber), transparent);
+    background-size: 100% 60%; background-repeat: no-repeat;
+    animation: rise 1.6s linear infinite;
+  }
+  .rail.live .pipe .flow { opacity: 0.85; }
+  @keyframes rise { 0% { background-position: 0 130%; } 100% { background-position: 0 -80%; } }
+  .rail .p2p {
+    width: 100%; text-align: center; font-size: 9px; line-height: 1.45;
+    color: var(--text3); font-weight: 600; transition: color .5s;
+  }
+  .rail.live .p2p { color: var(--green); }
+  .rail .p2p b { display: block; font-size: 10px; }
+  .rail .lock { font-size: 13px; opacity: 0.35; transition: opacity .5s; }
+  .rail.live .lock { opacity: 1; }
+
+  /* ── Customer chat ── */
+  .chat { flex: 1; overflow-y: auto; padding: 16px 16px 24px; display: flex; flex-direction: column; gap: 12px; }
+  .msg {
+    opacity: 0; transform: translateY(8px); transition: opacity .45s ease, transform .45s ease;
+    font-size: 12.5px; line-height: 1.55;
+  }
+  .msg.show { opacity: 1; transform: none; }
+  .msg .who { font-size: 10px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 3px; display: flex; align-items: center; gap: 6px; }
+  .msg.user .who { color: var(--blue); }
+  .msg.ai .who { color: var(--purple); }
+  .msg.sys { font-size: 11px; color: var(--text3); font-family: var(--mono); padding-left: 2px; }
+  .msg.user .body { color: #CFCFDA; }
+  .msg.ai .body { color: #ADAEBC; }
+  .msg .body code { font-family: var(--mono); font-size: 11.5px; background: var(--raised); padding: 1px 5px; border-radius: 4px; color: var(--amber); }
+  .cmd-pill { display: inline-block; font-family: var(--mono); font-size: 12px; color: var(--amber);
+    background: var(--amber-soft); border: 1px solid rgba(245,166,35,0.3); padding: 2px 8px; border-radius: 6px; }
+
+  /* consent card (MCP elicitation) */
+  .consent {
+    opacity: 0; transform: scale(.97); transition: all .5s ease;
+    border: 1px solid var(--amber); border-radius: 10px; overflow: hidden; background: var(--raised);
+  }
+  .consent.show { opacity: 1; transform: none; }
+  .consent .ch { padding: 11px 14px 8px; }
+  .consent .ttl { font-size: 12.5px; font-weight: 650; color: var(--amber); margin-bottom: 3px; }
+  .consent .sub { font-size: 11px; color: var(--text2); line-height: 1.5; }
+  .consent .sub b { color: var(--text); font-weight: 600; }
+  .consent .scopes { padding: 4px 14px 10px; display: flex; flex-direction: column; gap: 7px; }
+  .scope { display: flex; align-items: center; gap: 9px; font-size: 11.5px; color: var(--text2); }
+  .scope .box {
+    width: 16px; height: 16px; border-radius: 5px; border: 1.5px solid var(--border);
+    flex-shrink: 0; display: grid; place-items: center; font-size: 10px; color: transparent; transition: all .3s;
+  }
+  .scope.on .box { background: var(--green); border-color: var(--green); color: #04140A; }
+  .scope .k { color: var(--text); font-weight: 600; }
+  .consent .act { display: flex; gap: 8px; padding: 0 14px 12px; }
+  .consent .btn { font-family: var(--sans); font-size: 11.5px; font-weight: 600; padding: 6px 14px;
+    border-radius: 7px; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+  .consent .btn.ok { background: var(--amber); border-color: var(--amber); color: #140A00; }
+  .consent.approved .btn.ok { background: var(--green); border-color: var(--green); color: #04140A; }
+
+  /* live activity log */
+  .activity {
+    opacity: 0; transform: translateX(-6px); transition: all .4s ease;
+    display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--amber);
+    background: var(--amber-soft); border: 1px solid rgba(245,166,35,0.18);
+    border-radius: 7px; padding: 6px 10px; font-family: var(--mono);
+  }
+  .activity.show { opacity: 1; transform: none; }
+  .activity.join { color: var(--green); background: var(--green-soft); border-color: rgba(34,197,94,0.25); font-family: var(--sans); font-weight: 600; }
+  .activity .pulse { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; animation: blip 1.5s infinite; }
+  @keyframes blip { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+  .summary {
+    opacity: 0; transform: translateY(6px); transition: all .5s;
+    border: 1px solid var(--border); border-radius: 10px; background: var(--surface); overflow: hidden;
+  }
+  .summary.show { opacity: 1; transform: none; }
+  .summary .sh { padding: 9px 13px; font-size: 11px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; color: var(--green); border-bottom: 1px solid var(--border); background: var(--green-soft); }
+  .summary .sr { display: flex; gap: 8px; padding: 7px 13px; font-size: 11.5px; border-top: 1px solid var(--border-soft); }
+  .summary .sr:first-of-type { border-top: none; }
+  .summary .sk { color: var(--text3); width: 92px; flex-shrink: 0; }
+  .summary .sv { color: var(--text); font-family: var(--mono); font-size: 11px; }
+  .summary .sv .ok { color: var(--green); }
+
+  /* ── Expert dashboard ── */
+  .dash { flex: 1; display: flex; flex-direction: column; min-height: 0; position: relative; }
+
+  /* connect gate */
+  .gate { position: absolute; inset: 0; display: grid; place-items: center; padding: 20px;
+    background: var(--bg); z-index: 5; transition: opacity .5s; }
+  .gate.hide { opacity: 0; pointer-events: none; }
+  .gate-card { width: 300px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 22px; }
+  .gate-card h2 { font-size: 15px; margin-bottom: 4px; }
+  .gate-card p { font-size: 11.5px; color: var(--text2); margin-bottom: 15px; line-height: 1.5; }
+  .field { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+  .field .inp { margin-top: 4px; padding: 8px 11px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg); color: var(--text); font-size: 12px; font-family: var(--mono); text-transform: none; letter-spacing: 0; min-height: 17px; }
+  .field .inp.typing { border-color: var(--amber); }
+  .gate-card .go { margin-top: 4px; width: 100%; text-align: center; padding: 9px; border-radius: 8px; background: var(--amber); color: #140A00; font-weight: 650; font-size: 12.5px; transition: filter .2s; }
+
+  .dash-head { display: flex; align-items: center; gap: 10px; padding: 9px 15px; background: var(--surface); border-bottom: 1px solid var(--border); min-height: 40px; flex-shrink: 0; overflow: hidden; }
+  .dash-head .idle { font-size: 12px; color: var(--text3); }
+  .dash-head .active { display: none; align-items: center; gap: 9px; width: 100%; min-width: 0; }
+  .dash-head .active.show { display: flex; }
+  .dash-head .title { font-family: var(--mono); font-size: 11.5px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 1; }
+  .chips { display: flex; gap: 5px; margin-left: 6px; }
+  .chip { font-size: 9.5px; padding: 2px 8px; border-radius: 20px; border: 1px solid var(--border); color: var(--text3); transition: all .3s; white-space: nowrap; }
+  .chip.on { color: var(--green); border-color: rgba(34,197,94,0.4); background: var(--green-soft); }
+  .chip.revoked { color: var(--red); border-color: rgba(239,68,68,0.4); text-decoration: line-through; }
+  .end-btn { margin-left: auto; font-size: 10.5px; font-weight: 600; padding: 4px 11px; border-radius: 6px; border: 1px solid var(--red); color: var(--red); background: transparent; }
+
+  .dash-body { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+  /* queue overlay before claim */
+  .queue { position: absolute; left: 0; right: 0; top: 40px; bottom: 0; background: var(--bg); z-index: 3; padding: 12px; transition: opacity .45s; display: flex; }
+  .queue.hide { opacity: 0; pointer-events: none; }
+  .queue .col { width: 100%; }
+  .qlabel { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text3); margin-bottom: 10px; }
+  .qitem { opacity: 0; transform: translateY(5px); transition: all .4s; padding: 12px; border-radius: 9px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; max-width: 340px; }
+  .qitem.show { opacity: 1; transform: none; }
+  .qitem.focus { border-color: var(--amber); box-shadow: 0 0 0 3px rgba(245,166,35,0.08); }
+  .qitem .qn { font-size: 13px; font-weight: 650; }
+  .qitem .qp { font-size: 11px; color: var(--text3); font-family: var(--mono); margin-top: 2px; }
+  .qitem .qi { font-size: 11px; color: var(--text2); margin-top: 6px; line-height: 1.45; }
+  .qitem .qs { font-size: 10px; font-weight: 700; color: var(--amber); margin-top: 7px; }
+
+  /* terminal */
+  .term { flex: 1; display: flex; flex-direction: column; background: #08080C; min-height: 0; }
+  .term-head { display: flex; align-items: center; gap: 9px; padding: 6px 13px; background: #101018; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .term-head .tl { font-size: 9.5px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--amber); }
+  .term-head .td { font-size: 10.5px; color: var(--text3); font-family: var(--mono); }
+  .term-out { flex: 1; overflow-y: auto; padding: 11px 13px; font-family: var(--mono); font-size: 11.5px; line-height: 1.65; color: #A6A7B4; }
+  .tline { opacity: 0; transition: opacity .3s; white-space: pre-wrap; word-break: break-word; }
+  .tline.show { opacity: 1; }
+  .tline .p { color: var(--green); }
+  .tline .c { color: var(--text); }
+  .tline .o { color: var(--text2); }
+  .tline .g { color: var(--green); }
+  .tline .r { color: var(--red); }
+  .tline .a { color: var(--amber); }
+  .tline .d { color: var(--text3); font-style: italic; }
+  .tline .cl { color: var(--purple); }
+
+  /* tool cards row */
+  .tools { display: flex; gap: 8px; padding: 8px; background: var(--surface); border-top: 1px solid var(--border); flex-shrink: 0; height: 172px; overflow-x: auto; }
+  .chips { flex-shrink: 0; }
+  .end-btn { flex-shrink: 0; }
+  .card { flex: 1; min-width: 0; background: var(--raised); border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; }
+  .card.wide { flex: 1.35; }
+  .card-h { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-bottom: 1px solid var(--border); font-size: 9.5px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; color: var(--text3); }
+  .card-h span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card-b { flex: 1; overflow: auto; padding: 8px 10px; font-family: var(--mono); font-size: 10.5px; line-height: 1.55; color: var(--text2); }
+  .card-b.code { white-space: pre; color: #A6A7B4; }
+  .frow { opacity: 0; transition: opacity .3s; white-space: nowrap; }
+  .frow.show { opacity: 1; }
+  .frow.dir { color: var(--blue); }
+  .frow.fix { color: var(--green); }
+  .fmuted { color: var(--text3); }
+  .browser-pv { background: linear-gradient(135deg, #F5A623 0%, #A78BFA 52%, #60A5FA 100%); color: #fff; border-radius: 5px; padding: 16px 8px; text-align: center; font-family: var(--sans); border: 1px solid var(--border); }
+  .browser-pv .h { font-weight: 800; font-size: 15px; letter-spacing: -0.4px; text-shadow: 0 1px 12px rgba(0,0,0,0.18); }
+  .browser-pv .s { font-size: 10px; color: rgba(255,255,255,0.92); margin-top: 3px; }
+  .browser-pv .cta { display: inline-block; margin-top: 8px; background: #0A0A0E; color: #fff; font-size: 10px; font-weight: 600; padding: 4px 12px; border-radius: 5px; }
+  .browser-status { font-size: 10px; color: var(--green); margin-top: 6px; font-family: var(--mono); }
+  .browser-console { font-size: 9.5px; color: var(--text3); margin-top: 2px; font-family: var(--mono); }
+
+  /* ── Controls ── */
+  .controls { display: flex; align-items: center; gap: 10px; padding: 10px 20px; background: var(--surface); border-top: 1px solid var(--border); flex-shrink: 0; }
+  .controls button { font-family: var(--sans); font-size: 12px; font-weight: 600; padding: 7px 15px; border-radius: 7px; border: 1px solid var(--border); background: var(--raised); color: var(--text); cursor: pointer; transition: border-color .15s, filter .15s; }
+  .controls button:hover { border-color: var(--text2); }
+  .controls button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+  .controls .play { background: var(--amber); border-color: var(--amber); color: #140A00; }
+  .controls .play:hover { filter: brightness(1.08); }
+  .controls .track { flex: 1; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .controls .fill { height: 100%; width: 0; background: var(--amber); border-radius: 2px; transition: width .5s; }
+  .controls .now { font-size: 12px; color: var(--text2); min-width: 210px; text-align: right; font-weight: 500; }
+  .controls .now b { color: var(--text); }
+
+  @media (max-width: 860px) {
+    .rail { display: none; }
+    .tagline { display: none; }
+    .controls .now { min-width: 0; }
+  }
+  @media (max-width: 760px) {
+    .stage { flex-direction: column; overflow-y: auto; }
+    .panel { min-height: 0; }
+    .panel:first-child { border-bottom: 1px solid var(--border); }
+    .chat { max-height: 46vh; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition-duration: .001s !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <span class="logo">Get An Expert<b>.</b></span>
+    <span class="tagline">the expert works on your machine — scoped, live, revocable</span>
+  </div>
+  <div class="steps">
+    <span class="cap">Stuck</span>
+    <div class="dot" id="d1">1</div><div class="bar" id="b1"></div>
+    <div class="dot" id="d2">2</div><div class="bar" id="b2"></div>
+    <div class="dot" id="d3">3</div><div class="bar" id="b3"></div>
+    <div class="dot" id="d4">4</div><div class="bar" id="b4"></div>
+    <div class="dot" id="d5">5</div><div class="bar" id="b5"></div>
+    <div class="dot" id="d6">6</div>
+    <span class="cap">Fixed</span>
+  </div>
+</div>
+
+<div class="stage">
+  <!-- Customer -->
+  <div class="panel">
+    <div class="panel-head">
+      <span class="swatch green"></span> Jordan — Claude Code · ~/projects/landing-page
+      <span class="tag">Customer</span>
+    </div>
+    <div class="chat" id="chat"></div>
+  </div>
+
+  <!-- Center rail: the architecture -->
+  <div class="rail" id="rail">
+    <div class="relay"><b>Relay</b>signaling &amp; queue only</div>
+    <div class="pipe"><div class="flow"></div></div>
+    <div class="lock">🔒</div>
+    <div class="p2p"><b>P2P</b>encrypted, direct</div>
+    <div class="pipe"><div class="flow"></div></div>
+    <div class="relay" style="border-style:solid;"><b>No data</b>through relay</div>
+  </div>
+
+  <!-- Expert -->
+  <div class="panel">
+    <div class="panel-head">
+      <span class="swatch amber"></span> Priya — Get An Expert Expert Dashboard
+      <span class="tag">Expert</span>
+    </div>
+    <div class="dash">
+      <!-- connect gate -->
+      <div class="gate" id="gate">
+        <div class="gate-card">
+          <h2>Connect to the relay</h2>
+          <p>Sign in to see who needs help.</p>
+          <div class="field">Relay URL<div class="inp" id="f-url">ws://localhost:8787</div></div>
+          <div class="field">Expert token<div class="inp" id="f-tok"></div></div>
+          <div class="field">Your name<div class="inp" id="f-name"></div></div>
+          <div class="go">Connect</div>
+        </div>
+      </div>
+
+      <!-- header -->
+      <div class="dash-head">
+        <span class="idle" id="dash-idle">Select a session from the queue to start helping.</span>
+        <div class="active" id="dash-active">
+          <span class="swatch amber"></span>
+          <span class="title" id="dash-title">Jordan — ~/projects/landing-page</span>
+          <span class="chips" id="chips">
+            <span class="chip" id="chip-f">Files</span>
+            <span class="chip" id="chip-t">Terminal</span>
+            <span class="chip" id="chip-b">Browser :3000</span>
+          </span>
+          <button class="end-btn" id="end-btn">End session</button>
+        </div>
+      </div>
+
+      <div class="dash-body">
+        <!-- queue -->
+        <div class="queue" id="queue">
+          <div class="col">
+            <div class="qlabel">Queue</div>
+            <div class="qitem" id="q-jordan">
+              <div class="qn">Jordan Lee</div>
+              <div class="qp">~/projects/landing-page</div>
+              <div class="qi">Build failing: HeroImage is not exported from @/assets. Stuck 20 min.</div>
+              <div class="qs">Waiting</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- terminal -->
+        <div class="term">
+          <div class="term-head">
+            <span class="tl">Interactive terminal on Jordan's machine</span>
+            <span class="td">~/projects/landing-page</span>
+          </div>
+          <div class="term-out" id="term"></div>
+        </div>
+
+        <!-- tool cards -->
+        <div class="tools">
+          <div class="card">
+            <div class="card-h"><span>📁 Files</span></div>
+            <div class="card-b" id="files"><span class="fmuted">Not loaded</span></div>
+          </div>
+          <div class="card wide">
+            <div class="card-h"><span id="file-name">No file open</span></div>
+            <div class="card-b code" id="file-view"><span class="fmuted">Click a file to read it.</span></div>
+          </div>
+          <div class="card">
+            <div class="card-h"><span>🌐 Browser</span></div>
+            <div class="card-b" id="browser"><span class="fmuted">Not captured</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="controls">
+  <button id="reset">Reset</button>
+  <button data-step="1">1</button>
+  <button data-step="2">2</button>
+  <button data-step="3">3</button>
+  <button data-step="4">4</button>
+  <button data-step="5">5</button>
+  <button data-step="6">6</button>
+  <button class="play" id="play">▶ Play all</button>
+  <div class="track"><div class="fill" id="fill"></div></div>
+  <div class="now" id="now"><b>Step 1</b> · Jordan gets stuck</div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  const TOTAL = 6;
+  const NAMES = ["", "Jordan gets stuck", "Inline consent", "Expert connects (P2P)",
+    "Expert diagnoses", "Fix & verify", "Session ends"];
+  let timers = [];
+  let playing = false;
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const $ = (id) => document.getElementById(id);
+  const clearTimers = () => { timers.forEach(clearTimeout); timers = []; };
+  const at = (ms, fn) => { timers.push(setTimeout(fn, reduce ? Math.min(ms, 30) : ms)); };
+  const show = (elOrId, cls) => {
+    const el = typeof elOrId === "string" ? $(elOrId) : elOrId;
+    if (el) el.classList.add(cls || "show");
+  };
+
+  /* builders */
+  function chat(cls, who, body, delay) {
+    at(delay, () => {
+      const d = document.createElement("div");
+      d.className = "msg " + cls;
+      d.innerHTML = (who ? '<div class="who">' + who + "</div>" : "") +
+        (body ? '<div class="body">' + body + "</div>" : "");
+      $("chat").appendChild(d);
+      requestAnimationFrame(() => d.classList.add("show"));
+      $("chat").scrollTop = $("chat").scrollHeight;
+    });
+  }
+  function activity(text, delay, join) {
+    at(delay, () => {
+      const d = document.createElement("div");
+      d.className = "activity" + (join ? " join" : "");
+      d.innerHTML = '<span class="pulse"></span>' + text;
+      $("chat").appendChild(d);
+      requestAnimationFrame(() => d.classList.add("show"));
+      $("chat").scrollTop = $("chat").scrollHeight;
+    });
+  }
+  function term(html, delay) {
+    at(delay, () => {
+      const d = document.createElement("div");
+      d.className = "tline";
+      d.innerHTML = html;
+      $("term").appendChild(d);
+      requestAnimationFrame(() => d.classList.add("show"));
+      $("term").scrollTop = $("term").scrollHeight;
+    });
+  }
+  function typeInto(id, text, start, per) {
+    for (let i = 0; i <= text.length; i++) {
+      at(start + i * (per || 34), () => { $(id).textContent = text.slice(0, i); $(id).classList.add("typing"); });
+    }
+    at(start + text.length * (per || 34) + 120, () => $(id).classList.remove("typing"));
+  }
+
+  function progress(step) {
+    $("fill").style.width = ((step / TOTAL) * 100) + "%";
+    for (let i = 1; i <= TOTAL; i++) {
+      const dot = $("d" + i), bar = $("b" + i);
+      dot.classList.remove("active", "done");
+      if (bar) bar.classList.remove("done");
+      if (i < step) { dot.classList.add("done"); if (bar) bar.classList.add("done"); }
+      if (i === step) dot.classList.add("active");
+    }
+    $("now").innerHTML = "<b>Step " + step + "</b> · " + NAMES[step];
+  }
+
+  function reset() {
+    clearTimers(); playing = false;
+    progress(1);
+    $("chat").innerHTML = "";
+    $("term").innerHTML = "";
+    $("files").innerHTML = '<span class="fmuted">Not loaded</span>';
+    $("file-view").innerHTML = '<span class="fmuted">Click a file to read it.</span>';
+    $("file-name").textContent = "No file open";
+    $("browser").innerHTML = '<span class="fmuted">Not captured</span>';
+    $("gate").classList.remove("hide");
+    $("queue").classList.remove("hide");
+    $("dash-active").classList.remove("show");
+    $("dash-idle").style.display = "";
+    $("q-jordan").classList.remove("show", "focus");
+    $("rail").classList.remove("live");
+    $("f-tok").textContent = "";
+    $("f-name").textContent = "";
+    ["chip-f", "chip-t", "chip-b"].forEach((c) => $(c).className = "chip");
+  }
+
+  /* ── Steps (cumulative) ── */
+  function step1() {
+    reset(); progress(1);
+    chat("user", "Jordan", "Build me a landing page. The hero should have a gradient background, a headline, and a CTA button.", 200);
+    chat("ai", "Claude", "Created <code>src/components/Hero.tsx</code> and wired it into the page.", 1100);
+    chat("user", "Jordan", "The build is failing — TypeScript says <code>HeroImage</code> is not exported from <code>@/assets</code>. Everything looks fine to me. Stuck 20 min.", 2000);
+    chat("ai", "Claude", "I can bring in a human expert who works directly on your machine. Running <span class='cmd-pill'>/get-an-expert</span>…", 3100);
+    // expert signs in meanwhile
+    typeInto("f-tok", "•••••••••••", 3400, 30);
+    typeInto("f-name", "Priya", 4100, 70);
+    at(4700, () => { $("gate").classList.add("hide"); });
+    show("q-jordan"); // appears once queue visible
+    at(4750, () => $("q-jordan").classList.add("show"));
+  }
+
+  function step2() {
+    step1(); progress(2);
+    // MCP elicitation consent card
+    at(5200, () => {
+      const c = document.createElement("div");
+      c.className = "consent"; c.id = "consent";
+      c.innerHTML =
+        '<div class="ch"><div class="ttl">An expert wants to help on your machine</div>' +
+        '<div class="sub">Approve what they can do — everything is scoped to <b>~/projects/landing-page</b>, logged live, and revocable anytime.</div></div>' +
+        '<div class="scopes">' +
+        '<div class="scope" id="sc-f"><span class="box">✓</span><span><span class="k">Read &amp; edit files</span> in the project</span></div>' +
+        '<div class="scope" id="sc-t"><span class="box">✓</span><span><span class="k">Run terminal commands</span> in the project</span></div>' +
+        '<div class="scope" id="sc-b"><span class="box">✓</span><span><span class="k">View the browser</span> at localhost:3000</span></div>' +
+        '</div><div class="act"><button class="btn">Deny</button><button class="btn ok">Approve</button></div>';
+      $("chat").appendChild(c);
+      requestAnimationFrame(() => c.classList.add("show"));
+      $("chat").scrollTop = $("chat").scrollHeight;
+    });
+    at(5900, () => $("sc-f").classList.add("on"));
+    at(6150, () => $("sc-t").classList.add("on"));
+    at(6400, () => $("sc-b").classList.add("on"));
+    at(6900, () => { const c = $("consent"); if (c) c.classList.add("approved"); });
+    chat("sys", "", "✓ Approved. You're in the expert queue — an expert can act only within these scopes.", 7200);
+  }
+
+  function step3() {
+    step2(); progress(3);
+    // expert claims from the queue
+    at(7900, () => $("q-jordan").classList.add("focus"));
+    at(8500, () => {
+      $("queue").classList.add("hide");
+      $("dash-idle").style.display = "none";
+      $("dash-active").classList.add("show");
+      $("rail").classList.add("live");
+    });
+    term('<span class="d"># Priya clicked Jordan in the queue</span>', 8700);
+    term('<span class="o">Establishing a direct connection to Jordan\'s machine…</span>', 9100);
+    term('<span class="cl">Connected peer-to-peer to get-an-expert-agent. You\'re in.</span>', 9900);
+    // chips light up
+    at(9950, () => { $("chip-f").classList.add("on"); });
+    at(10100, () => { $("chip-t").classList.add("on"); });
+    at(10250, () => { $("chip-b").classList.add("on"); });
+    // customer sees the join
+    activity('Expert <b>Priya Sharma</b> joined your session.', 9600, true);
+  }
+
+  function step4() {
+    step3(); progress(4);
+    // file tree loads
+    at(10600, () => {
+      $("files").innerHTML =
+        '<div class="frow">package.json</div>' +
+        '<div class="frow dir">▸ src</div>' +
+        '<div class="frow" style="padding-left:10px">assets.ts</div>' +
+        '<div class="frow dir" style="padding-left:10px">▸ components</div>' +
+        '<div class="frow" id="fr-hero" style="padding-left:20px">Hero.tsx</div>';
+      [...$("files").children].forEach((el, i) => at(i * 90, () => el.classList.add("show")));
+    });
+    activity('Expert listing files: <span style="opacity:.85">.</span>', 10700);
+    // run a command
+    term('', 11000);
+    term('<span class="p">$</span> <span class="c">cat package.json</span>', 11100);
+    term('<span class="o">{ "name": "landing-page", "version": "1.0.0" }</span>', 11500);
+    term('<span class="d">exit 0</span>', 11700);
+    activity('Expert ran: <span style="opacity:.85">cat package.json</span>', 11300);
+    // Priya runs Claude Code INTERACTIVELY on Jordan's machine.
+    term('', 11900);
+    term('<span class="p">$</span> <span class="c">claude</span> <span class="d"># interactive, on Jordan\'s machine</span>', 12000);
+    term('<span class="cl">Claude Code</span> <span class="d">— working in ~/projects/landing-page</span>', 12150);
+    activity('Expert opened an interactive terminal', 12050);
+    term('<span class="cl">Priya ›</span> <span class="c">the build says HeroImage isn\'t exported from @/assets — find and fix it</span>', 12350);
+    // read Hero.tsx
+    at(12600, () => $("fr-hero").classList.add("focus"));
+    at(12700, () => {
+      $("file-name").textContent = "src/components/Hero.tsx";
+      $("file-view").innerHTML = "import { <span style='color:#EF4444'>HeroImage</span> } from '@/assets';\n\nexport function Hero() {\n  return &lt;section&gt;&lt;HeroImage /&gt;&lt;/section&gt;;\n}";
+    });
+    term('<span class="cl">●</span> <span class="o">Reading Hero.tsx and assets.ts…</span>', 12800);
+    term('<span class="cl">●</span> <span class="a">Found it — the import says HeroImage, but assets.ts exports HeroImg.</span>', 13100);
+  }
+
+  function step5() {
+    step4(); progress(5);
+    // fix
+    at(13600, () => {
+      $("file-view").innerHTML = "import { <span style='color:#22C55E'>HeroImg</span> } from '@/assets';\n\nexport function Hero() {\n  return &lt;section&gt;&lt;HeroImg /&gt;&lt;/section&gt;;\n}";
+      $("file-name").innerHTML = 'src/components/Hero.tsx <span style="color:var(--green)">✓ fixed</span>';
+    });
+    at(13650, () => { $("fr-hero").className = "frow fix"; $("fr-hero").textContent = "Hero.tsx ✓"; $("fr-hero").classList.add("show"); });
+    activity('Expert edited: <span style="opacity:.85">src/components/Hero.tsx</span>', 13700);
+    term('', 14000);
+    term('<span class="p">$</span> <span class="c">npm run dev</span>', 14100);
+    term('<span class="g">✓ Ready on http://localhost:3000</span>', 14600);
+    term('<span class="g">✓ Build: 0 errors, 0 warnings</span>', 14850);
+    activity('Expert ran: <span style="opacity:.85">npm run dev</span>', 14300);
+    // browser capture
+    at(15300, () => {
+      $("browser").innerHTML =
+        '<div class="browser-pv"><div class="h">The best Landing Page</div><div class="s">Ship a beautiful hero in minutes.</div><span class="cta">Get Started</span></div>' +
+        '<div class="browser-status">localhost:3000 · HTTP 200 ✓</div>' +
+        '<div class="browser-console">Console: clean · real screenshot</div>';
+    });
+    activity('Expert viewing: <span style="opacity:.85">localhost:3000</span>', 15300);
+  }
+
+  function step6() {
+    step5(); progress(6);
+    term('', 16000);
+    term('<span class="cl">Priya:</span> <span class="c">Fixed and verified — the page renders. Ending the session.</span>', 16100);
+    at(16600, () => {
+      ["chip-f", "chip-t", "chip-b"].forEach((c) => { $(c).className = "chip revoked"; });
+    });
+    term('<span class="d"># Session ended. All access revoked.</span>', 16800);
+    // customer summary
+    at(17200, () => {
+      const s = document.createElement("div");
+      s.className = "summary";
+      s.innerHTML =
+        '<div class="sh">Session summary · 4m 12s</div>' +
+        '<div class="sr"><span class="sk">Files modified</span><span class="sv">src/components/Hero.tsx</span></div>' +
+        '<div class="sr"><span class="sk">Commands run</span><span class="sv">npm run dev</span></div>' +
+        '<div class="sr"><span class="sk">The fix</span><span class="sv">import <span class="ok">HeroImg</span>, not HeroImage</span></div>' +
+        '<div class="sr"><span class="sk">Access now</span><span class="sv"><span style="color:var(--red)">all revoked</span></span></div>';
+      $("chat").appendChild(s);
+      requestAnimationFrame(() => s.classList.add("show"));
+      $("chat").scrollTop = $("chat").scrollHeight;
+    });
+    chat("ai", "Claude", "Priya fixed the import in <code>Hero.tsx</code> — your assets export <code>HeroImg</code>, not <code>HeroImage</code>. Build passes and the page renders. Picking up where you left off.", 17800);
+  }
+
+  const STEPS = [null, step1, step2, step3, step4, step5, step6];
+  function playStep(n) { clearTimers(); playing = false; STEPS[n](); }
+
+  async function playAll() {
+    reset(); playing = true;
+    const gaps = [0, 5300, 3000, 3200, 3400, 3200, 3200];
+    for (let i = 1; i <= TOTAL; i++) {
+      if (!playing) return;
+      playStep(i);
+      await new Promise((r) => setTimeout(r, reduce ? 400 : gaps[i]));
+    }
+    playing = false;
+  }
+
+  $("reset").addEventListener("click", reset);
+  $("play").addEventListener("click", playAll);
+  document.querySelectorAll("[data-step]").forEach((b) =>
+    b.addEventListener("click", () => playStep(Number(b.dataset.step))));
+
+  step1();
+})();
+</script>
+</body>
+</html>
