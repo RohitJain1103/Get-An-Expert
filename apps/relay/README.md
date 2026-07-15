@@ -28,7 +28,7 @@ On startup it prints the port, the dashboard directory it's serving, and — if 
 | `PORT` | `8787` | HTTP + WebSocket port. |
 | `GET_AN_EXPERT_HOST` | `127.0.0.1` | Bind address. Loopback by default. Set to `0.0.0.0` to accept network connections — only behind your own firewall/auth, since the relay coordinates terminal/file access. |
 | `GET_AN_EXPERT_EXPERT_TOKENS` | *generated* | Comma-separated expert auth tokens. If unset, one is generated and printed. |
-| `GET_AN_EXPERT_DASHBOARD_DIR` | sibling `get-an-expert-dashboard/public` | Static files for the expert dashboard. Omit to disable static serving. |
+| `GET_AN_EXPERT_DASHBOARD_DIR` | sibling `apps/dashboard/public` | Static files for the expert dashboard. Omit to disable static serving. |
 
 ## Endpoints
 
@@ -36,6 +36,30 @@ On startup it prints the port, the dashboard directory it's serving, and — if 
 - `GET /healthz` — `{ ok: true, sessions }`.
 - `WS /agent` — a customer's Get An Expert agent registers here.
 - `WS /expert` — an expert dashboard authenticates here.
+
+## Deploy (Railway)
+
+The relay is a normal long-lived Node process (WebSockets), so it runs on any
+container host. A `Dockerfile` (`apps/relay/Dockerfile`) and `railway.json` are
+included; the image is lightweight because the relay depends only on `ws` and
+`zod` (no native modules).
+
+1. **New Railway project → Deploy from GitHub repo**, pick this repo. Railway
+   reads `railway.json` and builds `apps/relay/Dockerfile`.
+2. **Set service variables:**
+   - `GET_AN_EXPERT_EXPERT_TOKENS` — comma-separated expert tokens (one per
+     expert, e.g. `alice-3f9a,bob-7c2d`). Required in production.
+   - `GET_AN_EXPERT_HOST=0.0.0.0` is already set in the Dockerfile; `PORT` is
+     injected by Railway. No other config needed.
+3. **Generate a public domain** (Settings → Networking). You get
+   `https://<name>.up.railway.app`.
+4. Experts open `https://<name>.up.railway.app/`, using
+   `wss://<name>.up.railway.app` as the Relay URL and their token.
+5. Point agents at it with `GET_AN_EXPERT_RELAY_URL=wss://<name>.up.railway.app`
+   (or bake it as the agent's default in a release so users need no config).
+
+Railway terminates TLS and proxies WebSocket upgrades, so `wss://` works with no
+extra setup. The relay's heartbeat keeps connections alive through the proxy.
 
 ## Wire protocol (summary)
 
