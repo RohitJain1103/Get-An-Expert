@@ -1,0 +1,10 @@
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+.git
+.vercel
+.gstack
+*.log
+.DS_Store
+coverage
