@@ -28,6 +28,14 @@ const state = {
 
 /* ── Connect gate ─────────────────────────────────────────────────── */
 
+// Default the Relay URL to wherever this dashboard is served from, so the
+// expert never has to know it: ws://localhost:8787 when self-hosted locally,
+// wss://<domain> when hosted (e.g. Railway). Only override the placeholder
+// when actually served over http(s) (not opened as a file://).
+if (location.protocol === "http:" || location.protocol === "https:") {
+  el("relay-url").value = location.origin.replace(/^http/, "ws");
+}
+
 el("connect-btn").addEventListener("click", connect);
 el("expert-token").addEventListener("keydown", (e) => {
   if (e.key === "Enter") connect();
