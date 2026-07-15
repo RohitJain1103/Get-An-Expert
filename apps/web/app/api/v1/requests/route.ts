@@ -75,7 +75,8 @@ export async function POST(request: NextRequest) {
         message: result.message,
         deleteUrl: result.deleteUrl,
         deleteToken: result.deleteToken,
-        threadToken: result.threadToken,
+        chatToken: result.chatToken,
+        chatJoinCommand: `npx get-an-expert chat ${result.requestId}`,
       },
       error: null,
     });

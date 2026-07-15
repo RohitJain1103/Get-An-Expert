@@ -64,49 +64,38 @@ export async function checkLoginRateLimit(
 }
 
 /**
- * Posting on a thread, IP-scoped part. Runs BEFORE token auth — it must not
- * consume any per-thread budget, or an attacker who merely knows a request id
- * could lock the real participants out (ids appear in delete URLs).
+ * Chat endpoints. IP-gated BEFORE any token verification (cheap rejection of
+ * floods). Posts: a fast human typist tops out well under 30 lines/minute.
+ * Polls: clients poll every ~2s (30/min); 240/min leaves room for a dashboard
+ * tab and a CLI on one NAT'd office IP without letting scrapers hammer us.
  */
-export async function checkThreadWriteRateLimit(
+export async function checkChatPostRateLimit(
   store: Store,
   ip: string,
 ): Promise<RateLimitDecision> {
-  const rules: LimitRule[] = [
-    { key: `msg-ip-min:${ip}`, windowSeconds: MINUTE, max: 20 },
-    { key: `msg-ip-hour:${ip}`, windowSeconds: HOUR, max: 120 },
-  ];
-  for (const rule of rules) {
-    const count = await store.incrWindow(rule.key, rule.windowSeconds);
-    if (count > rule.max) {
-      return { allowed: false, retryAfterSeconds: rule.windowSeconds };
-    }
-  }
-  return { allowed: true };
-}
-
-/**
- * Per-thread budget. Only call AFTER the thread token has been verified, so
- * unauthenticated garbage can never exhaust a real thread's quota.
- */
-export async function checkThreadQuota(
-  store: Store,
-  requestId: string,
-): Promise<RateLimitDecision> {
-  const count = await store.incrWindow(`msg-thread-hour:${requestId}`, HOUR);
-  if (count > 60) return { allowed: false, retryAfterSeconds: HOUR };
-  return { allowed: true };
-}
-
-/**
- * Reading a thread: sized for the companion plugin's poll (~1/min per
- * session) with headroom for manual checks.
- */
-export async function checkThreadReadRateLimit(
-  store: Store,
-  ip: string,
-): Promise<RateLimitDecision> {
-  const count = await store.incrWindow(`msg-read-ip-min:${ip}`, MINUTE);
+  const count = await store.incrWindow(`chat-post:${ip}`, MINUTE);
   if (count > 30) return { allowed: false, retryAfterSeconds: MINUTE };
+  return { allowed: true };
+}
+
+export async function checkChatPollRateLimit(
+  store: Store,
+  ip: string,
+): Promise<RateLimitDecision> {
+  const count = await store.incrWindow(`chat-poll:${ip}`, MINUTE);
+  if (count > 240) return { allowed: false, retryAfterSeconds: MINUTE };
+  return { allowed: true };
+}
+
+/**
+ * Relayed session events burst one per agent tool call, so this sits well
+ * above chat-post but still bounds a runaway hook loop.
+ */
+export async function checkEventRateLimit(
+  store: Store,
+  ip: string,
+): Promise<RateLimitDecision> {
+  const count = await store.incrWindow(`chat-event:${ip}`, MINUTE);
+  if (count > 120) return { allowed: false, retryAfterSeconds: MINUTE };
   return { allowed: true };
 }

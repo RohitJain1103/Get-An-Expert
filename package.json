@@ -1,5 +1,5 @@
 {
-  "name": "get-an-expert",
+  "name": "get-an-expert-monorepo",
   "private": true,
   "version": "0.1.0",
   "description": "Get An Expert — human expert helpline for AI coding tools, delivered as an MCP server",
