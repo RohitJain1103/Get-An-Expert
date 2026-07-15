@@ -66,10 +66,38 @@ export function createRelay(options: RelayOptions): Relay {
       return;
     }
     wss.handleUpgrade(req, socket, head, (ws) => {
+      trackHeartbeat(ws);
       if (path === "/agent") handleAgent(ws);
       else handleExpert(ws);
     });
   });
+
+  // Heartbeat: without it, an idle WebSocket (the relay goes quiet once the
+  // WebRTC handshake completes and data flows peer-to-peer) gets killed by
+  // proxies/load balancers after a few minutes. Ping every interval and drop
+  // peers that stop ponging.
+  const HEARTBEAT_MS = 30_000;
+  const alive = new WeakSet<WebSocket>();
+  function trackHeartbeat(ws: WebSocket): void {
+    alive.add(ws);
+    ws.on("pong", () => alive.add(ws));
+  }
+  const heartbeat = setInterval(() => {
+    for (const ws of wss.clients) {
+      if (!alive.has(ws)) {
+        ws.terminate();
+        continue;
+      }
+      alive.delete(ws);
+      try {
+        ws.ping();
+      } catch {
+        /* ignore */
+      }
+    }
+  }, HEARTBEAT_MS);
+  heartbeat.unref?.();
+  server.on("close", () => clearInterval(heartbeat));
 
   function sendTo(ws: WebSocket, msg: unknown): void {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));

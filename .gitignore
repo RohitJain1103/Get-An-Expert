@@ -11,3 +11,5 @@ coverage/
 *.tsbuildinfo
 .vercel
 .env*
+.worktrees/
+.superpowers/

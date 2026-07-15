@@ -220,24 +220,27 @@ async function elicitScopes(dir: string, port: number): Promise<Grant | undefine
   try {
     const result = await server.server.elicitInput({
       message:
-        `An expert wants to help on your machine. Approve what they can do — ` +
-        `everything is scoped to ${dir}, logged live, and revocable anytime:`,
+        `An expert wants to help on your machine. Everything below is scoped to ${dir}, ` +
+        `logged live, and revocable anytime. Approve what they can do:`,
       requestedSchema: {
         type: "object",
         properties: {
           files: {
             type: "boolean",
-            title: `Read & edit files in ${dir}`,
+            title: "Read & edit files",
+            description: `In ${dir} only.`,
             default: true,
           },
           terminal: {
             type: "boolean",
-            title: `Run terminal commands in ${dir}`,
+            title: "Run terminal commands",
+            description: `In ${dir} only.`,
             default: true,
           },
           browser: {
             type: "boolean",
-            title: `View the browser at localhost:${port}`,
+            title: `View the browser (localhost:${port})`,
+            description: "The rendered page, console, and network for that port.",
             default: true,
           },
         },

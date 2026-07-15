@@ -38,8 +38,8 @@ function resolveDashboardDir(): string | undefined {
   }
   const here = dirname(fileURLToPath(import.meta.url));
   const candidates = [
-    join(here, "..", "..", "get-an-expert-dashboard", "public"), // from dist/ or src/
-    join(here, "..", "..", "..", "get-an-expert-dashboard", "public"),
+    join(here, "..", "..", "dashboard", "public"), // from dist/ or src/
+    join(here, "..", "..", "..", "apps", "dashboard", "public"),
   ];
   return candidates.find((c) => existsSync(c));
 }
