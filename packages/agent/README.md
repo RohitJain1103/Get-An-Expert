@@ -78,7 +78,7 @@ Plus MCP tools: `list_files`, `read_file`, `write_file`, `run_command`, `browser
 
 | Env var | Default | Meaning |
 |---|---|---|
-| `GET_AN_EXPERT_RELAY_URL` | `ws://localhost:8787` | Relay to register with (`ws://` or `http://`). |
+| `GET_AN_EXPERT_RELAY_URL` | hosted relay | Relay to register with (`ws://` or `http://`). |
 | `GET_AN_EXPERT_PROJECT_DIR` | launch directory | Directory the expert is scoped to. |
 | `GET_AN_EXPERT_CUSTOMER_NAME` | OS username | Name shown to the expert in the queue. |
 | `GET_AN_EXPERT_BROWSER_PORT` | `3000` | Default dev-server port offered for Browser access. |
