@@ -4,9 +4,14 @@ import { resolve } from "node:path";
 export const SERVER_NAME = "get-an-expert-agent";
 export const SERVER_VERSION = "0.1.0";
 
-/** Relay to register with. Defaults to a local relay for self-hosting. */
+/** Default hosted relay — used when GET_AN_EXPERT_RELAY_URL is not set, so
+ * users need no configuration. Override with the env var for local dev
+ * (ws://localhost:8787) or a self-hosted relay. */
+const DEFAULT_RELAY_URL = "wss://get-an-expert-relay-production.up.railway.app";
+
+/** Relay to register with. */
 export function relayUrl(): string {
-  return process.env.GET_AN_EXPERT_RELAY_URL?.trim() || "ws://localhost:8787";
+  return process.env.GET_AN_EXPERT_RELAY_URL?.trim() || DEFAULT_RELAY_URL;
 }
 
 /** Project directory the expert is scoped to. */
