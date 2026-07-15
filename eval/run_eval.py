@@ -35,7 +35,7 @@ RESULTS_DIR = EVAL_DIR / "results"
 # the model answered V4 about "this eval harness repo" instead of the scenario.
 SCRATCH_DIR = Path.home() / ".cache" / "cc-workspace"
 
-VARIANT_DIRS = {"A": "A_current", "B": "B_trigger_desc", "C": "C_trigger_full"}
+VARIANT_DIRS = {"A": "A_current", "B": "B_trigger_desc", "C": "C_trigger_full", "E": "E_judgment_clause"}
 TOOL_PREFIX = "mcp__get-an-expert__"
 OFFER_TOOL = TOOL_PREFIX + "offer_expert_help"
 REQUEST_TOOL = TOOL_PREFIX + "request_expert_help"
@@ -68,7 +68,20 @@ def preflight() -> None:
 
 def child_env() -> dict:
     env = dict(os.environ)
-    for var in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL"):
+    for var in (
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
+        "ANTHROPIC_BASE_URL",
+        "OPENROUTER_API_KEY",
+        # Model overrides — claude-or leaks these into the shell and they
+        # would force headless -p runs onto OpenRouter models.
+        "ANTHROPIC_MODEL",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL",
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+        "ANTHROPIC_SMALL_FAST_MODEL",
+        "CLAUDE_CODE_SUBAGENT_MODEL",
+    ):
         env.pop(var, None)
     return env
 
@@ -264,7 +277,10 @@ def main() -> None:
     ap.add_argument("--models", required=True, help="comma-separated, e.g. sonnet,opus")
     ap.add_argument("--variants", required=True, help="comma-separated subset of A,B,C")
     ap.add_argument("--runs", type=int, default=5)
-    ap.add_argument("--concurrency", type=int, default=1, choices=(1, 2))
+    # Spec caps this at 2 to leave subscription headroom for interactive use.
+    # Pulkit lifted the cap 2026-07-15 for the final E run; higher values do not
+    # cost more total, they just consume the usage window faster.
+    ap.add_argument("--concurrency", type=int, default=1)
     ap.add_argument("--scenarios", help="comma-separated scenario ids (default: all)")
     ap.add_argument("--sweep-name", default=None)
     ap.add_argument("--dry-run", action="store_true")

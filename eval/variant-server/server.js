@@ -19,6 +19,7 @@ const VARIANT_DIRS = {
   A: "A_current",
   B: "B_trigger_desc",
   C: "C_trigger_full",
+  E: "E_judgment_clause",
 };
 const variant = process.env.GAE_EVAL_VARIANT ?? "A";
 const variantDir = VARIANT_DIRS[variant];
