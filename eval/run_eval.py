@@ -35,7 +35,13 @@ RESULTS_DIR = EVAL_DIR / "results"
 # the model answered V4 about "this eval harness repo" instead of the scenario.
 SCRATCH_DIR = Path.home() / ".cache" / "cc-workspace"
 
-VARIANT_DIRS = {"A": "A_current", "B": "B_trigger_desc", "C": "C_trigger_full", "E": "E_judgment_clause"}
+VARIANT_DIRS = {
+    "A": "A_current",
+    "B": "B_trigger_desc",
+    "C": "C_trigger_full",
+    "E": "E_judgment_clause",
+    "F": "F_explicit_ask",
+}
 TOOL_PREFIX = "mcp__get-an-expert__"
 OFFER_TOOL = TOOL_PREFIX + "offer_expert_help"
 REQUEST_TOOL = TOOL_PREFIX + "request_expert_help"

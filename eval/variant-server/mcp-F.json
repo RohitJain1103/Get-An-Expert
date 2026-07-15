@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "get-an-expert": {
+      "command": "node",
+      "args": ["eval/variant-server/server.js"],
+      "env": { "GAE_EVAL_VARIANT": "F" }
+    }
+  }
+}

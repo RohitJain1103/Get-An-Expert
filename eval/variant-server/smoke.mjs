@@ -6,13 +6,19 @@
  * 4 tools with the variant's descriptions, tools/call returns the offer stub.
  */
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const evalDir = join(here, "..");
-const VARIANT_DIRS = { A: "A_current", B: "B_trigger_desc", C: "C_trigger_full" };
+// Derived from disk, not hardcoded: a duplicated map here silently froze at
+// A/B/C and let variants E and F pass "all green" without ever being tested.
+const VARIANT_DIRS = Object.fromEntries(
+  readdirSync(join(evalDir, "variants"), { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => [d.name[0], d.name]),
+);
 
 async function testVariant(variant) {
   const child = spawn("node", [join(here, "server.js")], {
@@ -85,6 +91,6 @@ async function testVariant(variant) {
   console.log(`variant ${variant}: OK (instructions ${wantInstructions.length} chars, 4 tools, offer stub verified)`);
 }
 
-const variants = process.argv[2] ? [process.argv[2]] : ["A", "B", "C"];
+const variants = process.argv[2] ? [process.argv[2]] : Object.keys(VARIANT_DIRS);
 for (const v of variants) await testVariant(v);
 console.log("smoke: all green");
