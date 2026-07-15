@@ -24,7 +24,11 @@ Then register it as an MCP server in your tool. For Claude Code:
 claude mcp add get-an-expert get-an-expert-agent
 ```
 
-`get-an-expert-agent` ships a native WebRTC dependency (`node-datachannel`); its prebuilt binary is fetched automatically on install.
+### Requirements
+
+- **Node.js ≥ 18.**
+- Native modules `node-datachannel` (peer-to-peer WebRTC) and `node-pty` (the interactive terminal) — prebuilt binaries are fetched automatically for common platforms; other platforms build from source (needs a C/C++ toolchain).
+- A Chromium-family browser (Chrome / Chromium / Edge) for the real browser view. If none is present, the Browser scope falls back to an HTTP reachability check. Point at a specific binary with `GET_AN_EXPERT_BROWSER_EXECUTABLE`.
 
 ## Use it
 
