@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "get-an-expert-onmachine": {
+      "command": "npx",
+      "args": ["-y", "get-an-expert-agent@0.1.2"]
+    }
+  }
+}
