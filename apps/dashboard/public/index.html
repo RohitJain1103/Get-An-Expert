@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Get An Expert — Expert Dashboard</title>
+<link rel="stylesheet" href="vendor/xterm.css" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">Get An Expert<span>.</span></div>
+  <div class="sep"></div>
+  <div class="subtitle">Expert Dashboard</div>
+  <div class="conn" id="conn-status">
+    <span class="conn-dot" id="conn-dot"></span>
+    <span id="conn-label">Not connected</span>
+  </div>
+</div>
+
+<!-- Connect gate -->
+<div class="gate" id="gate">
+  <div class="gate-card">
+    <h1>Connect to the relay</h1>
+    <p>Sign in as an expert to see the queue of people who need help.</p>
+    <label>Relay URL
+      <input id="relay-url" type="text" value="ws://localhost:8787" spellcheck="false" />
+    </label>
+    <label>Expert token
+      <input id="expert-token" type="password" placeholder="paste your token" spellcheck="false" />
+    </label>
+    <label>Your name
+      <input id="expert-name" type="text" placeholder="e.g. Priya Sharma" spellcheck="false" />
+    </label>
+    <button id="connect-btn" class="primary">Connect</button>
+    <div class="gate-error" id="gate-error"></div>
+  </div>
+</div>
+
+<!-- Main app -->
+<div class="main hidden" id="app">
+  <aside class="queue-pane">
+    <div class="queue-title">Queue</div>
+    <div id="queue-list"></div>
+    <div class="queue-empty" id="queue-empty">No one is waiting right now.</div>
+  </aside>
+
+  <section class="workspace">
+    <div class="ws-header" id="ws-header">
+      <span class="ws-idle" id="ws-idle">Select a session from the queue to start helping.</span>
+      <div class="ws-active hidden" id="ws-active">
+        <span class="dot amber"></span>
+        <span id="ws-title">—</span>
+        <span class="perms" id="ws-perms"></span>
+        <span class="spacer"></span>
+        <button id="end-btn" class="danger small">End session</button>
+      </div>
+    </div>
+
+    <div class="ws-body hidden" id="ws-body">
+      <div class="terminal">
+        <div class="term-head">
+          <span class="tlabel" id="term-label">Interactive terminal on the customer's machine</span>
+          <span class="tdir" id="term-dir"></span>
+          <span class="term-hint" id="term-hint">type here — try <code>claude</code>, <code>npm run dev</code>, <code>pytest</code>…</span>
+        </div>
+        <div class="xterm-host" id="xterm"></div>
+      </div>
+
+      <div class="tools">
+        <div class="tool-card">
+          <div class="tc-head">
+            <span>📁 Files</span>
+            <button id="refresh-files" class="ghost small">Refresh</button>
+          </div>
+          <div class="tc-body" id="file-tree"><div class="muted">Not loaded</div></div>
+        </div>
+        <div class="tool-card file-view">
+          <div class="tc-head"><span id="file-view-name">No file open</span></div>
+          <pre class="tc-body code" id="file-content"><span class="muted">Click a file to read it.</span></pre>
+        </div>
+        <div class="tool-card">
+          <div class="tc-head">
+            <span>🌐 Browser</span>
+            <button id="browser-refresh" class="ghost small">Capture</button>
+          </div>
+          <div class="tc-body" id="browser-card"><div class="muted">Not captured</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script src="vendor/xterm.js"></script>
+<script src="vendor/addon-fit.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

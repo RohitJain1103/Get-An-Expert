@@ -1,0 +1,116 @@
+import { z } from "zod";
+
+/**
+ * Relay wire protocol.
+ *
+ * The relay is a signaling server ONLY. It routes `signal` payloads opaquely
+ * between the customer's agent and the claimed expert — it never parses,
+ * logs, or stores them. Everything else it handles is session metadata:
+ * who connected, when, which permissions were granted, and activity
+ * summaries (action + target, never file contents / terminal output /
+ * browser data).
+ */
+
+export const permissionsSchema = z.object({
+  files: z.boolean(),
+  terminal: z.boolean(),
+  browser: z.boolean(),
+  browserPort: z.number().int().min(1).max(65535).optional(),
+});
+export type Permissions = z.infer<typeof permissionsSchema>;
+
+export const NO_PERMISSIONS: Permissions = {
+  files: false,
+  terminal: false,
+  browser: false,
+};
+
+/* ── Messages the agent (customer machine) may send ─────────────── */
+
+const agentRegister = z.object({
+  type: z.literal("register"),
+  customerName: z.string().min(1).max(120),
+  projectDir: z.string().min(1).max(500),
+  issue: z.string().max(2000).optional(),
+});
+
+const agentMetadata = z.object({
+  type: z.literal("metadata"),
+  permissions: permissionsSchema.optional(),
+  activity: z
+    .object({ kind: z.string().min(1).max(60), summary: z.string().max(500) })
+    .optional(),
+});
+
+const agentSignal = z.object({
+  type: z.literal("signal"),
+  payload: z.unknown(),
+});
+
+const agentEnd = z.object({
+  type: z.literal("end"),
+  reason: z.string().max(200).optional(),
+});
+
+export const agentMessageSchema = z.discriminatedUnion("type", [
+  agentRegister,
+  agentMetadata,
+  agentSignal,
+  agentEnd,
+]);
+export type AgentMessage = z.infer<typeof agentMessageSchema>;
+
+/* ── Messages the expert (dashboard) may send ────────────────────── */
+
+const expertAuth = z.object({
+  type: z.literal("auth"),
+  token: z.string().min(1).max(200),
+  name: z.string().min(1).max(120),
+});
+
+const expertClaim = z.object({
+  type: z.literal("claim"),
+  sessionId: z.string().min(1).max(80),
+});
+
+const expertRelease = z.object({
+  type: z.literal("release"),
+  sessionId: z.string().min(1).max(80),
+});
+
+const expertSignal = z.object({
+  type: z.literal("signal"),
+  sessionId: z.string().min(1).max(80),
+  payload: z.unknown(),
+});
+
+const expertEnd = z.object({
+  type: z.literal("end-session"),
+  sessionId: z.string().min(1).max(80),
+  reason: z.string().max(200).optional(),
+});
+
+export const expertMessageSchema = z.discriminatedUnion("type", [
+  expertAuth,
+  expertClaim,
+  expertRelease,
+  expertSignal,
+  expertEnd,
+]);
+export type ExpertMessage = z.infer<typeof expertMessageSchema>;
+
+/** Parse a raw websocket frame into a validated message, or undefined. */
+export function parseMessage<T>(
+  raw: unknown,
+  schema: z.ZodType<T>,
+): T | undefined {
+  if (typeof raw !== "string" && !Buffer.isBuffer(raw)) return undefined;
+  let json: unknown;
+  try {
+    json = JSON.parse(raw.toString());
+  } catch {
+    return undefined;
+  }
+  const result = schema.safeParse(json);
+  return result.success ? result.data : undefined;
+}

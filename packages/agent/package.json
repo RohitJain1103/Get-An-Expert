@@ -1,0 +1,59 @@
+{
+  "name": "get-an-expert-agent",
+  "version": "0.1.0",
+  "description": "Get An Expert agent — on-demand expert assistance where the expert works directly on your machine through scoped, consent-based access. Runs as an MCP server inside Claude Code, Codex, Cursor, or Windsurf.",
+  "keywords": [
+    "mcp",
+    "modelcontextprotocol",
+    "expert",
+    "pair-programming",
+    "remote-assistance",
+    "claude-code",
+    "codex",
+    "cursor",
+    "windsurf"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/RohitJain1103/Get-An-Expert",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RohitJain1103/Get-An-Expert.git",
+    "directory": "packages/agent"
+  },
+  "type": "module",
+  "bin": {
+    "get-an-expert-agent": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --clean",
+    "dev": "tsx src/index.ts",
+    "demo": "tsx examples/local-demo.ts",
+    "test": "vitest run",
+    "prepublishOnly": "pnpm test && pnpm build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "node-datachannel": "^0.32.3",
+    "node-pty": "^1.1.0",
+    "playwright-core": "^1.61.1",
+    "ws": "^8.21.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "@types/ws": "^8.18.1",
+    "get-an-expert-relay": "workspace:*",
+    "tsup": "^8.5.1",
+    "tsx": "^4.23.1",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}

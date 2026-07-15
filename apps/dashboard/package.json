@@ -1,0 +1,16 @@
+{
+  "name": "get-an-expert-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Get An Expert expert dashboard — web UI showing the session queue, shared terminal, file browser, and browser preview. An MCP client that connects to the Get An Expert agent on the customer's machine peer-to-peer over WebRTC.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "vitest": "^4.1.10"
+  }
+}
