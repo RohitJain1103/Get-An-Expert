@@ -8,6 +8,11 @@
       "name": "get-an-expert",
       "description": "Offers expert help when a coding session gets stuck — consent-first, with deterministic stuck detection.",
       "source": "./plugins/claude-code"
+    },
+    {
+      "name": "get-an-expert-onmachine",
+      "description": "Bring a human expert onto your machine to fix a bug — scoped, consent-based, revocable access (files, interactive terminal, browser), peer-to-peer.",
+      "source": "./plugins/onmachine"
     }
   ]
 }
