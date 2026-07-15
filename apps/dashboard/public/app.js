@@ -390,7 +390,11 @@ function openShot(src, p) {
 
 el("end-btn").addEventListener("click", () => {
   if (!state.activeId) return;
-  relaySend({ type: "end-session", sessionId: state.activeId, reason: "expert ended the session" });
+  const sessionId = state.activeId;
+  relaySend({ type: "end-session", sessionId, reason: "expert ended the session" });
+  // Reset the dashboard immediately — the relay notifies the customer, not the
+  // expert who clicked End, so return to the queue view ourselves.
+  onSessionEnded(sessionId, "you ended the session", null);
 });
 
 function onSessionEnded(sessionId, reason, durationMs) {

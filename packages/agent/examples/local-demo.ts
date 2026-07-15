@@ -21,9 +21,9 @@ const RELAY_PORT = 8787;
 const DEV_PORT = 3000;
 const TOKEN = "demo-token";
 
-// 1. Relay, serving the expert dashboard from get-an-expert-dashboard/public.
+// 1. Relay, serving the expert dashboard from dashboard/public.
 const here = dirname(fileURLToPath(import.meta.url)); // packages/get-an-expert/examples
-const dashboardDir = join(here, "..", "..", "..", "apps", "get-an-expert-dashboard", "public");
+const dashboardDir = join(here, "..", "..", "..", "apps", "dashboard", "public");
 const relay = createRelay({
   expertTokens: [TOKEN],
   dashboardDir,
