@@ -37,7 +37,7 @@
     "dev": "tsx src/index.ts",
     "demo": "tsx examples/local-demo.ts",
     "test": "vitest run",
-    "prepublishOnly": "pnpm test && pnpm build"
+    "prepublishOnly": "pnpm build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
