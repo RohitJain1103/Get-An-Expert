@@ -25,6 +25,20 @@ export const NO_PERMISSIONS: Permissions = {
   browser: false,
 };
 
+/* ── Chat messages (customer ↔ expert, relayed + stored in memory) ── */
+
+/**
+ * A single chat message as stored and fanned out by the relay. `text` has
+ * already been through `redactText` by the time it is stored or forwarded.
+ */
+export const chatMessageSchema = z.object({
+  at: z.number(),
+  from: z.enum(["customer", "expert"]),
+  name: z.string().min(1).max(120),
+  text: z.string().max(2000),
+});
+export type ChatMessage = z.infer<typeof chatMessageSchema>;
+
 /* ── Messages the agent (customer machine) may send ─────────────── */
 
 const agentRegister = z.object({
@@ -84,6 +98,12 @@ const expertSignal = z.object({
   payload: z.unknown(),
 });
 
+const expertChat = z.object({
+  type: z.literal("chat"),
+  sessionId: z.string().min(1).max(80),
+  text: z.string().min(1).max(2000),
+});
+
 const expertEnd = z.object({
   type: z.literal("end-session"),
   sessionId: z.string().min(1).max(80),
@@ -95,9 +115,29 @@ export const expertMessageSchema = z.discriminatedUnion("type", [
   expertClaim,
   expertRelease,
   expertSignal,
+  expertChat,
   expertEnd,
 ]);
 export type ExpertMessage = z.infer<typeof expertMessageSchema>;
+
+/* ── Messages the customer chat page may send ────────────────────── */
+
+const customerHello = z.object({
+  type: z.literal("hello"),
+  sessionId: z.string().min(1).max(80),
+  token: z.string().min(1).max(200),
+});
+
+const customerChat = z.object({
+  type: z.literal("chat"),
+  text: z.string().min(1).max(2000),
+});
+
+export const customerMessageSchema = z.discriminatedUnion("type", [
+  customerHello,
+  customerChat,
+]);
+export type CustomerMessage = z.infer<typeof customerMessageSchema>;
 
 /** Parse a raw websocket frame into a validated message, or undefined. */
 export function parseMessage<T>(

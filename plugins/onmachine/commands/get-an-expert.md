@@ -8,6 +8,9 @@ Call the `request_expert_help` tool from the **get-an-expert-onmachine** MCP
 server so I can approve scoped access — Files, Terminal, and Browser — before
 anyone connects. Relay the approval prompt to me exactly.
 
-Once I approve, tell me my request is in the expert queue and I can keep working;
-an expert will join shortly, I'll see a live log of everything they do, and I can
-revoke any scope or end the session at any time.
+Once I approve, tell me plainly that I can walk away: my request is in the
+expert queue, and as long as I leave this chat open and my machine on and awake
+(don't close the laptop), the expert works without me — with a live log of
+everything they do. I can check back anytime with expert_status, revoke any
+scope, or end the session. If the tool returns a chat link, give it to me so I
+can message the expert from my phone or any browser.

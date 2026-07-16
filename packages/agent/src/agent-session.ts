@@ -1,4 +1,8 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { rmSync } from "node:fs";
+import { join } from "node:path";
+import { buildChatUrl } from "./chat-url";
 import { createExpertServer } from "./expert-server";
 import { PermissionGate, type Grant, type Scope } from "./permissions";
 import { RelayClient } from "./relay-client";
@@ -60,6 +64,7 @@ export class AgentSession {
   #expertServer?: McpServer;
   #ptys = new Set<PtyBridge>();
   #startedAt = 0;
+  #contextWritten = false;
   readonly #browser: BrowserController;
 
   constructor(opts: AgentSessionOptions) {
@@ -90,6 +95,15 @@ export class AgentSession {
 
   get expertName(): string | undefined {
     return this.#expertName;
+  }
+
+  /** Hosted chat-page URL for this session, or undefined when the relay
+   * didn't mint a customer token (old relays) or registration hasn't run. */
+  get chatUrl(): string | undefined {
+    const sessionId = this.#relay.sessionId;
+    const customerToken = this.#relay.customerToken;
+    if (!sessionId || !customerToken) return undefined;
+    return buildChatUrl(this.#opts.relayUrl, sessionId, customerToken);
   }
 
   /** Register the session with the relay and wait for an expert to claim it. */
@@ -150,6 +164,7 @@ export class AgentSession {
     state: SessionState;
     sessionId?: string;
     expertName?: string;
+    chatUrl?: string;
     permissions: Grant;
     recentActivity: ActivityEntry[];
   } {
@@ -157,9 +172,46 @@ export class AgentSession {
       state: this.#state,
       sessionId: this.#relay.sessionId,
       expertName: this.#expertName,
+      chatUrl: this.chatUrl,
       permissions: this.#gate.snapshot(),
       recentActivity: this.#log.entries().slice(-20),
     };
+  }
+
+  /**
+   * Write the expert hand-off file at <projectDir>/.get-an-expert/CONTEXT.md
+   * and log it in the activity feed so the customer sees exactly what the
+   * expert can read. The directory is removed again when the session ends.
+   */
+  async writeContext(markdown: string): Promise<void> {
+    const dir = join(this.#opts.projectDir, ".get-an-expert");
+    await mkdir(dir, { recursive: true });
+    // Self-ignore: if the agent is killed (crash / power loss) before the
+    // dir is cleaned up on session end, this keeps a stray `git add -A` from
+    // staging the transcript regardless of the project's root .gitignore.
+    await writeFile(join(dir, ".gitignore"), "*\n", "utf8");
+    await writeFile(join(dir, "CONTEXT.md"), markdown, "utf8");
+    this.#contextWritten = true;
+    this.#handleActivity({
+      at: Date.now(),
+      kind: "context",
+      summary: "Session context written: .get-an-expert/CONTEXT.md",
+    });
+  }
+
+  /**
+   * Synchronously remove the context dir. For signal handlers (SIGINT/SIGTERM)
+   * that must finish before process.exit, where the async #finish cleanup
+   * can't run to completion.
+   */
+  cleanupContextSync(): void {
+    if (!this.#contextWritten) return;
+    this.#contextWritten = false;
+    try {
+      rmSync(join(this.#opts.projectDir, ".get-an-expert"), { recursive: true, force: true });
+    } catch {
+      /* best-effort */
+    }
   }
 
   /** End the session: revoke everything, tear down the peer, return a summary. */
@@ -207,9 +259,10 @@ export class AgentSession {
     this.#peer = peer;
   }
 
-  /** Route each peer-to-peer data channel by its label. */
+  /** Route each peer-to-peer data channel by its label. The dashboard opens
+   * extra terminals as "pty-2", "pty-3", … — each gets its own PtyBridge. */
   #routeChannel(channel: RawChannel): void {
-    if (channel.label === "pty") {
+    if (channel.label === "pty" || channel.label.startsWith("pty-")) {
       this.#serveTerminal(channel);
     } else {
       void this.#serveExpert(channel);
@@ -249,6 +302,14 @@ export class AgentSession {
     this.#teardownPeer();
     this.#relay.close();
     void this.#browser.close?.().catch(() => {});
+    if (this.#contextWritten) {
+      // Best-effort: the context file only exists for the expert session.
+      this.#contextWritten = false;
+      await rm(join(this.#opts.projectDir, ".get-an-expert"), {
+        recursive: true,
+        force: true,
+      }).catch(() => {});
+    }
     this.#logLine(`session ended: ${reason ?? "unknown"}`);
     this.#opts.onSessionEnded?.(reason);
   }

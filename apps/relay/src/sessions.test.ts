@@ -36,6 +36,20 @@ describe("SessionStore.create", () => {
     const b = register(store);
     expect(a.id).not.toBe(b.id);
   });
+
+  it("mints a 32-hex customerToken and starts with an empty chat", () => {
+    const store = makeStore();
+    const s = register(store);
+    expect(s.customerToken).toMatch(/^[0-9a-f]{32}$/);
+    expect(s.chat).toEqual([]);
+  });
+
+  it("mints a distinct customerToken per session", () => {
+    const store = makeStore();
+    const a = register(store);
+    const b = register(store);
+    expect(a.customerToken).not.toBe(b.customerToken);
+  });
 });
 
 describe("SessionStore.claim", () => {
@@ -158,6 +172,49 @@ describe("SessionStore.addActivity", () => {
     expect(current.activity).toHaveLength(500);
     expect(current.activity[499].summary).toBe("cmd 519");
     expect(current.activity[0].summary).toBe("cmd 20");
+  });
+});
+
+describe("SessionStore.addChat", () => {
+  function chatMessage(text: string) {
+    return {
+      at: Date.now(),
+      from: "customer" as const,
+      name: "Jordan Lee",
+      text,
+    };
+  }
+
+  it("appends chat messages", () => {
+    const store = makeStore();
+    const s = register(store);
+    const updated = store.addChat(s.id, chatMessage("hello"));
+    expect(updated.chat).toHaveLength(1);
+    expect(updated.chat[0].text).toBe("hello");
+  });
+
+  it("does not mutate the previous session snapshot", () => {
+    const store = makeStore();
+    const s = register(store);
+    store.addChat(s.id, chatMessage("hello"));
+    expect(s.chat).toEqual([]);
+  });
+
+  it("caps the chat history at 200 messages, dropping the oldest", () => {
+    const store = makeStore();
+    const s = register(store);
+    for (let i = 0; i < 220; i++) {
+      store.addChat(s.id, chatMessage(`msg ${i}`));
+    }
+    const current = store.get(s.id)!;
+    expect(current.chat).toHaveLength(200);
+    expect(current.chat[0].text).toBe("msg 20");
+    expect(current.chat[199].text).toBe("msg 219");
+  });
+
+  it("throws for unknown sessions", () => {
+    const store = makeStore();
+    expect(() => store.addChat("nope", chatMessage("hi"))).toThrow(/unknown/i);
   });
 });
 

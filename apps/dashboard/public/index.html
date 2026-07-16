@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Get An Expert — Expert Dashboard</title>
 <link rel="stylesheet" href="vendor/xterm.css" />
+<link rel="stylesheet" href="vendor/github-dark.min.css" />
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -58,35 +59,55 @@
       </div>
     </div>
 
+    <!-- VS Code-style workspace: explorer sidebar | file tabs + viewer,
+         with a terminals/browser/chat panel along the bottom. -->
     <div class="ws-body hidden" id="ws-body">
-      <div class="terminal">
-        <div class="term-head">
-          <span class="tlabel" id="term-label">Interactive terminal on the customer's machine</span>
-          <span class="tdir" id="term-dir"></span>
-          <span class="term-hint" id="term-hint">type here — try <code>claude</code>, <code>npm run dev</code>, <code>pytest</code>…</span>
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-head">
+          <span class="sidebar-title">Explorer</span>
+          <button id="refresh-files" class="icon-btn" title="Refresh file list">&#10227;</button>
+          <button id="sidebar-toggle" class="icon-btn" title="Collapse explorer">&#9666;</button>
         </div>
-        <div class="xterm-host" id="xterm"></div>
-      </div>
+        <div class="file-tree" id="file-tree"><div class="tree-note">Not loaded yet.</div></div>
+      </aside>
 
-      <div class="tools">
-        <div class="tool-card">
-          <div class="tc-head">
-            <span>📁 Files</span>
-            <button id="refresh-files" class="ghost small">Refresh</button>
+      <div class="ws-main">
+        <section class="editor-area">
+          <div class="tab-bar" id="tab-bar"></div>
+          <div class="viewer-toolbar hidden" id="viewer-toolbar"></div>
+          <div class="viewer" id="viewer">
+            <div class="viewer-empty">Select a file from the explorer to view it.</div>
           </div>
-          <div class="tc-body" id="file-tree"><div class="muted">Not loaded</div></div>
-        </div>
-        <div class="tool-card file-view">
-          <div class="tc-head"><span id="file-view-name">No file open</span></div>
-          <pre class="tc-body code" id="file-content"><span class="muted">Click a file to read it.</span></pre>
-        </div>
-        <div class="tool-card">
-          <div class="tc-head">
-            <span>🌐 Browser</span>
-            <button id="browser-refresh" class="ghost small">Capture</button>
+        </section>
+
+        <section class="bottom-panel" id="bottom-panel">
+          <div class="panel-tabs" id="panel-tabs">
+            <div class="term-tabs" id="term-tabs"></div>
+            <button id="term-add" class="panel-add" title="New terminal">+</button>
+            <span class="spacer"></span>
+            <button id="tab-browser" class="panel-tab fixed">Browser</button>
+            <button id="tab-chat" class="panel-tab fixed">Chat<span class="badge hidden" id="chat-badge"></span></button>
           </div>
-          <div class="tc-body" id="browser-card"><div class="muted">Not captured</div></div>
-        </div>
+          <div class="panel-body">
+            <div id="terminals-host" class="terminals-host"></div>
+            <div id="panel-browser" class="panel-view hidden">
+              <div class="browser-toolbar">
+                <span class="panel-hint">Screenshot + console of the customer's dev server (localhost).</span>
+                <span class="spacer"></span>
+                <button id="browser-refresh" class="ghost small">Capture</button>
+              </div>
+              <div class="browser-body" id="browser-card"><div class="muted">Not captured yet — click Capture.</div></div>
+            </div>
+            <div id="panel-chat" class="panel-view hidden">
+              <div class="chat-messages" id="chat-messages"><div class="muted chat-empty">No messages yet.</div></div>
+              <div class="chat-note" id="chat-note"></div>
+              <div class="chat-input-row">
+                <input id="chat-input" type="text" maxlength="2000" placeholder="Message the customer…" spellcheck="true" />
+                <button id="chat-send" class="chat-send">Send</button>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
   </section>
@@ -94,6 +115,9 @@
 
 <script src="vendor/xterm.js"></script>
 <script src="vendor/addon-fit.js"></script>
+<script src="vendor/marked.min.js"></script>
+<script src="vendor/highlight.min.js"></script>
+<script src="viewer.js"></script>
 <script type="module" src="app.js"></script>
 </body>
 </html>
