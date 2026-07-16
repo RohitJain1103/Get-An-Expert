@@ -60,6 +60,55 @@ describe("submitExpertRequest", () => {
     expect(sent.clientRedactions.length).toBeGreaterThan(0);
   });
 
+  it("passes through requesterName when the caller supplied one", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          success: true,
+          data: { message: "Here's your prompt." },
+          error: null,
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await submitExpertRequest(
+      { ...input, requesterName: "Priya" },
+      new Date("2026-07-13T12:00:00Z"),
+    );
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    const sent = JSON.parse(String(init.body));
+    expect(sent.requesterName).toBe("Priya");
+  });
+
+  it("omits requesterName when the caller didn't supply one", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          success: true,
+          data: { message: "Here's your prompt." },
+          error: null,
+        }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await submitExpertRequest(input, new Date("2026-07-13T12:00:00Z"));
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    const sent = JSON.parse(String(init.body));
+    expect(sent.requesterName).toBeUndefined();
+  });
+
   it("passes through the chat escalation fields when the server sends them", async () => {
     vi.stubGlobal(
       "fetch",

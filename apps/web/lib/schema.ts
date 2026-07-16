@@ -4,8 +4,10 @@ import { z } from "zod";
  * Version of the consent text shown to users in the MCP flow. Bump whenever
  * the consent wording changes; stored with every request as proof of what the
  * user agreed to. 2026-07-14.v2 = experts-only + live chat + session relay.
+ * 2026-07-15.v4 = discloses the OS-account requester name (override via
+ * GET_AN_EXPERT_CUSTOMER_NAME or by asking the agent for a different name).
  */
-export const CONSENT_TEXT_VERSION = "2026-07-14.v2";
+export const CONSENT_TEXT_VERSION = "2026-07-15.v4";
 
 /** Hard size limits: fail fast, keep payloads minimal (data minimization). */
 export const expertRequestSchema = z.object({
@@ -18,6 +20,8 @@ export const expertRequestSchema = z.object({
   expertiseArea: z.string().min(1).max(100),
   messagesStuckCount: z.number().int().min(0).max(10000).optional(),
   installId: z.string().min(1).max(80).optional(),
+  /** How the requester is identified to the expert — OS account name by default. */
+  requesterName: z.string().min(1).max(100).optional(),
   clientRedactions: z
     .array(
       z.object({

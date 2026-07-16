@@ -27,6 +27,13 @@ export interface ExpertRequestPayload {
   messagesStuckCount?: number;
   /** Random per-install UUID; no account, no PII. */
   installId?: string;
+  /**
+   * How the requester is identified to the expert. Defaults to the OS
+   * account name (see resolveRequesterName in ./identity) — the same
+   * identity the on-machine agent already shows for live sessions — unless
+   * the user asked to be identified differently.
+   */
+  requesterName?: string;
   /** What the client-side redactor removed (types + counts only). */
   clientRedactions?: RedactionSummary[];
 }
