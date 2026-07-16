@@ -2,7 +2,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import type { ChatMessage } from "@get-an-expert/core";
+import { resolveRequesterName, type ChatMessage } from "@get-an-expert/core";
 import {
   readLastChat,
   readSessionStatus,
@@ -176,6 +176,18 @@ server.registerTool(
         .min(0)
         .optional()
         .describe("Roughly how many messages the user has been stuck for"),
+      requesterName: z
+        .string()
+        .min(1)
+        .max(100)
+        .optional()
+        .describe(
+          "Only set this if the user explicitly asked to be identified " +
+            "differently than usual (e.g. \"call me Panda\" or a teammate's " +
+            "name for a shared machine). Omit it otherwise — by default the " +
+            "requester's OS account name is used automatically, the same " +
+            "identity the on-machine agent already shows a live expert.",
+        ),
       userConfirmed: z
         .boolean()
         .describe(
@@ -257,6 +269,7 @@ server.registerTool(
       techStack: args.techStack,
       expertiseArea: args.expertiseArea,
       messagesStuckCount: args.messagesStuckCount,
+      requesterName: resolveRequesterName(args.requesterName),
     };
 
     const result = await submitExpertRequest(input, consentedAt);
@@ -431,7 +444,7 @@ server.registerTool(
           "**Get An Expert — data handling in plain words**",
           "",
           "- Nothing is ever sent anywhere until you explicitly say yes to a specific request.",
-          "- If you agree, exactly one structured summary is sent: your goal, what was tried, error messages, a short session summary, and your tech stack — plus a random install ID used for rate limiting and deletion.",
+          "- If you agree, exactly one structured summary is sent: your goal, what was tried, error messages, a short session summary, and your tech stack — plus a random install ID used for rate limiting and deletion, and your OS account name (override with GET_AN_EXPERT_CUSTOMER_NAME, or just tell the agent to use a different name) so the expert knows who they're helping — the same identity the on-machine agent already shows a live expert.",
           "- Saying yes also opens a live human-expert chat: the chat is human-to-human (no AI reads it), and while it is open your session's prompts, your agent's replies, agent-run commands with output, and file edits relay live to the expert. A RELAY ON indicator shows; /pause pauses relaying, /end (from either side) is a hard stop the server enforces.",
           "- Never sent: your source files, environment variables, or secrets. Secret redaction runs on your machine before transmission — chat messages and relayed events included — and again server-side, in both directions.",
           "- Your summary is reviewed by a human expert — no AI pipeline writes responses. No selling of data, no advertising use, no model training on your data.",

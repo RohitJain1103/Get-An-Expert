@@ -56,4 +56,26 @@ describe("expertRequestSchema", () => {
     expect(parsed.errorMessages).toEqual([]);
     expect(parsed.techStack).toEqual([]);
   });
+
+  it("accepts an optional requesterName", () => {
+    const parsed = expertRequestSchema.parse({
+      ...validInput,
+      requesterName: "Alex",
+    });
+    expect(parsed.requesterName).toBe("Alex");
+  });
+
+  it("omits requesterName when not given", () => {
+    const parsed = expertRequestSchema.parse(validInput);
+    expect(parsed.requesterName).toBeUndefined();
+  });
+
+  it("rejects an oversized requesterName", () => {
+    expect(() =>
+      expertRequestSchema.parse({
+        ...validInput,
+        requesterName: "x".repeat(101),
+      }),
+    ).toThrow();
+  });
 });

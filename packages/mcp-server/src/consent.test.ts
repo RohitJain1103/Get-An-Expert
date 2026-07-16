@@ -45,4 +45,9 @@ describe("buildOfferMessage", () => {
     // this is the only consent ask
     expect(message.toLowerCase()).toContain("only time we ask");
   });
+
+  it("discloses that the OS account name is sent, with how to override it", () => {
+    expect(message.toLowerCase()).toContain("os account");
+    expect(message).toContain("GET_AN_EXPERT_CUSTOMER_NAME");
+  });
 });

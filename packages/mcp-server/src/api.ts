@@ -10,6 +10,8 @@ export interface ExpertHelpInput {
   techStack: string[];
   expertiseArea: string;
   messagesStuckCount?: number;
+  /** Resolved by resolveRequesterName (@get-an-expert/core) before this is built. */
+  requesterName?: string;
 }
 
 export interface RedactedPayload {

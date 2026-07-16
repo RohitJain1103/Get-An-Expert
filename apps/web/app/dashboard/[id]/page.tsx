@@ -58,7 +58,8 @@ export default async function RequestDetailPage({
         </span>
       </div>
       <p className="mt-1 text-sm text-zinc-500">
-        {request.id} · {payload.tool} ·{" "}
+        {request.id} · {payload.tool} · from{" "}
+        {payload.requesterName ?? "anonymous"} ·{" "}
         {new Date(request.createdAt).toLocaleString()} ·{" "}
         {request.expertName ? `expert: ${request.expertName}` : "unclaimed"} ·
         consent {request.consent.textVersion}

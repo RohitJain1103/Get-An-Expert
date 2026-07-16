@@ -14,9 +14,12 @@ export function buildOfferMessage(expertiseArea: string): string {
     "",
     "**What gets sent (only if you proceed):** one structured summary — your goal, " +
       "what's been tried, error messages, a short session summary, and your tech " +
-      "stack — reviewed by a real person, never by an AI pipeline. A **live chat " +
-      "terminal opens where a human expert joins you**; the chat is human-to-human " +
-      "— no AI reads it.",
+      "stack — reviewed by a real person, never by an AI pipeline. Your OS account " +
+      "name is included too, so the expert knows who they're helping (the same " +
+      "identity the on-machine agent already shows a live expert) — override it " +
+      "with GET_AN_EXPERT_CUSTOMER_NAME, or just tell the agent to use a different " +
+      "name. A **live chat terminal opens where a human expert joins you**; the " +
+      "chat is human-to-human — no AI reads it.",
     "",
     "**While the chat is open:** from your \"proceed\" until the chat ends, this " +
       "working session — your prompts, your agent's replies, the commands your " +

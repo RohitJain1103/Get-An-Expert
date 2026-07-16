@@ -74,6 +74,9 @@ export default async function DashboardPage() {
                   <span className="text-sm text-zinc-500">
                     via {request.payload.tool}
                   </span>
+                  <span className="text-sm text-zinc-500">
+                    · {request.payload.requesterName ?? "anonymous"}
+                  </span>
                   <span className="ml-auto text-sm text-zinc-500">
                     {new Date(
                       request.lastActivityAt ?? request.createdAt,

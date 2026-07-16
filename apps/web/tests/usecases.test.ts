@@ -82,6 +82,30 @@ describe("createExpertRequest", () => {
     expect(JSON.stringify(stored)).not.toContain(result.chatToken);
     expect(JSON.stringify(stored)).not.toContain(result.deleteToken);
   });
+
+  it("persists an optional requesterName so it survives a restart", async () => {
+    const store = new MemoryStore();
+    const result = await createExpertRequest({
+      store,
+      input: input({ requesterName: "Priya" }),
+      baseUrl: BASE,
+    });
+
+    const stored = await store.get(result.requestId);
+    expect(stored?.payload.requesterName).toBe("Priya");
+  });
+
+  it("leaves requesterName unset when the requester never gave one", async () => {
+    const store = new MemoryStore();
+    const result = await createExpertRequest({
+      store,
+      input: input(),
+      baseUrl: BASE,
+    });
+
+    const stored = await store.get(result.requestId);
+    expect(stored?.payload.requesterName).toBeUndefined();
+  });
 });
 
 describe("deleteExpertRequest", () => {
@@ -117,7 +141,7 @@ describe("listExpertRequests", () => {
     });
     await createExpertRequest({
       store,
-      input: input({ goal: "second" }),
+      input: input({ goal: "second", requesterName: "Priya" }),
       baseUrl: BASE,
       now: new Date("2026-07-14T11:00:00Z"),
     });
@@ -125,6 +149,7 @@ describe("listExpertRequests", () => {
     const listed = await listExpertRequests(store, 10);
     expect(listed).toHaveLength(2);
     expect(listed[0].payload.goal).toBe("second");
+    expect(listed[0].payload.requesterName).toBe("Priya");
     expect(listed.some((r) => Object.hasOwn(r, "deleteTokenHash"))).toBe(false);
     expect(listed.some((r) => Object.hasOwn(r, "chatTokenHash"))).toBe(false);
   });

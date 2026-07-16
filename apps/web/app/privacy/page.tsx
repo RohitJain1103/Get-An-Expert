@@ -31,7 +31,7 @@ export default function PrivacyPage() {
         Privacy Policy
       </h1>
       <p className="mt-2 text-sm text-zinc-500">
-        Effective date: July 14, 2026 · Version 1.3
+        Effective date: July 15, 2026 · Version 1.4
       </p>
 
       <Section title="1. Who we are">
@@ -59,9 +59,14 @@ export default function PrivacyPage() {
           <li>
             <strong>The session summary you explicitly send</strong> when you
             ask for expert help: your stated goal, what was tried, error
-            messages, a short summary of the stuck session, and your tech
-            stack. Secret redaction runs on your machine before this is
-            transmitted, and again on our servers when it arrives.
+            messages, a short summary of the stuck session, your tech stack,
+            and your OS account name, so the expert knows who they&apos;re
+            helping — the same identity our on-machine agent already shows a
+            live expert. Set the <code>GET_AN_EXPERT_CUSTOMER_NAME</code>{" "}
+            environment variable, or just ask your agent to use a different
+            name, to override it. Secret redaction runs on your machine
+            before this is transmitted, and again on our servers when it
+            arrives.
           </li>
           <li>
             <strong>Live chat messages and relayed session activity</strong>{" "}
