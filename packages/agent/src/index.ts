@@ -11,6 +11,15 @@ import {
   projectDir,
   relayUrl,
 } from "./config";
+import {
+  buildContextMarkdown,
+  readProjectOverview,
+  readTranscriptPointer,
+  readTranscriptTail,
+  transcriptToMarkdown,
+  type ProjectOverview,
+} from "./context";
+import { END_SESSION_MESSAGE, queueMessage, statusMessage } from "./messages";
 import type { Grant } from "./permissions";
 import { cleanupWebrtc } from "./webrtc/peer";
 
@@ -25,7 +34,9 @@ import { cleanupWebrtc } from "./webrtc/peer";
  */
 const INSTRUCTIONS = `Get An Expert brings a real human expert onto the user's machine to fix a bug, through scoped, consent-based access. The expert works in the user's own project directory — reading files, running commands, checking the browser — and the user sees a live log of every action and can revoke any scope at any time.
 
-When the user asks for a human expert (or runs /get-an-expert), call request_expert_help. That tool asks the user, inline, to approve three scopes — Files, Terminal, and Browser — before anyone connects; relay its result verbatim. After an expert is requested, use expert_status to tell the user whether an expert has joined and what they have done so far (the live activity log). If the user wants to withdraw a scope, call revoke_access; when they're done, call end_session and relay the summary. Never grant or revoke on the user's behalf without them asking.`;
+When the user asks for a human expert (or runs /get-an-expert), call request_expert_help. That tool asks the user, inline, to approve three scopes — Files, Terminal, and Browser — before anyone connects; relay its result verbatim. After an expert is requested, use expert_status to tell the user whether an expert has joined and what they have done so far (the live activity log). If the user wants to withdraw a scope, call revoke_access; when they're done, call end_session and relay the summary. Never grant or revoke on the user's behalf without them asking.
+
+Once the request is queued, tell the user plainly: they can walk away — leave this chat open and the machine on and awake, and the expert works without them; every action is logged, and expert_status shows where things stand whenever they check back. If a chat link is returned, pass it on so they can message the expert from their phone or any browser.`;
 
 const server = new McpServer(
   { name: SERVER_NAME, version: SERVER_VERSION },
@@ -79,6 +90,12 @@ server.registerTool(
         .max(2000)
         .optional()
         .describe("Short description of what the user is stuck on, from this conversation."),
+      summary: z
+        .string()
+        .max(4000)
+        .describe(
+          "Hand-off notes for the human expert, written from this conversation: what the user is trying to do, the exact error or wrong behavior (quote it), what has been tried and why each attempt failed, which files/commands are involved, and how to run the app and its tests (plus any test login details the expert will need). Be specific — this is the first thing the expert reads.",
+        ),
       projectDir: z
         .string()
         .max(500)
@@ -93,7 +110,7 @@ server.registerTool(
     },
     annotations: { readOnlyHint: false, openWorldHint: true },
   },
-  async ({ issue, projectDir: dirArg, browserPort }) => {
+  async ({ issue, summary, projectDir: dirArg, browserPort }) => {
     if (session && session.state !== "ended" && session.state !== "idle") {
       return text(
         `A Get An Expert session is already active (state: ${session.state}). Use expert_status to check on it, or end_session to close it first.`,
@@ -121,23 +138,34 @@ server.registerTool(
     }
 
     // Ask the user, inline, to approve the scopes.
-    const grant = await elicitScopes(dir, port);
-    if (!grant) {
+    const consent = await elicitScopes(dir, port);
+    if (!consent) {
       await session.end("consent declined");
       session = undefined;
       return text(
         "No access was granted, so the request was cancelled. Nothing runs on your machine without your approval.",
       );
     }
-    session.grant(grant);
+    session.grant(consent.grant);
 
+    // Hand-off context for the expert — local + peer-to-peer only, and never
+    // allowed to block the request: any failure degrades the file instead.
+    const context = await writeSessionContext(session, {
+      issue,
+      summary,
+      projectDir: dir,
+      shareTranscript: consent.shareTranscript,
+    });
+
+    const chatUrl = session.chatUrl;
     return json({
       status: "waiting-for-expert",
       sessionId,
+      chatUrl,
       projectDir: dir,
-      granted: grant,
-      message:
-        "You're in the expert queue. The moment an expert joins they can act only within the scopes you approved, and you'll see every action. Call expert_status to check whether they've connected. You can revoke_access or end_session at any time.",
+      granted: consent.grant,
+      context,
+      message: queueMessage(chatUrl),
     });
   },
 );
@@ -157,7 +185,11 @@ server.registerTool(
     if (!session || session.state === "idle") {
       return text("No Get An Expert session is active. Call request_expert_help to start one.");
     }
-    return json(session.status());
+    return json({
+      message: statusMessage(session.state, session.expertName),
+      chatUrl: session.chatUrl,
+      ...session.status(),
+    });
   },
 );
 
@@ -202,16 +234,24 @@ server.registerTool(
     }
     const summary = await session.end();
     session = undefined;
-    return json({ status: "ended", summary });
+    return json({ status: "ended", message: END_SESSION_MESSAGE, summary });
   },
 );
 
+/** What the user approved inline: the revocable scopes, plus the one-time
+ * consent to share this conversation as context (not part of the Grant —
+ * it's a disclosure decision, not a revocable scope). */
+interface ScopeConsent {
+  grant: Grant;
+  shareTranscript: boolean;
+}
+
 /**
- * Ask the user to approve the three scopes, inline, via MCP elicitation.
- * Returns the granted scopes, or undefined if the host has no elicitation or
- * the user declined everything. Fails closed.
+ * Ask the user to approve the three scopes (plus conversation sharing),
+ * inline, via MCP elicitation. Returns the consent, or undefined if the host
+ * has no elicitation or the user declined everything. Fails closed.
  */
-async function elicitScopes(dir: string, port: number): Promise<Grant | undefined> {
+async function elicitScopes(dir: string, port: number): Promise<ScopeConsent | undefined> {
   const capabilities = server.server.getClientCapabilities();
   if (!capabilities?.elicitation) {
     // No inline prompt available: do not silently grant anything.
@@ -239,8 +279,13 @@ async function elicitScopes(dir: string, port: number): Promise<Grant | undefine
             title: `View browser (localhost:${port})`,
             default: true,
           },
+          conversation: {
+            type: "boolean",
+            title: "Share this conversation as context",
+            default: true,
+          },
         },
-        required: ["files", "terminal", "browser"],
+        required: ["files", "terminal", "browser", "conversation"],
       },
     });
     if (result.action !== "accept" || !result.content) return undefined;
@@ -250,10 +295,62 @@ async function elicitScopes(dir: string, port: number): Promise<Grant | undefine
     if (!files && !terminal && !browser) return undefined;
     const grant: Grant = { files, terminal, browser };
     if (browser) grant.browserPort = port;
-    return grant;
+    return { grant, shareTranscript: result.content.conversation === true };
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Assemble and write the expert's CONTEXT.md: the agent's hand-off summary,
+ * the consented conversation transcript (when the hook-written pointer is
+ * fresh), and the project overview. Every step is best-effort — a failure
+ * degrades the file to summary-only and never blocks the expert request.
+ * Returns a short note for the tool result describing what was written.
+ */
+async function writeSessionContext(
+  activeSession: AgentSession,
+  input: {
+    issue: string | undefined;
+    summary: string;
+    projectDir: string;
+    shareTranscript: boolean;
+  },
+): Promise<string> {
+  let transcriptMarkdown: string | undefined;
+  if (input.shareTranscript) {
+    try {
+      const pointer = readTranscriptPointer();
+      if (pointer) {
+        transcriptMarkdown =
+          transcriptToMarkdown(readTranscriptTail(pointer.transcriptPath)) || undefined;
+      }
+    } catch {
+      // transcript unavailable — degrade to summary-only
+    }
+  }
+  let overview: ProjectOverview | null = null;
+  try {
+    overview = readProjectOverview(input.projectDir);
+  } catch {
+    overview = null;
+  }
+  try {
+    const markdown = buildContextMarkdown({
+      customerName: customerName(),
+      issue: input.issue,
+      summary: input.summary,
+      overview,
+      transcriptMarkdown,
+      requestedAt: Date.now(),
+    });
+    await activeSession.writeContext(markdown);
+  } catch {
+    return "not written — the expert will start from the issue description";
+  }
+  return transcriptMarkdown
+    ? "summary + conversation transcript written to .get-an-expert/CONTEXT.md"
+    : "summary only written to .get-an-expert/CONTEXT.md";
 }
 
 function errText(err: unknown): string {
@@ -268,6 +365,11 @@ async function main(): Promise<void> {
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
+    try {
+      session?.cleanupContextSync();
+    } catch {
+      /* ignore */
+    }
     try {
       cleanupWebrtc();
     } catch {

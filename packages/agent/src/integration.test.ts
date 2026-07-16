@@ -25,7 +25,7 @@ let session: AgentSession;
 let expertWs: WebSocket;
 let expertPeer: NodePeer | undefined;
 let expertClient: Client | undefined;
-let expertPty: RawChannel | undefined;
+let expertPtys: RawChannel[] = [];
 
 beforeEach(async () => {
   relay = createRelay({ expertTokens: [TOKEN] });
@@ -52,23 +52,24 @@ afterEach(async () => {
   await bounded(expertClient?.close().catch(() => {}), 2000);
   expertClient = undefined;
   expertPeer = undefined;
-  expertPty = undefined;
+  expertPtys = [];
   await bounded(session?.end().catch(() => {}), 6000);
   relay.server.closeAllConnections?.();
   await bounded(new Promise<void>((r) => relay.server.close(() => r())), 4000);
 }, 20_000);
 
-/** Wait until the pty data channel has been established. */
-async function waitForPty(): Promise<RawChannel> {
+/** Wait until the pty data channel with the given label has been established. */
+async function waitForPty(label = "pty"): Promise<RawChannel> {
   for (let i = 0; i < 200; i++) {
-    if (expertPty) return expertPty;
+    const found = expertPtys.find((channel) => channel.label === label);
+    if (found) return found;
     await new Promise((r) => setTimeout(r, 25));
   }
-  throw new Error("pty channel never opened");
+  throw new Error(`${label} channel never opened`);
 }
 
 /** Drive the expert side: auth, claim, WebRTC offer, and an MCP client. */
-function connectExpert(sessionId: string): Promise<Client> {
+function connectExpert(sessionId: string, labels = ["mcp", "pty"]): Promise<Client> {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(`${relayUrl}/expert`);
     expertWs = ws;
@@ -89,15 +90,15 @@ function connectExpert(sessionId: string): Promise<Client> {
           const peer = new NodePeer({
             role: "offerer",
             iceServers: [],
-            labels: ["mcp", "pty"],
+            labels,
             sendSignal: (payload) =>
               ws.send(JSON.stringify({ type: "signal", sessionId, payload })),
           });
           expertPeer = peer;
           peer.onError((err) => reject(err));
           peer.onChannel(async (channel: RawChannel) => {
-            if (channel.label === "pty") {
-              expertPty = channel;
+            if (channel.label === "pty" || channel.label.startsWith("pty-")) {
+              expertPtys.push(channel);
               return;
             }
             try {
@@ -122,7 +123,7 @@ function connectExpert(sessionId: string): Promise<Client> {
   });
 }
 
-async function startSessionAndExpert(): Promise<Client> {
+async function startSessionAndExpert(labels?: string[]): Promise<Client> {
   session = new AgentSession({
     relayUrl,
     projectDir,
@@ -133,7 +134,7 @@ async function startSessionAndExpert(): Promise<Client> {
   });
   const { sessionId } = await session.requestExpert("Build failing on HeroImage import");
   session.grant({ files: true, terminal: true, browser: true, browserPort: 3000 });
-  return connectExpert(sessionId);
+  return connectExpert(sessionId, labels);
 }
 
 describe("end-to-end peer-to-peer session", () => {
@@ -165,6 +166,22 @@ describe("end-to-end peer-to-peer session", () => {
 
     pty.send(JSON.stringify({ t: "input", d: "echo interactive-pty-works\r" }));
     await vi.waitFor(() => expect(output).toContain("interactive-pty-works"), { timeout: 8000 });
+  }, 30_000);
+
+  it("routes extra pty-N labeled channels to their own terminals", async () => {
+    await startSessionAndExpert(["mcp", "pty", "pty-2"]);
+    const pty2 = await waitForPty("pty-2");
+    let output = "";
+    pty2.onMessage((raw) => {
+      const msg = JSON.parse(raw);
+      if (msg.t === "data") output += msg.d;
+    });
+
+    pty2.send(JSON.stringify({ t: "open", cols: 80, rows: 24 }));
+    await vi.waitFor(() => expect(output.length).toBeGreaterThan(0), { timeout: 8000 });
+
+    pty2.send(JSON.stringify({ t: "input", d: "echo second-terminal-works\r" }));
+    await vi.waitFor(() => expect(output).toContain("second-terminal-works"), { timeout: 8000 });
   }, 30_000);
 
   it("kills the interactive shell when Terminal is revoked", async () => {

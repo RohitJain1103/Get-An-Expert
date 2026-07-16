@@ -1,5 +1,9 @@
-import { randomUUID } from "node:crypto";
-import { NO_PERMISSIONS, type Permissions } from "./protocol";
+import { randomBytes, randomUUID } from "node:crypto";
+import {
+  NO_PERMISSIONS,
+  type ChatMessage,
+  type Permissions,
+} from "./protocol";
 
 export type SessionStatus = "waiting" | "active" | "ended";
 
@@ -21,6 +25,14 @@ export interface Session {
   endedAt?: number;
   permissions: Permissions;
   activity: readonly ActivityEntry[];
+  /**
+   * Bearer token for the customer chat page. Shared only with the customer's
+   * own agent (in the `registered` reply) — it must NEVER appear in queue
+   * entries or anything else sent to experts.
+   */
+  customerToken: string;
+  /** Chat history, already redacted. Never included in queue entries. */
+  chat: readonly ChatMessage[];
 }
 
 export interface CreateSessionInput {
@@ -33,6 +45,8 @@ export interface CreateSessionInput {
 const ACTIVITY_CAP = 500;
 /** Keep at most this many ended sessions around for metadata queries. */
 const ENDED_CAP = 200;
+/** Keep at most this many chat messages per session (oldest dropped). */
+const CHAT_CAP = 200;
 
 /**
  * In-memory session registry. Session metadata only — never file contents,
@@ -52,6 +66,8 @@ export class SessionStore {
       createdAt: Date.now(),
       permissions: { ...NO_PERMISSIONS },
       activity: [],
+      customerToken: randomBytes(16).toString("hex"),
+      chat: [],
     };
     this.#sessions.set(session.id, session);
     return session;
@@ -111,6 +127,12 @@ export class SessionStore {
   setPermissions(id: string, permissions: Permissions): Session {
     const session = this.#require(id);
     return this.#update({ ...session, permissions: { ...permissions } });
+  }
+
+  addChat(id: string, message: ChatMessage): Session {
+    const session = this.#require(id);
+    const chat = [...session.chat, message].slice(-CHAT_CAP);
+    return this.#update({ ...session, chat });
   }
 
   addActivity(id: string, entry: { kind: string; summary: string }): Session {

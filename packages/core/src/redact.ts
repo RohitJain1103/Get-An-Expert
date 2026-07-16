@@ -40,6 +40,15 @@ const SECRET_PATTERNS: SecretPattern[] = [
     pattern:
       /-----BEGIN [A-Z0-9 ]*PRIVATE KEY[A-Z ]*-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY[A-Z ]*-----/g,
   },
+  {
+    type: "chat-link",
+    // Get An Expert's own per-session chat link carries a bearer token in the
+    // URL fragment (/chat#<sessionId>.<token>). It gets echoed into tool
+    // results, so scrub the whole fragment before it can be quoted back inside
+    // a later session's shared transcript.
+    pattern: /(\/chat#)[A-Za-z0-9._-]+/g,
+    replacement: `$1${placeholder("chat-link")}`,
+  },
   { type: "anthropic-api-key", pattern: /\bsk-ant-[A-Za-z0-9_-]{16,}/g },
   {
     type: "openai-api-key",

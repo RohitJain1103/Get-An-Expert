@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__.*get-an-expert.*__request_expert_help",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/save-transcript-pointer.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

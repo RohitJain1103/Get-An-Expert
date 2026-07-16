@@ -24,6 +24,7 @@ export interface RegisterInput {
 export class RelayClient {
   #ws?: WebSocket;
   #sessionId?: string;
+  #customerToken?: string;
   #events: RelayClientEvents = {};
   readonly #url: string;
 
@@ -36,6 +37,12 @@ export class RelayClient {
 
   get sessionId(): string | undefined {
     return this.#sessionId;
+  }
+
+  /** Token the relay minted for the customer's hosted chat page. Optional —
+   * relays predating the chat feature never send one. */
+  get customerToken(): string | undefined {
+    return this.#customerToken;
   }
 
   on(events: RelayClientEvents): void {
@@ -71,6 +78,9 @@ export class RelayClient {
         }
         if (!this.#sessionId && msg.type === "registered") {
           this.#sessionId = msg.sessionId;
+          if (typeof msg.customerToken === "string" && msg.customerToken) {
+            this.#customerToken = msg.customerToken;
+          }
           ws.off("error", onError);
           resolve(msg.sessionId);
           return;

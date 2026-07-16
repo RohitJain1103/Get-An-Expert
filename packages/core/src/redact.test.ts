@@ -85,6 +85,24 @@ xyz123
     expect(text).not.toContain("abc123def456");
   });
 
+  it("redacts the Get An Expert chat link token", () => {
+    const token = "a".repeat(32);
+    const { text } = redactText(
+      `Message the expert at https://relay.example.com/chat#req_abc-123.${token}`,
+    );
+    expect(text).toContain("/chat#[REDACTED:chat-link]");
+    expect(text).not.toContain(token);
+    expect(text).not.toContain("req_abc-123");
+  });
+
+  it("redacts a chat link inside a markdown link without eating the paren", () => {
+    const { text } = redactText(
+      "See [chat](https://relay.example.com/chat#sid.deadbeefdeadbeefdeadbeefdeadbeef) now",
+    );
+    expect(text).toContain("/chat#[REDACTED:chat-link])");
+    expect(text).not.toContain("deadbeef");
+  });
+
   it("redacts generic key=value credential assignments", () => {
     const { text } = redactText(
       'API_KEY=super-secret-value-9000 and password: "hunter2hunter2"',
