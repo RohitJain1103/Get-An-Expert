@@ -89,6 +89,13 @@ describe("MiniMcpClient", () => {
     await expect(p).rejects.toThrow(/channel closed/);
   });
 
+  it("times out a request whose reply never arrives", async () => {
+    // A dropped/oversized frame gets no reply; without a deadline the request
+    // would hang forever and the UI would sit on "Loading…".
+    const client = new MiniMcpClient(() => {}, { requestTimeoutMs: 20 });
+    await expect(client.listTools()).rejects.toThrow(/timed out/i);
+  });
+
   it("ignores inbound notifications without an id", () => {
     const client = new MiniMcpClient(() => {});
     // Should not throw.

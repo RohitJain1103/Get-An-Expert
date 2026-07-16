@@ -76,6 +76,17 @@ describe("expert MCP server over a data channel", () => {
     ]);
   });
 
+  it("lists only immediate children when depth is 1", async () => {
+    const res: any = await client.callTool({
+      name: "list_files",
+      arguments: { dir: ".", depth: 1 },
+    });
+    const payload = JSON.parse(res.content[0].text);
+    const names = payload.entries.map((e: any) => e.path);
+    expect(names).toContain("src"); // directory node, not descended
+    expect(names).not.toContain("src/Hero.tsx");
+  });
+
   it("reads a file through the channel", async () => {
     const res: any = await client.callTool({
       name: "read_file",

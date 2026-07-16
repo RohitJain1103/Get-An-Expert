@@ -9,7 +9,10 @@ const SERVER_VERSION = "0.1.0";
 const EXPERT_INSTRUCTIONS = `You are connected to the customer's machine through Get An Expert. Every tool here runs on THEIR machine, in THEIR project directory, and only within the scopes the customer approved (files, terminal, browser). The customer sees a live log of every action. Read before you edit, run commands to reproduce and verify, and check the browser to confirm the fix renders. If a tool returns a permission error, the customer has not granted or has revoked that scope — ask them, don't work around it.`;
 
 function ok(data: unknown) {
-  return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
+  // Compact, not pretty-printed: these frames cross a size-limited WebRTC data
+  // channel, and the two-space indentation just inflates every reply for a
+  // machine reader that parses it with JSON.parse anyway.
+  return { content: [{ type: "text" as const, text: JSON.stringify(data) }] };
 }
 
 function fail(message: string) {
@@ -44,15 +47,24 @@ export function createExpertServer(tools: AgentTools): McpServer {
     "list_files",
     {
       description:
-        "List files in the customer's project directory (recursive). Requires the Files scope.",
+        "List files in the customer's project directory. Recursive by default; pass depth to limit descent (depth 1 = immediate children only). Requires the Files scope.",
       inputSchema: {
         dir: z
           .string()
           .optional()
           .describe("Directory relative to the project root. Defaults to the root."),
+        depth: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe(
+            "How many directory levels to descend. Omit for the full recursive tree; pass 1 for immediate children only.",
+          ),
       },
     },
-    async ({ dir }) => guard(() => tools.listFiles(dir ?? ".")),
+    async ({ dir, depth }) =>
+      guard(() => tools.listFiles(dir ?? ".", depth ? { depth } : {})),
   );
 
   server.registerTool(

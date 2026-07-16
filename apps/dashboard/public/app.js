@@ -38,10 +38,16 @@ const state = {
   terminals: [],
   termCounter: 0,
   activePanel: null, // "terminal:<id>" | "browser" | "chat"
-  // File explorer + viewer
+  // File explorer + viewer.
+  // The explorer is lazy: `fileEntries` accumulates only the directories the
+  // expert has actually opened (one `list_files` level at a time), never the
+  // whole recursive tree in one frame.
   fileEntries: [],
   listTruncated: false,
   expandedDirs: new Set(),
+  loadedDirs: new Set(), // dirs whose children have been fetched
+  loadingDirs: new Set(), // dirs with a fetch in flight (shows a spinner row)
+  dirErrors: new Map(), // dir path -> error message from its last failed fetch
   tabState: Viewer.emptyTabState(),
   files: new Map(), // path -> { content, truncated } | { error }
   pendingReads: new Set(),
@@ -306,7 +312,10 @@ async function initMcp(dc) {
   dc.onmessage = (ev) => mcp.feed(typeof ev.data === "string" ? ev.data : "");
   try {
     await mcp.initialize();
+    // The context file opens independently of the tree: it's a single direct
+    // read, so the expert sees it even if the listing is slow or fails.
     await loadFiles();
+    await autoOpenContext();
   } catch (err) {
     status(`Failed to start MCP session: ${err.message}`);
   }
@@ -554,14 +563,22 @@ el("sidebar-toggle").addEventListener("click", () => {
   if (t) requestAnimationFrame(() => safeFit(t));
 });
 
+/** Load the top level of the tree. Subdirectories load on demand (loadDir). */
 async function loadFiles() {
   if (!state.mcp) return;
   const epoch = state.sessionEpoch;
   const treeEl = el("file-tree");
   treeEl.innerHTML = `<div class="tree-note">Loading…</div>`;
+  // Fresh listing: drop any tree we accumulated for a previous view.
+  state.fileEntries = [];
+  state.listTruncated = false;
+  state.loadedDirs = new Set();
+  state.loadingDirs = new Set();
+  state.dirErrors = new Map();
+  state.expandedDirs = new Set();
   let res;
   try {
-    res = await state.mcp.callTool("list_files", { dir: "." });
+    res = await state.mcp.callTool("list_files", { dir: ".", depth: 1 });
   } catch (err) {
     if (epoch !== state.sessionEpoch) return;
     treeEl.innerHTML = `<div class="tree-note">${escapeHtml(err.message)}</div>`;
@@ -581,8 +598,71 @@ async function loadFiles() {
   }
   state.fileEntries = Array.isArray(payload.entries) ? payload.entries : [];
   state.listTruncated = payload.truncated === true;
+  state.loadedDirs = new Set(["."]);
   renderTree();
-  maybeAutoOpenContext();
+}
+
+/** Fetch one directory's immediate children when the expert expands it. */
+async function loadDir(path) {
+  if (!state.mcp) return;
+  if (state.loadedDirs.has(path) || state.loadingDirs.has(path)) return;
+  const epoch = state.sessionEpoch;
+  state.loadingDirs = new Set(state.loadingDirs).add(path);
+  const nextErrors = new Map(state.dirErrors);
+  nextErrors.delete(path);
+  state.dirErrors = nextErrors;
+  renderTree();
+
+  const finishLoading = () => {
+    const next = new Set(state.loadingDirs);
+    next.delete(path);
+    state.loadingDirs = next;
+  };
+  const failWith = (message) => {
+    if (epoch !== state.sessionEpoch) return;
+    finishLoading();
+    state.dirErrors = new Map(state.dirErrors).set(path, message);
+    renderTree();
+  };
+
+  let res;
+  try {
+    res = await state.mcp.callTool("list_files", { dir: path, depth: 1 });
+  } catch (err) {
+    failWith(err.message);
+    return;
+  }
+  if (epoch !== state.sessionEpoch) return;
+  if (res.isError) {
+    failWith(res.text);
+    return;
+  }
+  let payload;
+  try {
+    payload = JSON.parse(res.text);
+  } catch {
+    failWith("Unexpected list_files response.");
+    return;
+  }
+  finishLoading();
+  mergeEntries(Array.isArray(payload.entries) ? payload.entries : []);
+  if (payload.truncated === true) state.listTruncated = true;
+  state.loadedDirs = new Set(state.loadedDirs).add(path);
+  renderTree();
+}
+
+/** Merge freshly fetched entries into the accumulated list, deduped by path. */
+function mergeEntries(entries) {
+  const seen = new Set(state.fileEntries.map((e) => Viewer.normalizePath(e.path)));
+  const merged = state.fileEntries.slice();
+  for (const entry of entries) {
+    if (!entry || typeof entry.path !== "string") continue;
+    const norm = Viewer.normalizePath(entry.path);
+    if (norm === "" || seen.has(norm)) continue;
+    seen.add(norm);
+    merged.push(entry);
+  }
+  state.fileEntries = merged;
 }
 
 function renderTree() {
@@ -620,7 +700,15 @@ function appendTreeNodes(container, nodes, depth) {
       chev.textContent = open ? "▾" : "▸";
       row.addEventListener("click", () => toggleDir(node.path));
       container.appendChild(row);
-      if (open) appendTreeNodes(container, node.children, depth + 1);
+      if (open) {
+        if (state.loadingDirs.has(node.path)) {
+          appendTreeNote(container, depth + 1, "Loading…");
+        } else if (state.dirErrors.has(node.path)) {
+          appendTreeNote(container, depth + 1, state.dirErrors.get(node.path));
+        } else {
+          appendTreeNodes(container, node.children, depth + 1);
+        }
+      }
     } else {
       row.addEventListener("click", () => openFile(node.path));
       container.appendChild(row);
@@ -628,24 +716,59 @@ function appendTreeNodes(container, nodes, depth) {
   }
 }
 
-function toggleDir(path) {
-  const next = new Set(state.expandedDirs);
-  if (next.has(path)) next.delete(path);
-  else next.add(path);
-  state.expandedDirs = next;
-  renderTree();
+/** An indented, non-interactive status row under a folder (loading / error). */
+function appendTreeNote(container, depth, text) {
+  const note = document.createElement("div");
+  note.className = "tree-row tree-note";
+  note.style.paddingLeft = 6 + depth * 12 + "px";
+  note.textContent = text;
+  container.appendChild(note);
 }
 
-/** Open the session context file as the first tab, once, if the agent wrote one. */
-function maybeAutoOpenContext() {
-  if (state.contextAutoOpened) return;
-  const path = Viewer.contextFilePath(state.fileEntries);
-  if (!path) return;
-  state.contextAutoOpened = true;
+function toggleDir(path) {
   const next = new Set(state.expandedDirs);
-  next.add(".get-an-expert");
+  const opening = !next.has(path);
+  if (opening) next.add(path);
+  else next.delete(path);
   state.expandedDirs = next;
-  openFile(path);
+  renderTree();
+  // Fetch children the first time this folder is opened.
+  if (opening && !state.loadedDirs.has(path) && !state.loadingDirs.has(path)) {
+    loadDir(path);
+  }
+}
+
+/**
+ * Open the session context file as the first tab, once, if the agent wrote one.
+ *
+ * This reads the file directly rather than waiting for it to appear in the tree
+ * — the context lives in a nested `.get-an-expert/` folder that the lazy
+ * explorer hasn't expanded, so relying on the listing would never surface it.
+ */
+async function autoOpenContext() {
+  if (state.contextAutoOpened || !state.mcp) return;
+  state.contextAutoOpened = true; // attempt once per session, success or not
+  const epoch = state.sessionEpoch;
+  let res;
+  try {
+    res = await state.mcp.callTool("read_file", { path: Viewer.CONTEXT_FILE });
+  } catch {
+    return; // channel error; nothing to open
+  }
+  if (epoch !== state.sessionEpoch) return;
+  if (res.isError) return; // no context file for this session
+  let payload;
+  try {
+    payload = JSON.parse(res.text);
+  } catch {
+    return;
+  }
+  // Prime the cache so openFile shows it without a second read.
+  state.files.set(Viewer.CONTEXT_FILE, {
+    content: typeof payload.content === "string" ? payload.content : "",
+    truncated: payload.truncated === true,
+  });
+  openFile(Viewer.CONTEXT_FILE);
 }
 
 /* ── File tabs + viewer (view-only by design) ─────────────────────── */
@@ -1007,9 +1130,28 @@ async function captureBrowser() {
     typeof p.imageBase64 === "string" && /^[A-Za-z0-9+/=]+$/.test(p.imageBase64)
       ? p.imageBase64
       : null;
-  const visual = imageBase64
-    ? `<img class="shot" alt="localhost:${port}" src="data:image/png;base64,${imageBase64}" title="Click to enlarge" />`
-    : `<div class="browser-frame"><strong>${escapeHtml(p.title ?? "(no title)")}</strong><br /><span style="color:#666">localhost:${port}</span></div>`;
+  const note = typeof p.note === "string" ? p.note : "";
+  const html = typeof p.html === "string" ? p.html : "";
+  let visual;
+  if (imageBase64) {
+    visual = `<img class="shot" alt="localhost:${port}" src="data:image/png;base64,${imageBase64}" title="Click to enlarge" />`;
+  } else if (html) {
+    // No headless browser on the customer's machine: show the page's HTML
+    // source (escaped) so the expert can still read the markup.
+    visual =
+      `<div class="browser-frame">` +
+      `<strong>${escapeHtml(p.title ?? "(no title)")}</strong>` +
+      (note ? `<div class="browser-note">${escapeHtml(note)}</div>` : "") +
+      `<pre class="html-src">${escapeHtml(html)}</pre>` +
+      `</div>`;
+  } else {
+    visual =
+      `<div class="browser-frame">` +
+      `<strong>${escapeHtml(p.title ?? "(no title)")}</strong><br />` +
+      `<span style="color:#666">localhost:${port}</span>` +
+      (note ? `<div class="browser-note">${escapeHtml(note)}</div>` : "") +
+      `</div>`;
+  }
 
   card.innerHTML =
     visual +
@@ -1089,6 +1231,9 @@ function resetWorkspace() {
   state.fileEntries = [];
   state.listTruncated = false;
   state.expandedDirs = new Set();
+  state.loadedDirs = new Set();
+  state.loadingDirs = new Set();
+  state.dirErrors = new Map();
   state.tabState = Viewer.emptyTabState();
   state.files = new Map();
   state.pendingReads = new Set();
