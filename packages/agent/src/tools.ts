@@ -16,7 +16,12 @@ export interface AgentToolsOptions {
   gate: PermissionGate;
   browser: BrowserController;
   onActivity: (entry: ActivityEntry) => void;
-  /** Max bytes returned from read_file (default 512 KB). */
+  /**
+   * Max bytes returned from read_file (default 128 KB). Kept below the WebRTC
+   * data-channel per-message size limit (~256 KB) so a single read_file reply
+   * always fits in one frame — an oversized frame is silently dropped and the
+   * expert's viewer would hang forever waiting for it.
+   */
   maxFileBytes?: number;
   /** Max entries returned from list_files (default 2000). */
   maxListEntries?: number;
@@ -45,7 +50,7 @@ export class AgentTools {
     this.#gate = opts.gate;
     this.#browser = opts.browser;
     this.#onActivity = opts.onActivity;
-    this.#maxFileBytes = opts.maxFileBytes ?? 512 * 1024;
+    this.#maxFileBytes = opts.maxFileBytes ?? 128 * 1024;
     this.#maxListEntries = opts.maxListEntries ?? 2000;
     this.#commandTimeoutMs = opts.commandTimeoutMs ?? 120_000;
   }
@@ -59,12 +64,26 @@ export class AgentTools {
     return r === "" ? "." : r;
   }
 
-  async listFiles(dir = "."): Promise<ListFilesResult> {
+  /**
+   * List entries under `dir` (paths relative to the project root).
+   *
+   * By default this walks the whole subtree — that's what the expert's AI
+   * agent expects. Pass `depth` to limit descent so the reply stays small: the
+   * dashboard's explorer lists one level at a time (`depth: 1`) and fetches a
+   * folder's children only when the expert expands it, instead of dumping the
+   * entire recursive tree in a single (potentially oversized) frame.
+   */
+  async listFiles(
+    dir = ".",
+    opts: { depth?: number } = {},
+  ): Promise<ListFilesResult> {
     const root = this.#gate.checkFile(dir);
+    const maxDepth =
+      typeof opts.depth === "number" && opts.depth > 0 ? opts.depth : Infinity;
     const entries: ListFilesResult["entries"] = [];
     let truncated = false;
 
-    const walk = async (current: string): Promise<void> => {
+    const walk = async (current: string, depth: number): Promise<void> => {
       if (entries.length >= this.#maxListEntries) {
         truncated = true;
         return;
@@ -79,7 +98,7 @@ export class AgentTools {
         const abs = resolve(current, dirent.name);
         if (dirent.isDirectory()) {
           entries.push({ path: this.#rel(abs), type: "dir" });
-          await walk(abs);
+          if (depth < maxDepth) await walk(abs, depth + 1);
         } else if (dirent.isFile()) {
           let size: number | undefined;
           try {
@@ -92,7 +111,7 @@ export class AgentTools {
       }
     };
 
-    await walk(root);
+    await walk(root, 1);
     this.#log("list_files", `Expert listing files: ${this.#rel(root)}`);
     return { entries, truncated };
   }

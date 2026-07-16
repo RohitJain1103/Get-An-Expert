@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import type { Browser, BrowserContext, Page } from "playwright-core";
 import { chromium } from "playwright-core";
 import type {
@@ -67,6 +68,18 @@ export class PlaywrightBrowserController implements BrowserController {
     for (const channel of channels) {
       try {
         this.#browser = await chromium.launch({ ...base, channel });
+        return this.#browser;
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    // Channel discovery misses browsers installed outside Playwright's search
+    // (common on machines without the CLI helpers). Try well-known install
+    // locations for this OS before giving up.
+    for (const exe of systemBrowserPaths()) {
+      if (!existsSync(exe)) continue;
+      try {
+        this.#browser = await chromium.launch({ ...base, executablePath: exe });
         return this.#browser;
       } catch (err) {
         lastErr = err;
@@ -159,6 +172,36 @@ export class PlaywrightBrowserController implements BrowserController {
     this.#ports.clear();
     await this.#browser?.close().catch(() => {});
     this.#browser = undefined;
+  }
+}
+
+/** Well-known Chrome/Chromium/Edge install paths, by OS, tried when channel
+ *  discovery finds nothing. Guarded by existsSync at the call site. */
+function systemBrowserPaths(): string[] {
+  switch (process.platform) {
+    case "darwin":
+      return [
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+        "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
+      ];
+    case "win32":
+      return [
+        "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+        "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+        "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+        "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+      ];
+    default:
+      return [
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/usr/bin/microsoft-edge",
+        "/snap/bin/chromium",
+      ];
   }
 }
 

@@ -107,3 +107,72 @@ export function writeLastChat(record: LastChatRecord): void {
     mode: 0o600,
   });
 }
+
+/**
+ * Live snapshot of the running expert session, written by the on-machine agent
+ * and read by the MCP server's `expert_status` tool. The two run in separate
+ * processes on the customer's machine, so this file is how "what has the expert
+ * been doing?" gets a fresh answer without a network round-trip. Refreshed on
+ * every expert action and state change; removed when the session ends.
+ */
+export interface SessionStatusActivity {
+  at: number;
+  kind: string;
+  summary: string;
+}
+
+export interface SessionStatusRecord {
+  state: "idle" | "waiting" | "connected" | "ended";
+  sessionId?: string;
+  expertName?: string;
+  chatUrl?: string;
+  /** Snapshot of the approved scopes at the time of writing. */
+  permissions?: Record<string, unknown>;
+  /** Most recent expert actions, oldest first. */
+  recentActivity: SessionStatusActivity[];
+  /** Epoch ms of the last write, so readers can show how fresh this is. */
+  updatedAt: number;
+}
+
+export function sessionStatusFilePath(): string {
+  return join(expertHomeDir(), "session-status.json");
+}
+
+export function readSessionStatus(): SessionStatusRecord | null {
+  try {
+    const parsed: unknown = JSON.parse(
+      readFileSync(sessionStatusFilePath(), "utf8"),
+    );
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      typeof (parsed as SessionStatusRecord).state === "string"
+    ) {
+      const record = parsed as SessionStatusRecord;
+      return {
+        ...record,
+        recentActivity: Array.isArray(record.recentActivity)
+          ? record.recentActivity
+          : [],
+        updatedAt:
+          typeof record.updatedAt === "number" ? record.updatedAt : 0,
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeSessionStatus(record: SessionStatusRecord): void {
+  mkdirSync(expertHomeDir(), { recursive: true, mode: 0o700 });
+  writeFileSync(
+    sessionStatusFilePath(),
+    `${JSON.stringify(record, null, 2)}\n`,
+    { encoding: "utf8", mode: 0o600 },
+  );
+}
+
+export function clearSessionStatus(): void {
+  rmSync(sessionStatusFilePath(), { force: true });
+}

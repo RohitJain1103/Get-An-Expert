@@ -145,6 +145,54 @@ describe("expert auth", () => {
   });
 });
 
+describe("customer activity feed", () => {
+  async function registerWithToken() {
+    const agent = await connect("/agent");
+    send(agent, {
+      type: "register",
+      customerName: "Jordan Lee",
+      projectDir: "~/projects/landing-page",
+      issue: "Build failing",
+    });
+    const reg = await nextMessage(agent);
+    expect(reg.type).toBe("registered");
+    return { agent, sessionId: reg.sessionId as string, customerToken: reg.customerToken as string };
+  }
+
+  it("pushes expert activity to the customer chat socket in real time", async () => {
+    const { agent, sessionId, customerToken } = await registerWithToken();
+    const customer = await connect("/customer");
+    send(customer, { type: "hello", sessionId, token: customerToken });
+    const hello = await waitFor(customer, (m) => m.type === "hello-ok");
+    expect(Array.isArray(hello.activity)).toBe(true);
+
+    send(agent, {
+      type: "metadata",
+      activity: { kind: "read_file", summary: "Expert reading: src/app.ts" },
+    });
+    const act = await waitFor(customer, (m) => m.type === "activity");
+    expect(act.entry.summary).toBe("Expert reading: src/app.ts");
+    expect(typeof act.entry.at).toBe("number");
+  });
+
+  it("seeds activity history in hello-ok for a customer who joins mid-session", async () => {
+    const { agent, sessionId, customerToken } = await registerWithToken();
+    send(agent, {
+      type: "metadata",
+      activity: { kind: "write_file", summary: "Expert edited: src/app.ts" },
+    });
+    // Let the relay process the metadata before the customer connects.
+    await new Promise((r) => setTimeout(r, 50));
+
+    const customer = await connect("/customer");
+    send(customer, { type: "hello", sessionId, token: customerToken });
+    const hello = await waitFor(customer, (m) => m.type === "hello-ok");
+    expect(
+      hello.activity.some((a: any) => a.summary === "Expert edited: src/app.ts"),
+    ).toBe(true);
+  });
+});
+
 describe("claiming sessions", () => {
   it("notifies the agent when an expert claims its session", async () => {
     const { agent, sessionId } = await registeredAgent();

@@ -6,59 +6,84 @@ export interface AutoBrowserOptions {
   host?: string;
   executablePath?: string;
   channel?: string;
-  /** Called once if Playwright can't launch and we fall back to HTTP. */
+  /** Called when Playwright can't launch and we fall back to HTTP (once per
+   *  failure streak, not on every degraded call). */
   onFallback?: (reason: string) => void;
+  /** How long to stay on the HTTP fallback before retrying Playwright, in ms
+   *  (default 60s). A browser installed mid-session then gets picked up. */
+  retryMs?: number;
 }
+
+/** Default cooldown before re-probing Playwright after a launch failure. */
+const DEFAULT_RETRY_MS = 60_000;
 
 /**
  * The default browser controller. It prefers a real headless browser
- * (screenshot + console + status via Playwright) and falls back — once,
- * permanently — to the HTTP reachability controller if no browser binary is
- * available on the customer's machine. Either way `browser_screenshot` and
- * `browser_console` keep working; with a browser present the expert sees the
- * actual rendered page.
+ * (screenshot + console + status via Playwright) and falls back to the HTTP
+ * controller when no browser binary is available on the customer's machine.
+ *
+ * The fallback is NOT permanent: after a launch failure it stays on HTTP for a
+ * cooldown, then re-probes Playwright, so a browser installed mid-session is
+ * picked up without restarting. Each failure streak fires `onFallback` once so
+ * the reason can be surfaced to the expert instead of vanishing.
  */
 export class AutoBrowserController implements BrowserController {
   readonly #playwright: PlaywrightBrowserController;
   readonly #http: HttpBrowserController;
   readonly #onFallback?: (reason: string) => void;
-  #mode: "probe" | "playwright" | "http" = "probe";
+  readonly #retryMs: number;
+  #failedAt?: number;
+  #notified = false;
 
   constructor(opts: AutoBrowserOptions = {}) {
     this.#playwright = new PlaywrightBrowserController(opts);
     this.#http = new HttpBrowserController(opts);
     this.#onFallback = opts.onFallback;
+    this.#retryMs = opts.retryMs ?? DEFAULT_RETRY_MS;
   }
 
-  #fallback(reason: string): void {
-    if (this.#mode !== "http") {
-      this.#mode = "http";
+  #shouldTryPlaywright(): boolean {
+    if (this.#failedAt === undefined) return true;
+    return Date.now() - this.#failedAt >= this.#retryMs;
+  }
+
+  #playwrightOk(): void {
+    this.#failedAt = undefined;
+    this.#notified = false;
+  }
+
+  #playwrightFailed(reason: string): void {
+    this.#failedAt = Date.now();
+    if (!this.#notified) {
+      this.#notified = true;
       this.#onFallback?.(reason);
     }
   }
 
   async screenshot(port: number): Promise<ScreenshotResult> {
-    if (this.#mode === "http") return this.#http.screenshot(port);
-    try {
-      const result = await this.#playwright.screenshot(port);
-      this.#mode = "playwright";
-      return result;
-    } catch (err) {
-      this.#fallback(errText(err));
-      return this.#http.screenshot(port);
+    if (this.#shouldTryPlaywright()) {
+      try {
+        const result = await this.#playwright.screenshot(port);
+        this.#playwrightOk();
+        return result;
+      } catch (err) {
+        this.#playwrightFailed(errText(err));
+      }
     }
+    return this.#http.screenshot(port);
   }
 
   async console(port: number): Promise<ConsoleResult> {
-    if (this.#mode === "http") return this.#http.console(port);
-    try {
-      const result = await this.#playwright.console(port);
-      this.#mode = "playwright";
-      return result;
-    } catch (err) {
-      this.#fallback(errText(err));
-      return this.#http.console(port);
+    if (this.#shouldTryPlaywright()) {
+      try {
+        const result = await this.#playwright.console(port);
+        this.#playwrightOk();
+        return result;
+      } catch (err) {
+        this.#playwrightFailed(errText(err));
+      }
     }
+    return this.#http.console(port);
   }
 
   async close(): Promise<void> {

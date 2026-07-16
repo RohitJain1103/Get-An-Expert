@@ -133,6 +133,28 @@
     els.messages.scrollTop = els.messages.scrollHeight;
   }
 
+  /** A live action the expert took on this machine (read/edit/command/etc.). */
+  function renderActivity(entry) {
+    if (!entry || typeof entry.summary !== "string") return;
+    els.empty.classList.add("hidden");
+
+    const row = document.createElement("div");
+    row.className = "msg activity";
+    const dot = document.createElement("span");
+    dot.className = "act-dot";
+    dot.textContent = "•";
+    const text = document.createElement("span");
+    text.className = "act-text";
+    text.textContent = entry.summary;
+    const time = document.createElement("span");
+    time.className = "act-time";
+    time.textContent = formatTime(entry.at);
+
+    row.append(dot, text, time);
+    els.messages.appendChild(row);
+    els.messages.scrollTop = els.messages.scrollHeight;
+  }
+
   /* ── Session state transitions ── */
 
   function onSessionEnded() {
@@ -173,7 +195,17 @@
         setConn("online", "Connected");
         clearMessages();
         const history = Array.isArray(msg.history) ? msg.history : [];
-        for (const m of history) renderMessage(m);
+        const activity = Array.isArray(msg.activity) ? msg.activity : [];
+        // Interleave chat and expert actions by timestamp so the log reads in
+        // the order things actually happened.
+        const feed = [
+          ...history.map((m) => ({ at: m.at || 0, chat: m })),
+          ...activity.map((a) => ({ at: a.at || 0, activity: a })),
+        ].sort((x, y) => x.at - y.at);
+        for (const f of feed) {
+          if (f.chat) renderMessage(f.chat);
+          else renderActivity(f.activity);
+        }
         applyStatus(msg.status, msg.expertName);
         return;
       }
@@ -182,6 +214,9 @@
         return;
       case "chat":
         if (!ended) renderMessage(msg.message);
+        return;
+      case "activity":
+        if (!ended) renderActivity(msg.entry);
         return;
       case "expert-joined":
         if (!ended) applyStatus("active", msg.expertName);

@@ -52,6 +52,24 @@ describe("list_files", () => {
     expect(names).toContain("src/components/Hero.tsx");
   });
 
+  it("lists only immediate children when depth is 1", async () => {
+    grantAll();
+    const res = await tools.listFiles(".", { depth: 1 });
+    const names = res.entries.map((e) => e.path);
+    expect(names).toContain("package.json");
+    expect(names).toContain("src"); // the directory itself, as a lazy node
+    // Depth 1 must NOT descend into subdirectories.
+    expect(names).not.toContain("src/components");
+    expect(names).not.toContain("src/components/Hero.tsx");
+  });
+
+  it("descends the full tree by default (no depth)", async () => {
+    grantAll();
+    const res = await tools.listFiles(".");
+    const names = res.entries.map((e) => e.path);
+    expect(names).toContain("src/components/Hero.tsx");
+  });
+
   it("throws PermissionDenied without files scope", async () => {
     await expect(tools.listFiles(".")).rejects.toBeInstanceOf(PermissionDenied);
   });
@@ -77,6 +95,20 @@ describe("read_file", () => {
     await expect(tools.readFile("../../etc/passwd")).rejects.toBeInstanceOf(
       PermissionDenied,
     );
+  });
+
+  it("truncates contents past the byte cap so the reply fits one frame", async () => {
+    grantAll();
+    writeFileSync(join(projectDir, "big.txt"), "x".repeat(50));
+    const capped = new AgentTools({
+      gate,
+      browser,
+      onActivity: (e) => activity.push(e),
+      maxFileBytes: 10,
+    });
+    const res = await capped.readFile("big.txt");
+    expect(res.truncated).toBe(true);
+    expect(res.content.length).toBe(10);
   });
 });
 

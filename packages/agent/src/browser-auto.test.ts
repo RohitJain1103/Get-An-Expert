@@ -36,10 +36,31 @@ describe("AutoBrowserController fallback", () => {
     expect(res.status).toBe(200);
     expect(res.imageBase64).toBeUndefined();
     expect(fallbackReason.length).toBeGreaterThan(0);
+    // The safety net: HTML source so the expert can still read the page.
+    expect(res.html).toContain("hi");
+    expect(res.note).toMatch(/HTML source/i);
 
-    // Once fallen back, console also uses HTTP without retrying the browser.
+    // Within the cooldown, console also uses HTTP without retrying the browser.
     const con = await controller.console(port);
     expect(con.note).toBeTruthy();
+    await controller.close();
+  }, 30_000);
+
+  it("re-probes after the cooldown but reports the fallback once per streak", async () => {
+    await serve();
+    let calls = 0;
+    const controller = new AutoBrowserController({
+      executablePath: "/nonexistent/definitely/not/a/browser",
+      retryMs: 0, // re-probe Playwright on every call
+      onFallback: () => (calls += 1),
+    });
+    const a = await controller.screenshot(port);
+    const b = await controller.screenshot(port);
+    // Both degrade to HTTP...
+    expect(a.status).toBe(200);
+    expect(b.status).toBe(200);
+    // ...but the failure is reported once for the streak, not per call.
+    expect(calls).toBe(1);
     await controller.close();
   }, 30_000);
 });

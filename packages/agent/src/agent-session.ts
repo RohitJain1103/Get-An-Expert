@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
+import { clearSessionStatus, writeSessionStatus } from "@get-an-expert/core/relay";
 import { buildChatUrl } from "./chat-url";
 import { createExpertServer } from "./expert-server";
 import { PermissionGate, type Grant, type Scope } from "./permissions";
@@ -127,6 +128,7 @@ export class AgentSession {
     });
     this.#state = "waiting";
     this.#startedAt = Date.now();
+    this.#persistStatus();
     this.#logLine(`session ${sessionId} registered, waiting for an expert`);
     return { sessionId };
   }
@@ -135,6 +137,7 @@ export class AgentSession {
   grant(grant: Grant): Grant {
     this.#gate.grant(grant);
     this.#relay.reportPermissions(this.#gate.snapshot());
+    this.#persistStatus();
     this.#logLine(`permissions granted: ${JSON.stringify(this.#gate.snapshot())}`);
     return this.#gate.snapshot();
   }
@@ -148,6 +151,7 @@ export class AgentSession {
       for (const pty of this.#ptys) pty.kill(`terminal access revoked (${scope})`);
     }
     this.#relay.reportPermissions(this.#gate.snapshot());
+    this.#persistStatus();
     this.#logLine(`permission revoked: ${scope}`);
     return this.#gate.snapshot();
   }
@@ -234,12 +238,39 @@ export class AgentSession {
   #handleActivity(entry: ActivityEntry): void {
     this.#log.record(entry);
     this.#relay.reportActivity({ kind: entry.kind, summary: entry.summary });
+    this.#persistStatus();
     this.#opts.onActivity?.(entry);
+  }
+
+  /**
+   * Mirror the live session state to a local file the MCP server reads. The
+   * customer's `expert_status` runs in a separate process, so without this the
+   * customer's "what has the expert been doing?" answer would be stale. Removed
+   * on end (see #finish) so nothing lingers after the session closes.
+   */
+  #persistStatus(): void {
+    try {
+      writeSessionStatus({
+        state: this.#state,
+        sessionId: this.#relay.sessionId,
+        expertName: this.#expertName,
+        chatUrl: this.chatUrl,
+        permissions: this.#gate.snapshot() as unknown as Record<string, unknown>,
+        recentActivity: this.#log
+          .entries()
+          .slice(-20)
+          .map((e) => ({ at: e.at, kind: e.kind, summary: e.summary })),
+        updatedAt: Date.now(),
+      });
+    } catch {
+      // Best-effort: a failed write just means expert_status is briefly stale.
+    }
   }
 
   #onExpertJoined(name: string): void {
     this.#expertName = name;
     this.#state = "connected";
+    this.#persistStatus();
     this.#logLine(`expert ${name} joined; establishing peer connection`);
     this.#opts.onExpertJoined?.(name);
 
@@ -293,11 +324,13 @@ export class AgentSession {
     this.#expertName = undefined;
     this.#teardownPeer();
     if (this.#state === "connected") this.#state = "waiting";
+    this.#persistStatus();
   }
 
   async #finish(reason: string | undefined, revoke: boolean): Promise<void> {
     if (this.#state === "ended") return;
     this.#state = "ended";
+    clearSessionStatus();
     if (revoke) this.#gate.revokeAll();
     this.#teardownPeer();
     this.#relay.close();

@@ -44,6 +44,12 @@ export interface ScreenshotResult {
   note: string;
   /** Optional base64 PNG when a real headless browser controller is used. */
   imageBase64?: string;
+  /**
+   * Truncated HTML source of the page. The HTTP fallback fills this in when no
+   * headless browser is available, so the expert can at least read the markup
+   * instead of seeing only an HTTP status code.
+   */
+  html?: string;
 }
 
 export interface ConsoleEntry {

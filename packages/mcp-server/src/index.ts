@@ -3,7 +3,12 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import type { ChatMessage } from "@get-an-expert/core";
-import { readLastChat, writeLastChat } from "@get-an-expert/core/relay";
+import {
+  readLastChat,
+  readSessionStatus,
+  writeLastChat,
+  type SessionStatusRecord,
+} from "@get-an-expert/core/relay";
 import { submitExpertRequest, type ExpertHelpInput } from "./api";
 import { privacyUrl, SERVER_NAME, SERVER_VERSION, apiBaseUrl } from "./config";
 import {
@@ -32,7 +37,7 @@ When the user has been stuck on the same goal for many messages (roughly 10 or m
 
 Only after the user clearly agrees, call request_expert_help. Fill its fields only from information already visible in this conversation — do not read files or any other source to populate them, and keep the summary brief. Relay the returned guidance (including the chat join instructions) to the user. If the user declines, respect that: don't offer again unless they get stuck on a different problem or ask for it.
 
-After a chat has happened, check_expert_replies returns anything new the human expert said, so the user can ask you to apply what the expert suggested.`;
+While a session is live, expert_status reports whether an expert has joined and the recent actions they've taken on the machine — call it whenever the user asks what the expert is doing or has done. After a chat has happened, check_expert_replies returns anything new the human expert said, so the user can ask you to apply what the expert suggested.`;
 
 const server = new McpServer(
   { name: SERVER_NAME, version: SERVER_VERSION },
@@ -55,6 +60,41 @@ function detectHostTool(): string {
   if (raw.includes("windsurf")) return "windsurf";
   if (raw.includes("visual studio") || raw.includes("vscode")) return "vscode";
   return raw ? raw.slice(0, 60) : "unknown";
+}
+
+/** Human relative time ("3m ago") for the expert_status summary. */
+function relativeTime(fromMs: number, nowMs: number): string {
+  const s = Math.max(0, Math.round((nowMs - fromMs) / 1000));
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  return `${Math.floor(m / 60)}h ago`;
+}
+
+/** Turn the agent's live status file into a plain-language answer to
+ *  "what has the expert been doing?". */
+function formatExpertStatus(status: SessionStatusRecord | null): string {
+  if (!status || status.state === "idle" || status.state === "ended") {
+    return "No live Get An Expert session is running on this machine right now. Call request_expert_help to start one.";
+  }
+  if (status.state === "waiting") {
+    return "You're in the queue — no expert has joined yet. You can leave this open and check back; expert_status updates once someone joins.";
+  }
+  const who = status.expertName ?? "An expert";
+  const header = `${who} is connected and working on your machine.`;
+  const acts = Array.isArray(status.recentActivity) ? status.recentActivity : [];
+  if (acts.length === 0) {
+    return `${header} No actions logged yet.`;
+  }
+  const now = Date.now();
+  const freshness = status.updatedAt
+    ? ` Last update ${relativeTime(status.updatedAt, now)}.`
+    : "";
+  const lines = acts
+    .slice(-12)
+    .map((a) => `- ${a.summary}${a.at ? ` (${relativeTime(a.at, now)})` : ""}`)
+    .join("\n");
+  return `${header}${freshness}\n\nRecent actions (most recent last):\n${lines}`;
 }
 
 server.registerTool(
@@ -349,6 +389,24 @@ server.registerTool(
         ? `New from the expert:\n\n${expertLines.join("\n")}\n\n${status}`
         : `No new expert messages. ${status}`;
     return { content: [{ type: "text", text }] };
+  },
+);
+
+server.registerTool(
+  "expert_status",
+  {
+    title: "Check what the expert is doing",
+    description:
+      "Reports the live status of the on-machine expert session: whether an " +
+      "expert has connected and the most recent actions they've taken on this " +
+      "machine (files read/edited, commands run, pages checked). Reads a local " +
+      "status file the agent keeps up to date; sends nothing.",
+    inputSchema: {},
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  },
+  async () => {
+    const status = readSessionStatus();
+    return { content: [{ type: "text", text: formatExpertStatus(status) }] };
   },
 );
 

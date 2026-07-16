@@ -10,14 +10,24 @@
 
 const PROTOCOL_VERSION = "2025-06-18";
 
+/** Default per-request timeout. A data channel can silently drop an oversized
+ *  or lost frame; without a deadline the request would hang forever and the
+ *  UI would sit on "Loading…" with no error. */
+const DEFAULT_REQUEST_TIMEOUT_MS = 20000;
+
 export class MiniMcpClient {
   #sendRaw;
   #nextId = 1;
   #pending = new Map();
   #initialized = false;
+  #timeoutMs;
 
-  constructor(sendRaw) {
+  constructor(sendRaw, opts = {}) {
     this.#sendRaw = sendRaw;
+    this.#timeoutMs =
+      typeof opts.requestTimeoutMs === "number"
+        ? opts.requestTimeoutMs
+        : DEFAULT_REQUEST_TIMEOUT_MS;
   }
 
   /** Feed one inbound JSON frame from the data channel. */
@@ -32,6 +42,7 @@ export class MiniMcpClient {
     const entry = this.#pending.get(msg.id);
     if (!entry) return;
     this.#pending.delete(msg.id);
+    if (entry.timer) clearTimeout(entry.timer);
     if (msg.error) {
       entry.reject(new Error(msg.error.message || "MCP error"));
     } else {
@@ -43,11 +54,25 @@ export class MiniMcpClient {
     const id = this.#nextId++;
     const frame = { jsonrpc: "2.0", id, method, params };
     return new Promise((resolve, reject) => {
-      this.#pending.set(id, { resolve, reject });
+      let timer = null;
+      if (this.#timeoutMs > 0 && typeof setTimeout === "function") {
+        timer = setTimeout(() => {
+          if (!this.#pending.has(id)) return;
+          this.#pending.delete(id);
+          reject(
+            new Error(`MCP request "${method}" timed out after ${this.#timeoutMs}ms`),
+          );
+        }, this.#timeoutMs);
+        // Node keeps the event loop alive for pending timers; don't let a
+        // background request hold the process (or a test runner) open.
+        if (timer && typeof timer.unref === "function") timer.unref();
+      }
+      this.#pending.set(id, { resolve, reject, timer });
       try {
         this.#sendRaw(JSON.stringify(frame));
       } catch (err) {
         this.#pending.delete(id);
+        if (timer) clearTimeout(timer);
         reject(err);
       }
     });
@@ -88,7 +113,10 @@ export class MiniMcpClient {
   /** Reject every in-flight request (call when the channel closes). */
   fail(reason) {
     const err = new Error(reason || "connection closed");
-    for (const { reject } of this.#pending.values()) reject(err);
+    for (const { reject, timer } of this.#pending.values()) {
+      if (timer) clearTimeout(timer);
+      reject(err);
+    }
     this.#pending.clear();
   }
 }
