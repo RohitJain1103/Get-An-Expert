@@ -1,7 +1,7 @@
 {
   "name": "get-an-expert-onmachine",
   "description": "Bring a real human expert onto your machine to fix what you're stuck on. Scoped, consent-based, revocable access — files, an interactive terminal (run claude/codex/dev servers live), and your browser — peer-to-peer over WebRTC.",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "author": {
     "name": "Get An Expert"
   },
