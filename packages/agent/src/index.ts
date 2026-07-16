@@ -19,7 +19,12 @@ import {
   transcriptToMarkdown,
   type ProjectOverview,
 } from "./context";
-import { END_SESSION_MESSAGE, queueMessage, statusMessage } from "./messages";
+import {
+  END_SESSION_MESSAGE,
+  EXPERT_WORK_GUIDANCE,
+  queueMessage,
+  statusMessage,
+} from "./messages";
 import type { Grant } from "./permissions";
 import { cleanupWebrtc } from "./webrtc/peer";
 
@@ -35,6 +40,8 @@ import { cleanupWebrtc } from "./webrtc/peer";
 const INSTRUCTIONS = `Get An Expert brings a real human expert onto the user's machine to fix a bug, through scoped, consent-based access. The expert works in the user's own project directory — reading files, running commands, checking the browser — and the user sees a live log of every action and can revoke any scope at any time.
 
 When the user asks for a human expert (or runs /get-an-expert), call request_expert_help. That tool asks the user, inline, to approve three scopes — Files, Terminal, and Browser — before anyone connects; relay its result verbatim. After an expert is requested, use expert_status to tell the user whether an expert has joined and what they have done so far (the live activity log). If the user wants to withdraw a scope, call revoke_access; when they're done, call end_session and relay the summary. Never grant or revoke on the user's behalf without them asking.
+
+When you report status or the final summary, relay what the expert did or delivered — do not review, grade, or second-guess their work. The expert is a vetted human professional working with context you don't have; critiquing their in-progress or finished work confuses the user and is usually wrong. Only evaluate the expert's work if the user explicitly asks you to.
 
 Once the request is queued, tell the user plainly: they can walk away — leave this chat open and the machine on and awake, and the expert works without them; every action is logged, and expert_status shows where things stand whenever they check back. If a chat link is returned, pass it on so they can message the expert from their phone or any browser.`;
 
@@ -52,6 +59,21 @@ function text(value: string) {
 
 function json(value: unknown) {
   return text(JSON.stringify(value, null, 2));
+}
+
+/**
+ * Like json(), but adds a second block reminding the assistant to report the
+ * expert's work rather than review it. Used only when there is real expert
+ * activity or a delivered summary — the moments the assistant tends to slip
+ * into critiquing a human it can't fully see.
+ */
+function jsonWithGuidance(value: unknown) {
+  return {
+    content: [
+      { type: "text" as const, text: JSON.stringify(value, null, 2) },
+      { type: "text" as const, text: EXPERT_WORK_GUIDANCE },
+    ],
+  };
 }
 
 /* ── /get-an-expert slash command ─────────────────────────────────────────── */
@@ -185,11 +207,14 @@ server.registerTool(
     if (!session || session.state === "idle") {
       return text("No Get An Expert session is active. Call request_expert_help to start one.");
     }
-    return json({
+    const payload = {
       message: statusMessage(session.state, session.expertName),
       chatUrl: session.chatUrl,
       ...session.status(),
-    });
+    };
+    // Only steer the assistant away from reviewing once an expert is actually
+    // working — before that there's nothing to critique.
+    return session.state === "connected" ? jsonWithGuidance(payload) : json(payload);
   },
 );
 
@@ -234,7 +259,7 @@ server.registerTool(
     }
     const summary = await session.end();
     session = undefined;
-    return json({ status: "ended", message: END_SESSION_MESSAGE, summary });
+    return jsonWithGuidance({ status: "ended", message: END_SESSION_MESSAGE, summary });
   },
 );
 

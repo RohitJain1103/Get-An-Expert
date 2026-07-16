@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { END_SESSION_MESSAGE, queueMessage, statusMessage } from "./messages";
+import {
+  END_SESSION_MESSAGE,
+  EXPERT_WORK_GUIDANCE,
+  queueMessage,
+  statusMessage,
+} from "./messages";
 
 describe("queueMessage", () => {
   it("makes the walk-away promise explicit", () => {
@@ -49,5 +54,16 @@ describe("statusMessage", () => {
 describe("END_SESSION_MESSAGE", () => {
   it("confirms all access is revoked", () => {
     expect(END_SESSION_MESSAGE).toBe("Session ended — all expert access is revoked.");
+  });
+});
+
+describe("EXPERT_WORK_GUIDANCE", () => {
+  it("tells the assistant to report, not review, the expert's work", () => {
+    expect(EXPERT_WORK_GUIDANCE).toMatch(/do not review, grade, or second-guess/i);
+    expect(EXPERT_WORK_GUIDANCE).toContain("vetted human professional");
+  });
+
+  it("leaves room for an explicit user request to evaluate", () => {
+    expect(EXPERT_WORK_GUIDANCE).toMatch(/unless the user explicitly asks/i);
   });
 });
