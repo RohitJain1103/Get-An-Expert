@@ -13,6 +13,9 @@ import type {
  * that is a swappable controller. This default reports what HTTP alone can
  * see and says so, rather than pretending to have console access it doesn't.
  */
+/** Cap the HTML source we ship back so it fits one data-channel frame. */
+const MAX_HTML_BYTES = 96 * 1024;
+
 export class HttpBrowserController implements BrowserController {
   readonly #host: string;
   readonly #timeoutMs: number;
@@ -28,14 +31,16 @@ export class HttpBrowserController implements BrowserController {
       const res = await this.#fetch(url);
       const contentType = res.headers.get("content-type") ?? undefined;
       const body = await res.text();
+      const html = body.length > MAX_HTML_BYTES ? body.slice(0, MAX_HTML_BYTES) : body;
       return {
         ok: res.ok,
         port,
         status: res.status,
         title: extractTitle(body),
         contentType,
+        html,
         note: res.ok
-          ? "Page reachable over HTTP. Attach a headless browser for a pixel screenshot."
+          ? "No headless browser on the customer's machine — showing the page's HTML source instead of a rendered screenshot."
           : `Dev server responded with HTTP ${res.status}.`,
       };
     } catch (err) {
