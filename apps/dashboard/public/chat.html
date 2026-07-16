@@ -110,6 +110,19 @@
       border: 1px solid var(--border);
       border-bottom-left-radius: 4px;
     }
+    .msg.activity {
+      max-width: 100%;
+      align-self: stretch;
+      flex-direction: row;
+      align-items: baseline;
+      gap: 7px;
+      font-size: 12px;
+      color: var(--text2);
+      padding: 1px 2px;
+    }
+    .msg.activity .act-dot { color: var(--amber); flex-shrink: 0; }
+    .msg.activity .act-text { flex: 1; word-break: break-word; }
+    .msg.activity .act-time { font-size: 10px; color: var(--text3); flex-shrink: 0; }
     .messages .empty {
       margin: auto;
       text-align: center;

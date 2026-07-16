@@ -4,11 +4,15 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   clearRelayFlag,
+  clearSessionStatus,
   readLastChat,
   readRelayFlag,
+  readSessionStatus,
   writeLastChat,
   writeRelayFlag,
+  writeSessionStatus,
   type RelayFlag,
+  type SessionStatusRecord,
 } from "./relay";
 
 let dir: string;
@@ -102,5 +106,49 @@ describe("last-chat record", () => {
     writeLastChat({ requestId: "req_a", chatToken: "tok", lastReadSeq: 0 });
     clearRelayFlag();
     expect(readLastChat()?.requestId).toBe("req_a");
+  });
+});
+
+describe("session-status record", () => {
+  const record: SessionStatusRecord = {
+    state: "connected",
+    sessionId: "sess_a",
+    expertName: "Priya",
+    chatUrl: "https://relay.test/chat#sess_a.tok",
+    permissions: { files: true, terminal: true, browser: false },
+    recentActivity: [
+      { at: 1, kind: "read_file", summary: "Expert reading: src/app.ts" },
+      { at: 2, kind: "run_command", summary: "Expert ran: npm test" },
+    ],
+    updatedAt: 3,
+  };
+
+  it("round-trips and is owner-only (0600)", () => {
+    writeSessionStatus(record);
+    expect(readSessionStatus()).toEqual(record);
+    const mode = statSync(join(dir, "session-status.json")).mode & 0o777;
+    expect(mode).toBe(0o600);
+  });
+
+  it("returns null when absent or corrupt", () => {
+    expect(readSessionStatus()).toBeNull();
+    writeFileSync(join(dir, "session-status.json"), "not json");
+    expect(readSessionStatus()).toBeNull();
+  });
+
+  it("clears on session end", () => {
+    writeSessionStatus(record);
+    clearSessionStatus();
+    expect(readSessionStatus()).toBeNull();
+  });
+
+  it("tolerates a missing recentActivity array", () => {
+    writeFileSync(
+      join(dir, "session-status.json"),
+      JSON.stringify({ state: "waiting" }),
+    );
+    const read = readSessionStatus();
+    expect(read?.state).toBe("waiting");
+    expect(read?.recentActivity).toEqual([]);
   });
 });

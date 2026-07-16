@@ -275,7 +275,13 @@ export function createRelay(options: RelayOptions): Relay {
           return;
         case "metadata": {
           if (msg.permissions) store.setPermissions(sessionId, msg.permissions);
-          if (msg.activity) store.addActivity(sessionId, msg.activity);
+          if (msg.activity) {
+            const updated = store.addActivity(sessionId, msg.activity);
+            // Fan the action out to the customer's chat page too, so they can
+            // watch what the expert is doing in real time — not just experts.
+            const entry = updated.activity[updated.activity.length - 1];
+            if (entry) notifyChatSockets(sessionId, { type: "activity", entry });
+          }
           broadcastQueue();
           return;
         }
@@ -450,6 +456,9 @@ export function createRelay(options: RelayOptions): Relay {
           status: session.status,
           expertName: session.expertName,
           history: session.chat,
+          // Seed the live activity feed for a customer who opens (or reopens)
+          // the page after the expert has already started working.
+          activity: session.activity.slice(-50),
         });
         log(`customer chat socket joined session ${sessionId}`);
         return;
