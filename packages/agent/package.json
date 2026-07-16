@@ -1,6 +1,6 @@
 {
   "name": "get-an-expert-agent",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Get An Expert agent — on-demand expert assistance where the expert works directly on your machine through scoped, consent-based access. Runs as an MCP server inside Claude Code, Codex, Cursor, or Windsurf.",
   "keywords": [
     "mcp",
