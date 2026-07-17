@@ -54,6 +54,12 @@ class FakeRelay implements RelayConnection {
     this.closed = true;
   }
   // Test controls for the relay-driven events.
+  fireExpertJoined(name: string, profile?: unknown): void {
+    this.events.onExpertJoined?.(name, profile as never);
+  }
+  fireExpertLeft(): void {
+    this.events.onExpertLeft?.();
+  }
   fireReconnecting(): void {
     this.events.onReconnecting?.(1);
   }
@@ -237,6 +243,76 @@ describe("AgentSession reconnect", () => {
     relay.fireResumeFailed();
     expect(session.state).toBe("ended");
     expect(readResume()).toBeNull();
+  });
+});
+
+describe("AgentSession expert profile", () => {
+  const rohit = {
+    id: "rohit",
+    name: "Rohit Jain",
+    photo: "/experts/rohit.jpg",
+    role: "Senior software engineer",
+    companies: [{ logo: "/experts/amazon.jpg", label: "Amazon" }],
+    tag: "Code, payments & APIs",
+    rating: 4.8,
+    fixesDelivered: 12,
+  };
+
+  // A no-op peer so a claim doesn't spin up a real WebRTC connection.
+  function makeSessionWithFakePeer(relay: FakeRelay): AgentSession {
+    return new AgentSession({
+      relayUrl: "ws://relay.test",
+      projectDir,
+      customerName: "Jordan Lee",
+      browser: fakeBrowser,
+      relayClientFactory: () => relay,
+      peerFactory: () => ({
+        onChannel() {},
+        onError() {},
+        handleSignal() {},
+        close() {},
+      }),
+    });
+  }
+
+  it("stores the profile from expert-joined and exposes it in status()", async () => {
+    const relay = new FakeRelay();
+    const session = makeSessionWithFakePeer(relay);
+    await session.requestExpert("x");
+    relay.fireExpertJoined("Rohit Jain", rohit);
+
+    expect(session.state).toBe("connected");
+    expect(session.expertName).toBe("Rohit Jain");
+    expect(session.expertProfile?.id).toBe("rohit");
+    expect(session.status().expertProfile?.rating).toBe(4.8);
+
+    await session.end();
+  });
+
+  it("clears the profile when the expert leaves", async () => {
+    const relay = new FakeRelay();
+    const session = makeSessionWithFakePeer(relay);
+    await session.requestExpert("x");
+    relay.fireExpertJoined("Rohit Jain", rohit);
+    relay.fireExpertLeft();
+
+    expect(session.expertProfile).toBeUndefined();
+    expect(session.status().expertProfile).toBeUndefined();
+
+    await session.end();
+  });
+
+  it("connects without a profile when the relay sends only a name", async () => {
+    const relay = new FakeRelay();
+    const session = makeSessionWithFakePeer(relay);
+    await session.requestExpert("x");
+    relay.fireExpertJoined("Someone");
+
+    expect(session.state).toBe("connected");
+    expect(session.expertName).toBe("Someone");
+    expect(session.expertProfile).toBeUndefined();
+
+    await session.end();
   });
 });
 

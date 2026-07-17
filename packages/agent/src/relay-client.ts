@@ -1,8 +1,11 @@
 import WebSocket from "ws";
 import type { Grant } from "./permissions";
+import type { PublicExpertProfile } from "./types";
 
 export interface RelayClientEvents {
-  onExpertJoined?: (expertName: string) => void;
+  /** The relay sends the expert's display name and, when the session is claimed
+   * by a roster expert, their public profile (absent on older relays). */
+  onExpertJoined?: (expertName: string, profile?: PublicExpertProfile) => void;
   onExpertLeft?: () => void;
   onSignal?: (payload: unknown) => void;
   onSessionEnded?: (reason: string | undefined) => void;
@@ -201,7 +204,7 @@ export class RelayClient implements RelayConnection {
         this.#events.onResumeFailed?.();
         return;
       case "expert-joined":
-        this.#events.onExpertJoined?.(msg.expertName);
+        this.#events.onExpertJoined?.(msg.expertName, msg.expert);
         return;
       case "expert-left":
         this.#events.onExpertLeft?.();

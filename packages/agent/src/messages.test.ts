@@ -7,19 +7,22 @@ import {
 } from "./messages";
 
 describe("queueMessage", () => {
-  it("makes the walk-away promise explicit", () => {
-    const msg = queueMessage();
-    expect(msg).toContain("walk away");
-    expect(msg).toContain("machine on and awake");
-    expect(msg).toContain("expert_status");
+  it("says a tab is opening when one was launched", () => {
+    expect(queueMessage("https://r.example/chat#a.b", true)).toBe(
+      "Opening your expert chat now. Your request is queued and stays queued if you close it. Link: https://r.example/chat#a.b",
+    );
   });
 
-  it("omits the chat-link clause when no chat URL exists", () => {
-    expect(queueMessage()).not.toContain("chat link");
+  it("gives the link to open manually when a tab could not open", () => {
+    expect(queueMessage("https://r.example/chat#a.b", false)).toBe(
+      "Your request is queued. Open your expert chat here: https://r.example/chat#a.b",
+    );
   });
 
-  it("mentions the chat link when a chat URL exists", () => {
-    expect(queueMessage("https://relay.example.com/chat#abc.def")).toContain("chat link");
+  it("keeps a plain queue line when there is no chat url", () => {
+    expect(queueMessage(undefined)).toBe(
+      "You're in the expert queue. Check back anytime with expert_status.",
+    );
   });
 });
 
@@ -52,9 +55,41 @@ describe("statusMessage", () => {
   });
 });
 
+describe("statusMessage with an expert profile", () => {
+  const rohit = {
+    id: "rohit",
+    name: "Rohit Jain",
+    photo: "/experts/rohit.jpg",
+    role: "Senior software engineer",
+    companies: [],
+    tag: "Code, payments & APIs",
+    rating: 4.8,
+    fixesDelivered: 12,
+  };
+
+  it("names the role, rating, and fixes delivered when connected", () => {
+    expect(statusMessage("connected", "Rohit Jain", rohit)).toBe(
+      "Rohit Jain (Senior software engineer, ★ 4.8, 12 fixes delivered) is working on your machine right now, within the scopes you approved. Every action is in the log below. Feel free to step away (keep the machine awake); check back whenever you like.",
+    );
+  });
+
+  it("uses the profile name even if the passed expertName differs", () => {
+    const msg = statusMessage("connected", "stale name", rohit);
+    expect(msg).toContain("Rohit Jain (Senior software engineer");
+  });
+
+  it("falls back to the name-only line for an incomplete profile, never rendering undefined", () => {
+    // A profile missing role/rating/fixes must never leak "undefined" into the copy.
+    const partial = { name: "Rohit Jain" } as never;
+    const line = statusMessage("connected", "Rohit Jain", partial);
+    expect(line).not.toContain("undefined");
+    expect(line).toBe(statusMessage("connected", "Rohit Jain"));
+  });
+});
+
 describe("END_SESSION_MESSAGE", () => {
   it("confirms all access is revoked", () => {
-    expect(END_SESSION_MESSAGE).toBe("Session ended — all expert access is revoked.");
+    expect(END_SESSION_MESSAGE).toBe("Session ended. All expert access is revoked.");
   });
 });
 
