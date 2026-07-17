@@ -178,6 +178,32 @@ describe("expert auth", () => {
   });
 });
 
+describe("expert roster identity", () => {
+  it("auth with an expertId adopts the roster identity", async () => {
+    const expert = await connect("/expert");
+    send(expert, { type: "auth", token: TOKEN, name: "Whoever", expertId: "rohit" });
+    const ok = await waitFor(expert, (m) => m.type === "auth-ok");
+    expect(ok.name).toBe("Rohit Jain");
+    expect(ok.expert).toEqual(expect.objectContaining({ id: "rohit" }));
+  });
+
+  it("auth without expertId keeps today's self-declared name", async () => {
+    const expert = await connect("/expert");
+    send(expert, { type: "auth", token: TOKEN, name: "Whoever" });
+    const ok = await waitFor(expert, (m) => m.type === "auth-ok");
+    expect(ok.name).toBe("Whoever");
+    expect(ok.expert).toBeUndefined();
+  });
+
+  it("auth with an unknown expertId falls back to the declared name", async () => {
+    const expert = await connect("/expert");
+    send(expert, { type: "auth", token: TOKEN, name: "Whoever", expertId: "nobody" });
+    const ok = await waitFor(expert, (m) => m.type === "auth-ok");
+    expect(ok.name).toBe("Whoever");
+    expect(ok.expert).toBeUndefined();
+  });
+});
+
 describe("customer activity feed", () => {
   async function registerWithToken() {
     const agent = await connect("/agent");

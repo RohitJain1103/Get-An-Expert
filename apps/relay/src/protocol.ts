@@ -92,6 +92,10 @@ const expertAuth = z.object({
   type: z.literal("auth"),
   token: z.string().min(1).max(200),
   name: z.string().min(1).max(120),
+  // Self-selected roster identity (org-trust decision 2026-07-17): the shared
+  // token stays unchanged; the expert picks who they are at login and the
+  // relay adopts that profile. Unknown ids fall back to the declared name.
+  expertId: z.string().min(1).max(40).optional(),
 });
 
 const expertClaim = z.object({

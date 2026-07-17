@@ -18,6 +18,7 @@ import {
   type SessionPersistence,
 } from "./persistence";
 import { serveStatic } from "./static";
+import { findExpert, type PublicExpertProfile } from "./roster";
 
 /** Default max age of a queued request before the sweep expires it (72h). */
 export const DEFAULT_MAX_AGE_MS = 72 * 60 * 60 * 1000;
@@ -48,6 +49,8 @@ export interface Relay {
 
 interface ExpertConn {
   name: string;
+  /** The roster profile this expert self-selected at login, if any. */
+  profile?: PublicExpertProfile;
   claimed: Set<string>;
 }
 
@@ -444,8 +447,13 @@ export function createRelay(options: RelayOptions): Relay {
           return;
         }
         clearTimeout(authTimer);
-        experts.set(ws, { name: msg.name, claimed: new Set() });
-        sendTo(ws, { type: "auth-ok", name: msg.name });
+        const profile = msg.expertId ? findExpert(msg.expertId) : undefined;
+        experts.set(ws, {
+          name: profile?.name ?? msg.name,
+          profile,
+          claimed: new Set(),
+        });
+        sendTo(ws, { type: "auth-ok", name: profile?.name ?? msg.name, expert: profile });
         sendTo(ws, { type: "queue", sessions: store.queue().map(queueEntry) });
         log(`expert ${msg.name} connected`);
         return;
