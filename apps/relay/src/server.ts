@@ -19,6 +19,7 @@ import {
 } from "./persistence";
 import { serveStatic } from "./static";
 import { ROSTER, findExpert, type PublicExpertProfile } from "./roster";
+import { DEFAULT_STUN, iceServers } from "./ice";
 
 /** Default max age of a queued request before the sweep expires it (72h). */
 export const DEFAULT_MAX_AGE_MS = 72 * 60 * 60 * 1000;
@@ -122,6 +123,29 @@ export function createRelay(options: RelayOptions): Relay {
     if (new URL(req.url ?? "/", "http://relay.local").pathname === "/api/roster") {
       res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
       res.end(JSON.stringify(ROSTER));
+      return;
+    }
+    // ICE servers (STUN + optional TURN) for the peer-to-peer WebRTC leg. The
+    // dashboard fetches this before creating its RTCPeerConnection so TURN
+    // credentials stay server-side. Async because a TURN provider (Cloudflare)
+    // may be minted on demand; any failure degrades to the STUN baseline so a
+    // session is never blocked. no-store: TURN credentials are short-lived.
+    if (new URL(req.url ?? "/", "http://relay.local").pathname === "/api/ice") {
+      iceServers()
+        .then((servers) => {
+          res.writeHead(200, {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "no-store",
+          });
+          res.end(JSON.stringify({ iceServers: servers }));
+        })
+        .catch(() => {
+          res.writeHead(200, {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "no-store",
+          });
+          res.end(JSON.stringify({ iceServers: [{ urls: DEFAULT_STUN }] }));
+        });
       return;
     }
     if (options.dashboardDir) {
