@@ -705,6 +705,16 @@ export function createRelay(options: RelayOptions): Relay {
           broadcastIssueUpdated(updated);
           return;
         }
+        case "end": {
+          // The customer ends their own session: same fan-out and teardown as an
+          // expert end-session (agent + claiming expert + all chat sockets get
+          // session-ended; store.end + persistence removal).
+          endSession(sessionId, "customer ended the session", {
+            agent: true,
+            expert: true,
+          });
+          return;
+        }
       }
     });
 

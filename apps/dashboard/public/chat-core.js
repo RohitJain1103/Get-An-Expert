@@ -210,6 +210,20 @@
     return { type: "edit-issue", text: trimmed.slice(0, 2000) };
   }
 
+  /* ── End session two-step confirm state machine ─────────────────────────
+     Ending is destructive and irreversible, so a first tap only arms the
+     confirm; "confirm" is honoured only from the armed step, so a stray click
+     can never end a session. "cancel" (Keep going / Esc) returns to idle.
+     Steps: "idle" -> "armed" -> "ending". ──────────────────────────────── */
+
+  function nextEndStep(step, action) {
+    var s = step || "idle";
+    if (action === "arm") return "armed";
+    if (action === "cancel") return "idle";
+    if (action === "confirm") return s === "armed" ? "ending" : s;
+    return s;
+  }
+
   // Shallow immutable update: never mutate the state the caller handed us.
   function assign(state, patch) {
     var next = {};
@@ -232,6 +246,7 @@
     reduce: reduce,
     editPayload: editPayload,
     contextChips: contextChips,
+    nextEndStep: nextEndStep,
     initialState: initialState,
   };
 

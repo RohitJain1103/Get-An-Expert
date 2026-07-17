@@ -134,6 +134,31 @@
   let editDraft = "";
   let editorTextarea = null;
 
+  // End-session two-step confirm. "idle" shows the End session control; "armed"
+  // shows the inline "End session? Yes, end it / Keep going" confirm. Pure
+  // transitions live in GaeChat.nextEndStep (tested); this only holds the step.
+  let endStep = "idle"; // "idle" | "armed" | "ending"
+
+  function armEnd() {
+    endStep = G.nextEndStep(endStep, "arm");
+    render();
+  }
+
+  function cancelEnd() {
+    if (endStep !== "armed") return;
+    endStep = G.nextEndStep(endStep, "cancel");
+    render();
+  }
+
+  function confirmEnd() {
+    endStep = G.nextEndStep(endStep, "confirm");
+    if (endStep === "ending" && ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "end" }));
+    }
+    endStep = "idle"; // the session-ended echo collapses the pinned region
+    render();
+  }
+
   function openEditor() {
     editDraft = state.issue || "";
     ctxMode = "edit";
@@ -334,14 +359,34 @@
 
   function accessBodyInto(node, perms) {
     node.replaceChildren();
-    if (!perms) return;
-    if (perms.files) node.append(el("span", "c-scope", "Files"));
-    if (perms.terminal) node.append(el("span", "c-scope", "Terminal"));
-    if (perms.browser) {
-      node.append(
-        el("span", "c-scope", perms.browserPort ? "Browser :" + perms.browserPort : "Browser"),
-      );
+    if (perms) {
+      if (perms.files) node.append(el("span", "c-scope", "Files"));
+      if (perms.terminal) node.append(el("span", "c-scope", "Terminal"));
+      if (perms.browser) {
+        node.append(
+          el("span", "c-scope", perms.browserPort ? "Browser :" + perms.browserPort : "Browser"),
+        );
+      }
     }
+    node.append(endControl());
+  }
+
+  // The End session control. Destructive and irreversible, so the first tap only
+  // arms an inline confirm (no browser confirm() dialog). Copy is exact.
+  function endControl() {
+    if (endStep === "armed") {
+      const wrap = el("div", "c-endconfirm");
+      wrap.append(el("span", "q", "End session?"));
+      const yes = el("button", "yes", "Yes, end it");
+      yes.addEventListener("click", confirmEnd);
+      const no = el("button", "no", "Keep going");
+      no.addEventListener("click", cancelEnd);
+      wrap.append(yes, no);
+      return wrap;
+    }
+    const btn = el("button", "c-endbtn", "End session");
+    btn.addEventListener("click", armEnd);
+    return btn;
   }
 
   function ctxMiniInto(node) {
@@ -437,6 +482,9 @@
   }
 
   function renderBody() {
+    // The End control only lives in the claimed pinned region; drop any armed
+    // confirm the moment the session leaves that state.
+    if (state.phase !== "claimed") endStep = "idle";
     if (state.phase === "failed") {
       els.pinned.classList.add("hidden");
       setBanner(FAILED_BANNER, "muted");
@@ -479,7 +527,9 @@
     els.mini.classList.add("hidden");
     els.ctxMini.classList.remove("hidden");
     els.access.classList.remove("hidden");
-    els.access.open = false; // collapsed by default: check it, do not stare at it
+    // Collapsed by default (check it, do not stare at it), but held open while
+    // the End session confirm is armed so the confirm stays visible.
+    els.access.open = endStep === "armed";
     expertCardInto(els.expertCard, state.expert);
     ctxMiniInto(els.ctxMini);
     accessBodyInto(els.accessBody, state.permissions);
@@ -552,6 +602,14 @@
   }
 
   /* ── Sending (no optimistic render: wait for the echo) ─────────────── */
+
+  // Esc restores the armed End session confirm (matches the editor's Esc-cancel).
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && endStep === "armed") {
+      event.preventDefault();
+      cancelEnd();
+    }
+  });
 
   els.composer.addEventListener("submit", (event) => {
     event.preventDefault();

@@ -185,10 +185,19 @@ const customerEditIssue = z.object({
   text: z.string().min(1).max(2000),
 });
 
+/**
+ * End the session from the customer side. No fields: the socket's hello already
+ * bound it to a session. The relay ends it exactly like an expert end-session.
+ */
+const customerEnd = z.object({
+  type: z.literal("end"),
+});
+
 export const customerMessageSchema = z.discriminatedUnion("type", [
   customerHello,
   customerChat,
   customerEditIssue,
+  customerEnd,
 ]);
 export type CustomerMessage = z.infer<typeof customerMessageSchema>;
 

@@ -5,8 +5,16 @@ import { describe, expect, it } from "vitest";
 import "../public/chat-core.js";
 
 const GaeChat = (globalThis as any).GaeChat;
-const { parseLink, initials, firstName, validProfile, reduce, editPayload, contextChips } =
-  GaeChat;
+const {
+  parseLink,
+  initials,
+  firstName,
+  validProfile,
+  reduce,
+  editPayload,
+  contextChips,
+  nextEndStep,
+} = GaeChat;
 
 // PublicExpertProfile fixture, verbatim per the Wire Contracts section.
 const FIXTURE_ROHIT = {
@@ -384,5 +392,28 @@ describe("contextChips", () => {
       "This conversation, 5 messages",
       "A short overview of your project",
     ]);
+  });
+});
+
+/* ── nextEndStep (customer End session two-step confirm) ─────────────── */
+
+describe("nextEndStep", () => {
+  it("arms from idle (first tap)", () => {
+    expect(nextEndStep("idle", "arm")).toBe("armed");
+    expect(nextEndStep(undefined, "arm")).toBe("armed");
+  });
+
+  it("cancels back to idle from armed (Keep going / Esc)", () => {
+    expect(nextEndStep("armed", "cancel")).toBe("idle");
+  });
+
+  it("confirms to ending only from armed (Yes, end it)", () => {
+    expect(nextEndStep("armed", "confirm")).toBe("ending");
+    // A confirm can never fire without first arming.
+    expect(nextEndStep("idle", "confirm")).toBe("idle");
+  });
+
+  it("leaves the step unchanged on an unknown action", () => {
+    expect(nextEndStep("armed", "nope")).toBe("armed");
   });
 });

@@ -120,6 +120,15 @@
     .c-access[open] > summary .chev { transform: rotate(180deg); }
     .c-access-body { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 0 16px 10px; }
     .c-scope { font-family: var(--mono); font-size: 10px; padding: 2px 9px; border: 1px solid var(--c-bronze); background: var(--c-paper); color: var(--c-bronze-ink); border-radius: var(--r-pill); }
+    /* End session: destructive, so it stays a quiet underlined link pushed to the
+       right of the scopes, and the first tap arms an inline confirm. */
+    .c-endbtn { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--c-rust); text-decoration: underline; cursor: pointer; background: none; border: none; padding: 0; transition: opacity 0.18s var(--ease-out); }
+    .c-endbtn:hover { opacity: 0.75; }
+    .c-endconfirm { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+    .c-endconfirm .q { font-family: var(--mono); font-size: 10px; color: var(--c-bronze-ink); }
+    .c-endconfirm button { font-family: var(--mono); font-size: 10px; text-decoration: underline; cursor: pointer; background: none; border: none; padding: 0; }
+    .c-endconfirm .yes { color: var(--c-rust); }
+    .c-endconfirm .no { color: var(--c-forest); }
 
     .c-ctx-mini { display: flex; align-items: center; gap: 8px; padding: 9px 16px; border-top: 1px solid var(--c-sand); font-size: 13px; color: var(--c-ink2); }
     .c-ctx-mini .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

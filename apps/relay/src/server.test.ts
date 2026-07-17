@@ -567,6 +567,46 @@ describe("session end", () => {
   });
 });
 
+describe("customer-initiated end", () => {
+  it("ends the session and notifies agent, expert, and chat sockets", async () => {
+    const { agent, sessionId, customerToken } = await registeredAgent();
+    const { expert } = await authedExpert();
+    send(expert, { type: "claim", sessionId });
+    await waitFor(expert, (m) => m.type === "claimed");
+    await waitFor(agent, (m) => m.type === "expert-joined");
+
+    const customer = await connect("/customer");
+    send(customer, { type: "hello", sessionId, token: customerToken });
+    await waitFor(customer, (m) => m.type === "hello-ok");
+
+    send(customer, { type: "end" });
+
+    await waitFor(agent, (m) => m.type === "session-ended");
+    await waitFor(expert, (m) => m.type === "session-ended");
+    await waitFor(customer, (m) => m.type === "session-ended");
+    expect(relay.store.get(sessionId)?.status).toBe("ended");
+  });
+
+  it("refuses further customer messages once ended", async () => {
+    const { sessionId, customerToken } = await registeredAgent();
+    const customer = await connect("/customer");
+    send(customer, { type: "hello", sessionId, token: customerToken });
+    await waitFor(customer, (m) => m.type === "hello-ok");
+    send(customer, { type: "end" });
+    await waitFor(customer, (m) => m.type === "session-ended");
+
+    // The ended session lingers, so a fresh hello still works, but any further
+    // chat is refused with session-ended.
+    const c2 = await connect("/customer");
+    send(c2, { type: "hello", sessionId, token: customerToken });
+    const hello = await waitFor(c2, (m) => m.type === "hello-ok");
+    expect(hello.status).toBe("ended");
+    send(c2, { type: "chat", text: "anyone still there?" });
+    const refused = await waitFor(c2, (m) => m.type === "session-ended");
+    expect(refused).toBeTruthy();
+  });
+});
+
 describe("http", () => {
   it("serves the dashboard at /", async () => {
     const res = await fetch(`${baseUrl}/`);
