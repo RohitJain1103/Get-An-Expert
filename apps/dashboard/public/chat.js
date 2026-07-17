@@ -26,6 +26,7 @@
   const CTX_HEADING = "What we've told the expert";
   const CTX_NOTE =
     "This is the summary. They get the full detail. Change it anytime, before or after someone picks it up.";
+  const CTX_SAVED = "Updated. The expert sees this now.";
   // Chips that are categorically true without a per-session count. The two
   // count-bearing chips in the spec ("47 messages", "3 secrets removed") are
   // omitted until a wire contract carries the real numbers: a hardcoded count
@@ -127,6 +128,62 @@
   let ws = null;
   let reconnectTimer = null;
 
+  // Context editor state. ctxMode drives both the waiting context card and the
+  // claimed-state ctx-mini row. editDraft survives re-renders (a chat message
+  // arriving mid-edit must not wipe what the customer is typing). editorTextarea
+  // is the live node so render() can restore focus after rebuilding.
+  let ctxMode = "view"; // "view" | "edit" | "saved"
+  let editDraft = "";
+  let editorTextarea = null;
+
+  function openEditor() {
+    editDraft = state.issue || "";
+    ctxMode = "edit";
+    render();
+  }
+
+  function cancelEditor() {
+    ctxMode = "view";
+    render();
+  }
+
+  function saveEditor(value) {
+    const payload = G.editPayload(value);
+    if (payload && ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(payload));
+      ctxMode = "saved"; // the issue-updated echo repaints the text
+    } else {
+      ctxMode = "view"; // empty edit or no socket: treat as cancel
+    }
+    render();
+  }
+
+  // The textarea + Save/Cancel, shared by the waiting card and the ctx-mini row.
+  // Esc cancels; input is mirrored into editDraft so a re-render keeps it.
+  function appendEditor(box) {
+    const ta = el("textarea", "c-edit");
+    ta.value = editDraft;
+    ta.setAttribute("aria-label", "Edit what the expert sees");
+    ta.addEventListener("input", () => {
+      editDraft = ta.value;
+    });
+    ta.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        cancelEditor();
+      }
+    });
+    editorTextarea = ta;
+    box.append(ta);
+    const acts = el("div", "c-ctx-acts");
+    const save = el("button", "c-btn", "Save");
+    save.addEventListener("click", () => saveEditor(ta.value));
+    const cancel = el("button", "c-btn ghost", "Cancel");
+    cancel.addEventListener("click", cancelEditor);
+    acts.append(save, cancel);
+    box.append(acts);
+  }
+
   /* ── Card builders ─────────────────────────────────────────────────── */
 
   function messageNode(m) {
@@ -158,9 +215,13 @@
   function contextCard() {
     const box = el("div", "c-ctx");
     box.append(el("div", "c-ctx-h", CTX_HEADING));
+    if (ctxMode === "edit") {
+      appendEditor(box);
+      return box;
+    }
     if (state.issue) box.append(el("div", "c-ctx-issue", state.issue));
     const chips = el("div", "c-chips");
-    CTX_CHIPS.forEach((t) => {
+    contextChips().forEach((t) => {
       const c = el("span", "c-chip");
       c.append(el("span", "tk", "✓")); // check mark
       c.append(el("span", null, t));
@@ -168,8 +229,24 @@
     });
     box.append(chips);
     box.append(el("div", "c-ctx-note", CTX_NOTE));
-    // Edit affordance is deferred to Track E; display-only here.
+    if (ctxMode === "saved") {
+      const ok = el("div", "c-saved");
+      ok.append(el("span", null, "✓"));
+      ok.append(el("span", null, CTX_SAVED));
+      box.append(ok);
+    }
+    const acts = el("div", "c-ctx-acts");
+    const edit = el("button", "c-btn ghost", "Edit");
+    edit.addEventListener("click", openEditor);
+    acts.append(edit);
+    box.append(acts);
     return box;
+  }
+
+  // The always-true chips, kept as a helper so Track E's count-bearing chips
+  // ("This conversation, N messages", "N secrets removed") can slot in.
+  function contextChips() {
+    return CTX_CHIPS.slice();
   }
 
   function stepsCard() {
@@ -275,10 +352,17 @@
     }
   }
 
-  function ctxMiniInto(node, issue) {
+  function ctxMiniInto(node) {
     node.replaceChildren();
-    node.append(el("span", "t", issue || ""));
-    // Edit affordance is deferred to Track E; display-only here.
+    node.classList.toggle("editing", ctxMode === "edit");
+    if (ctxMode === "edit") {
+      appendEditor(node);
+      return;
+    }
+    node.append(el("span", "t", state.issue || ""));
+    const edit = el("button", null, "Edit");
+    edit.addEventListener("click", openEditor);
+    node.append(edit);
   }
 
   /* ── UI primitives ─────────────────────────────────────────────────── */
@@ -321,8 +405,21 @@
   /* ── Render ────────────────────────────────────────────────────────── */
 
   function render() {
+    editorTextarea = null;
     renderConn();
     renderBody();
+    // Keep the caret in the editor across rebuilds (a stray relay message must
+    // not steal focus from someone mid-edit).
+    if (ctxMode === "edit" && editorTextarea) {
+      const ta = editorTextarea;
+      ta.focus();
+      const end = ta.value.length;
+      try {
+        ta.setSelectionRange(end, end);
+      } catch {
+        /* not all inputs support selection ranges */
+      }
+    }
   }
 
   function renderConn() {
@@ -392,7 +489,7 @@
     els.access.classList.remove("hidden");
     els.access.open = false; // collapsed by default: check it, do not stare at it
     expertCardInto(els.expertCard, state.expert);
-    ctxMiniInto(els.ctxMini, state.issue);
+    ctxMiniInto(els.ctxMini);
     accessBodyInto(els.accessBody, state.permissions);
     setBanner(G.firstName(expertName()) + " is here and working on your machine.", "");
     enableComposer("Message your expert");

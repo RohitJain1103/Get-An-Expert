@@ -123,6 +123,9 @@
 
     .c-ctx-mini { display: flex; align-items: center; gap: 8px; padding: 9px 16px; border-top: 1px solid var(--c-sand); font-size: 13px; color: var(--c-ink2); }
     .c-ctx-mini .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* When the ctx-mini row hosts the inline editor, stack it instead of the
+       one-line flex row so the textarea and its buttons get real room. */
+    .c-ctx-mini.editing { flex-direction: column; align-items: stretch; gap: 9px; }
     .c-ctx-mini button { font-family: var(--mono); font-size: 10px; color: var(--c-forest); background: none; border: none; text-decoration: underline; cursor: pointer; flex-shrink: 0; padding: 0; }
 
     /* ── Message feed / waiting cards live here ─────────────────────── */

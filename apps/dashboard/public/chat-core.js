@@ -159,12 +159,35 @@
         });
       }
 
+      case "issue-updated": {
+        // Every accepted edit (ours or the expert's) echoes back here; the
+        // echo is the single render path, so the card never updates optimistically.
+        if (s.phase === "ended" || s.phase === "failed") return s;
+        return assign(s, {
+          issue: typeof msg.issue === "string" ? msg.issue : s.issue,
+        });
+      }
+
+      case "edit-rejected":
+        // The customer always wins, so a customer socket never receives this;
+        // the case keeps reduce total and leaves the issue untouched.
+        return s;
+
       case "session-ended":
         return assign(s, { phase: "ended" });
 
       default:
         return s; // unknown message types leave state unchanged
     }
+  }
+
+  /* ── Edit payload: trim, bound 1..2000, wrap as an edit-issue message ── */
+
+  function editPayload(text) {
+    if (typeof text !== "string") return undefined;
+    var trimmed = text.trim();
+    if (trimmed.length === 0) return undefined;
+    return { type: "edit-issue", text: trimmed.slice(0, 2000) };
   }
 
   // Shallow immutable update: never mutate the state the caller handed us.
@@ -187,6 +210,7 @@
     firstName: firstName,
     validProfile: validProfile,
     reduce: reduce,
+    editPayload: editPayload,
     initialState: initialState,
   };
 

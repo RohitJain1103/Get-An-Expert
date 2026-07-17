@@ -5,7 +5,8 @@ import { describe, expect, it } from "vitest";
 import "../public/chat-core.js";
 
 const GaeChat = (globalThis as any).GaeChat;
-const { parseLink, initials, firstName, validProfile, reduce } = GaeChat;
+const { parseLink, initials, firstName, validProfile, reduce, editPayload } =
+  GaeChat;
 
 // PublicExpertProfile fixture, verbatim per the Wire Contracts section.
 const FIXTURE_ROHIT = {
@@ -260,5 +261,72 @@ describe("reduce", () => {
     const s0 = reduce(undefined, helloWaiting);
     expect(reduce(s0, {})).toBe(s0);
     expect(reduce(s0, { type: 42 })).toBe(s0);
+  });
+
+  it("issue-updated replaces the issue text (customer edit echo)", () => {
+    const s0 = reduce(undefined, helloWaiting);
+    const s1 = reduce(s0, {
+      type: "issue-updated",
+      issue: "Revised: login also drops on tab focus.",
+      by: "customer",
+      at: 123,
+    });
+    expect(s1.issue).toBe("Revised: login also drops on tab focus.");
+  });
+
+  it("issue-updated from the expert also updates the issue", () => {
+    const s0 = reduce(undefined, helloWaiting);
+    const s1 = reduce(s0, {
+      type: "issue-updated",
+      issue: "Reworded by the expert.",
+      by: "expert",
+      at: 200,
+    });
+    expect(s1.issue).toBe("Reworded by the expert.");
+  });
+
+  it("issue-updated is ignored once the session has ended", () => {
+    const s0 = reduce(undefined, { type: "session-ended" });
+    const s1 = reduce(s0, { type: "issue-updated", issue: "too late", by: "expert", at: 1 });
+    expect(s1.issue).toBeUndefined();
+  });
+
+  it("edit-rejected leaves the issue unchanged (customers always win)", () => {
+    const s0 = reduce(undefined, helloWaiting);
+    const s1 = reduce(s0, {
+      type: "edit-rejected",
+      issue: "someone else's version",
+      reason: "stale",
+      at: 1,
+      by: "customer",
+    });
+    expect(s1.issue).toBe(helloWaiting.issue);
+  });
+});
+
+/* ── editPayload ────────────────────────────────────────────────────── */
+
+describe("editPayload", () => {
+  it("trims and wraps valid text as an edit-issue message", () => {
+    expect(editPayload("  new problem statement  ")).toEqual({
+      type: "edit-issue",
+      text: "new problem statement",
+    });
+  });
+
+  it("returns undefined for empty or whitespace-only text", () => {
+    expect(editPayload("")).toBeUndefined();
+    expect(editPayload("   ")).toBeUndefined();
+  });
+
+  it("clamps to 2000 characters", () => {
+    const long = "a".repeat(2500);
+    const payload = editPayload(long);
+    expect(payload.text.length).toBe(2000);
+  });
+
+  it("returns undefined for non-string input", () => {
+    expect(editPayload(undefined)).toBeUndefined();
+    expect(editPayload(42)).toBeUndefined();
   });
 });
