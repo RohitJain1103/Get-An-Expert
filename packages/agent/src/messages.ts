@@ -1,4 +1,5 @@
 import type { SessionState } from "./agent-session";
+import type { PublicExpertProfile } from "./types";
 
 /**
  * Customer-facing walk-away copy. Every message the customer reads after
@@ -19,18 +20,43 @@ export function queueMessage(chatUrl?: string, opened?: boolean): string {
     : `Your request is queued. Open your expert chat here: ${chatUrl}`;
 }
 
-/** Per-state status line prepended to every expert_status response. */
-export function statusMessage(state: SessionState, expertName?: string): string {
+/** Per-state status line prepended to every expert_status response. When a
+ * roster profile is present, the connected line names who the expert is. */
+export function statusMessage(
+  state: SessionState,
+  expertName?: string,
+  profile?: PublicExpertProfile,
+): string {
   switch (state) {
     case "waiting":
       return "Still in the queue, and no expert has joined yet. You don't have to wait here: step away and check back later. Your request stays queued through disconnects and restarts (it reconnects on its own), so it won't be lost; keep your machine on and awake so an expert can work once they pick it up.";
     case "connected":
-      return `${expertName ?? "An expert"} is working on your machine right now, within the scopes you approved. Every action is in the log below. Feel free to step away (keep the machine awake); check back whenever you like.`;
+      return `${connectedSubject(expertName, profile)} is working on your machine right now, within the scopes you approved. Every action is in the log below. Feel free to step away (keep the machine awake); check back whenever you like.`;
     case "ended":
       return "This session has ended and all expert access is revoked.";
     case "idle":
       return "No expert session is active. Call request_expert_help to start one.";
   }
+}
+
+/**
+ * The subject of the connected status line. With a complete roster profile it
+ * reads "Rohit Jain (Senior software engineer, ★ 4.8, 12 fixes delivered)";
+ * any missing field drops the whole parenthetical and falls back to the plain
+ * name, so the copy never shows "undefined".
+ */
+function connectedSubject(expertName?: string, profile?: PublicExpertProfile): string {
+  const name = profile?.name ?? expertName ?? "An expert";
+  const hasDetails =
+    !!profile &&
+    typeof profile.role === "string" &&
+    profile.role.length > 0 &&
+    typeof profile.rating === "number" &&
+    Number.isFinite(profile.rating) &&
+    typeof profile.fixesDelivered === "number" &&
+    Number.isFinite(profile.fixesDelivered);
+  if (!hasDetails) return name;
+  return `${name} (${profile.role}, ★ ${profile.rating}, ${profile.fixesDelivered} fixes delivered)`;
 }
 
 /** Confirmation returned by end_session. */

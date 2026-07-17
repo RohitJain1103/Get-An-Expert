@@ -55,6 +55,38 @@ describe("statusMessage", () => {
   });
 });
 
+describe("statusMessage with an expert profile", () => {
+  const rohit = {
+    id: "rohit",
+    name: "Rohit Jain",
+    photo: "/experts/rohit.jpg",
+    role: "Senior software engineer",
+    companies: [],
+    tag: "Code, payments & APIs",
+    rating: 4.8,
+    fixesDelivered: 12,
+  };
+
+  it("names the role, rating, and fixes delivered when connected", () => {
+    expect(statusMessage("connected", "Rohit Jain", rohit)).toBe(
+      "Rohit Jain (Senior software engineer, ★ 4.8, 12 fixes delivered) is working on your machine right now, within the scopes you approved. Every action is in the log below. Feel free to step away (keep the machine awake); check back whenever you like.",
+    );
+  });
+
+  it("uses the profile name even if the passed expertName differs", () => {
+    const msg = statusMessage("connected", "stale name", rohit);
+    expect(msg).toContain("Rohit Jain (Senior software engineer");
+  });
+
+  it("falls back to the name-only line for an incomplete profile, never rendering undefined", () => {
+    // A profile missing role/rating/fixes must never leak "undefined" into the copy.
+    const partial = { name: "Rohit Jain" } as never;
+    const line = statusMessage("connected", "Rohit Jain", partial);
+    expect(line).not.toContain("undefined");
+    expect(line).toBe(statusMessage("connected", "Rohit Jain"));
+  });
+});
+
 describe("END_SESSION_MESSAGE", () => {
   it("confirms all access is revoked", () => {
     expect(END_SESSION_MESSAGE).toBe("Session ended. All expert access is revoked.");

@@ -20,7 +20,12 @@ import { PtyBridge } from "./pty";
 import { DataChannelTransport } from "./webrtc/transport";
 import { NodePeer } from "./webrtc/peer";
 import type { RawChannel } from "./webrtc/channel";
-import type { ActivityEntry, BrowserController, SessionSummary } from "./types";
+import type {
+  ActivityEntry,
+  BrowserController,
+  PublicExpertProfile,
+  SessionSummary,
+} from "./types";
 
 export interface AgentSessionOptions {
   relayUrl: string;
@@ -36,8 +41,9 @@ export interface AgentSessionOptions {
   relayClientFactory?: (relayUrl: string) => RelayConnection;
   /** Notified whenever the live activity log gains an entry. */
   onActivity?: (entry: ActivityEntry) => void;
-  /** Notified when the expert connects / disconnects / the session ends. */
-  onExpertJoined?: (expertName: string) => void;
+  /** Notified when the expert connects / disconnects / the session ends. The
+   * profile is present when a roster expert claimed the session. */
+  onExpertJoined?: (expertName: string, profile?: PublicExpertProfile) => void;
   onSessionEnded?: (reason: string | undefined) => void;
   log?: (line: string) => void;
 }
@@ -69,6 +75,7 @@ export class AgentSession {
 
   #state: SessionState = "idle";
   #expertName?: string;
+  #expertProfile?: PublicExpertProfile;
   #peer?: Peer;
   #expertServer?: McpServer;
   #ptys = new Set<PtyBridge>();
@@ -111,6 +118,12 @@ export class AgentSession {
     return this.#expertName;
   }
 
+  /** The connected expert's public profile, when a roster expert claimed the
+   * session. Undefined while waiting, after they leave, or on older relays. */
+  get expertProfile(): PublicExpertProfile | undefined {
+    return this.#expertProfile;
+  }
+
   /** Hosted chat-page URL for this session, or undefined when the relay
    * didn't mint a customer token (old relays) or registration hasn't run. */
   get chatUrl(): string | undefined {
@@ -123,7 +136,7 @@ export class AgentSession {
   /** Wire the relay events once (shared by requestExpert and resumeExpert). */
   #wireRelayEvents(): void {
     this.#relay.on({
-      onExpertJoined: (name) => this.#onExpertJoined(name),
+      onExpertJoined: (name, profile) => this.#onExpertJoined(name, profile),
       onExpertLeft: () => this.#onExpertLeft(),
       onSignal: (payload) => this.#peer?.handleSignal(payload),
       onSessionEnded: (reason) => this.#finish(reason, false),
@@ -224,6 +237,7 @@ export class AgentSession {
     this.#teardownPeer();
     if (this.#state === "connected") {
       this.#expertName = undefined;
+      this.#expertProfile = undefined;
       this.#state = "waiting";
       this.#persistStatus();
     }
@@ -287,6 +301,7 @@ export class AgentSession {
     state: SessionState;
     sessionId?: string;
     expertName?: string;
+    expertProfile?: PublicExpertProfile;
     chatUrl?: string;
     permissions: Grant;
     recentActivity: ActivityEntry[];
@@ -295,6 +310,7 @@ export class AgentSession {
       state: this.#state,
       sessionId: this.#relay.sessionId,
       expertName: this.#expertName,
+      expertProfile: this.#expertProfile,
       chatUrl: this.chatUrl,
       permissions: this.#gate.snapshot(),
       recentActivity: this.#log.entries().slice(-20),
@@ -386,12 +402,13 @@ export class AgentSession {
     }
   }
 
-  #onExpertJoined(name: string): void {
+  #onExpertJoined(name: string, profile?: PublicExpertProfile): void {
     this.#expertName = name;
+    this.#expertProfile = profile;
     this.#state = "connected";
     this.#persistStatus();
     this.#logLine(`expert ${name} joined; establishing peer connection`);
-    this.#opts.onExpertJoined?.(name);
+    this.#opts.onExpertJoined?.(name, profile);
 
     const makePeer =
       this.#opts.peerFactory ??
@@ -441,6 +458,7 @@ export class AgentSession {
   #onExpertLeft(): void {
     this.#logLine("expert left; tearing down peer connection");
     this.#expertName = undefined;
+    this.#expertProfile = undefined;
     this.#teardownPeer();
     if (this.#state === "connected") this.#state = "waiting";
     this.#persistStatus();
