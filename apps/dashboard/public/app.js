@@ -26,6 +26,8 @@ const Viewer = window.GaeViewer;
 const state = {
   ws: null,
   expertName: "",
+  // Roster id the expert picked on the who-are-you grid (null = typed a name).
+  selectedExpertId: null,
   // Auto-reconnect: the relay holds active claims through a grace window and
   // re-attaches on auth, so a transient socket drop must retry — not strand
   // the expert while their P2P session is still alive underneath.
@@ -80,15 +82,82 @@ el("expert-token").addEventListener("keydown", (e) => {
   if (e.key === "Enter") connect();
 });
 
+// Who-are-you picker: fetch the public roster and let the expert pick their
+// face. Picking one sends its id as `expertId` at auth, so the relay adopts
+// that roster identity (name, photo, card) for everyone downstream. Typing a
+// name in the "Someone else" field instead clears any pick.
+loadRoster();
+
+async function loadRoster() {
+  const grid = el("who-grid");
+  try {
+    const res = await fetch("/api/roster");
+    if (!res.ok) throw new Error(`roster ${res.status}`);
+    const roster = await res.json();
+    if (!Array.isArray(roster) || roster.length === 0) {
+      grid.innerHTML = '<div class="who-loading">No experts to pick from.</div>';
+      return;
+    }
+    grid.innerHTML = "";
+    for (const expert of roster) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "who-card";
+      btn.dataset.id = expert.id;
+      btn.innerHTML =
+        `<img class="who-photo" src="${escapeHtml(expert.photo)}" alt="" />` +
+        `<span class="who-name">${escapeHtml(expert.name)}</span>` +
+        `<span class="who-tag">${escapeHtml(expert.tag)}</span>`;
+      btn.addEventListener("click", () => selectExpert(expert));
+      grid.appendChild(btn);
+    }
+  } catch {
+    grid.innerHTML =
+      '<div class="who-loading">Could not load the roster. Type your name below instead.</div>';
+  }
+}
+
+function selectExpert(expert) {
+  state.selectedExpertId = expert.id;
+  // Kept so auth can send a non-empty name: the protocol requires one, and
+  // picking a face clears the free-text field below. The relay's roster
+  // lookup still wins; this is only wire-validity.
+  state.selectedExpertName = expert.name;
+  for (const card of document.querySelectorAll(".who-card")) {
+    card.classList.toggle("selected", card.dataset.id === expert.id);
+  }
+  // Picking a face wins over a typed name: clear the free-text fallback.
+  el("expert-name").value = "";
+  el("gate-error").textContent = "";
+}
+
+// Typing in the fallback field clears any picked face (last action wins).
+el("expert-name").addEventListener("input", () => {
+  if (el("expert-name").value.trim()) {
+    state.selectedExpertId = null;
+    state.selectedExpertName = null;
+    for (const card of document.querySelectorAll(".who-card")) {
+      card.classList.remove("selected");
+    }
+  }
+});
+
 function connect() {
   const url = el("relay-url").value.trim().replace(/^http/, "ws").replace(/\/+$/, "");
   const token = el("expert-token").value.trim();
   const name = el("expert-name").value.trim();
+  const expertId = state.selectedExpertId;
   el("gate-error").textContent = "";
-  if (!token || !name) {
-    el("gate-error").textContent = "Enter your token and name.";
+  if (!token) {
+    el("gate-error").textContent = "Enter your token.";
     return;
   }
+  if (!expertId && !name) {
+    el("gate-error").textContent = "Pick who you are, or type a name.";
+    return;
+  }
+  // Provisional label until auth-ok returns the authoritative name (the roster
+  // name when a face was picked). A typed name is used verbatim.
   state.expertName = name;
   state.connParams = { url, token, name };
   state.authFailed = false;
@@ -114,7 +183,12 @@ function openSocket() {
   state.ws = ws;
 
   ws.addEventListener("open", () => {
-    ws.send(JSON.stringify({ type: "auth", token, name }));
+    // expertAuth requires a non-empty name even when expertId is set; when a
+    // face was picked the free-text field is empty by design, so fall back to
+    // the roster name. The relay adopts the roster identity either way.
+    const auth = { type: "auth", token, name: name || state.selectedExpertName || "Expert" };
+    if (expertId) auth.expertId = expertId;
+    ws.send(JSON.stringify(auth));
   });
   ws.addEventListener("message", (ev) => {
     let msg;
@@ -167,6 +241,10 @@ function relaySend(msg) {
 function handleRelay(msg) {
   switch (msg.type) {
     case "auth-ok":
+      // Adopt the authoritative name from the relay: when a roster face was
+      // picked this is the profile name (e.g. "Rohit Jain"), which the queue's
+      // mine-detection compares against. Falls back to the typed name.
+      if (msg.name) state.expertName = msg.name;
       state.reconnectAttempts = 0;
       setConn("online", `Connected as ${state.expertName}`);
       el("gate").classList.add("hidden");
@@ -199,6 +277,23 @@ function handleRelay(msg) {
       break;
     case "session-ended":
       onSessionEnded(msg.sessionId, msg.reason, msg.durationMs);
+      break;
+    case "issue-updated":
+      onIssueUpdated(msg);
+      break;
+    case "edit-rejected":
+      onEditRejected(msg);
+      break;
+    case "delivery-accepted":
+      setDeliverStatus("Accepted. Nice work.", "ok");
+      break;
+    case "delivery-declined":
+      setDeliverStatus("Not solved yet. The customer is typing what's missing.", "neutral");
+      break;
+    case "rated":
+      if (typeof msg.rating === "number") {
+        setDeliverStatus(`Customer rated this session ${msg.rating}/5`, "rated");
+      }
       break;
   }
 }
@@ -310,6 +405,7 @@ function onClaimed(sessionId) {
     customerName: session?.customerName ?? "Customer",
     projectDir: session?.projectDir ?? "",
     permissions: session?.permissions,
+    issue: session?.issue,
     status: "active",
     expertName: state.expertName,
   });
@@ -326,7 +422,107 @@ function openWorkspace(session) {
   el("ws-active").classList.remove("hidden");
   el("ws-body").classList.remove("hidden");
   el("ws-title").textContent = `${session.customerName} — ${session.projectDir}`;
+  // Seed the editable issue. baseAt starts undefined: the expert has not seen an
+  // issueEditedAt yet, so a first edit onto a session a customer already edited
+  // is refused (customer always wins) and the toast hands back their version.
+  state.issueText = session.issue || "";
+  state.issueBaseAt = undefined;
+  closeIssueEditor();
+  closeDeliverEditor();
+  setDeliverStatus("", null);
+  renderIssue();
   renderPerms(session);
+}
+
+/* ── Issue editing (expert side; customer always wins on conflict) ──── */
+
+function renderIssue() {
+  const node = el("ws-issue");
+  node.textContent = state.issueText || "";
+  node.title = state.issueText || "";
+  // Only offer Edit / Deliver on a live session, never idle/ended.
+  el("issue-edit-btn").classList.toggle("hidden", !state.activeId);
+  el("deliver-btn").classList.toggle("hidden", !state.activeId);
+}
+
+function openIssueEditor() {
+  if (!state.activeId) return;
+  const input = el("issue-editor-input");
+  input.value = state.issueText || "";
+  el("issue-editor").classList.remove("hidden");
+  input.focus();
+  const end = input.value.length;
+  try {
+    input.setSelectionRange(end, end);
+  } catch {
+    /* ignore */
+  }
+}
+
+function closeIssueEditor() {
+  el("issue-editor").classList.add("hidden");
+}
+
+function saveIssue() {
+  if (!state.activeId) return;
+  const text = el("issue-editor-input").value.trim();
+  closeIssueEditor();
+  if (!text) return; // empty edit: treat as cancel (relay requires 1..2000)
+  relaySend({
+    type: "edit-issue",
+    sessionId: state.activeId,
+    text: text.slice(0, 2000),
+    baseAt: state.issueBaseAt,
+  });
+  // No optimistic update: the issue-updated echo (or an edit-rejected) is the
+  // single render path.
+}
+
+function onIssueUpdated(msg) {
+  if (typeof msg.issue === "string") state.issueText = msg.issue;
+  if (typeof msg.at === "number") state.issueBaseAt = msg.at;
+  renderIssue();
+}
+
+/* ── Deliver (expert marks the work done; customer accepts or declines) ── */
+
+function setDeliverStatus(text, kind) {
+  const node = el("deliver-status");
+  node.textContent = text;
+  node.className = "deliver-status" + (kind ? " " + kind : "");
+}
+
+function openDeliverEditor() {
+  if (!state.activeId) return;
+  closeIssueEditor();
+  el("deliver-input").value = "";
+  el("deliver-editor").classList.remove("hidden");
+  el("deliver-input").focus();
+}
+
+function closeDeliverEditor() {
+  el("deliver-editor").classList.add("hidden");
+}
+
+function sendDeliver() {
+  if (!state.activeId) return;
+  const summary = el("deliver-input").value.trim();
+  closeDeliverEditor();
+  if (!summary) return; // empty: treat as cancel (relay requires 1..2000)
+  relaySend({ type: "deliver", sessionId: state.activeId, summary: summary.slice(0, 2000) });
+  setDeliverStatus("Delivered. Waiting for the customer to confirm.", "neutral");
+}
+
+function onEditRejected(msg) {
+  // The customer edited more recently; adopt their version and its timestamp so
+  // a retry carries a fresh baseAt, then show them what changed.
+  if (typeof msg.issue === "string") state.issueText = msg.issue;
+  if (typeof msg.at === "number") state.issueBaseAt = msg.at;
+  renderIssue();
+  showToast(
+    msg.reason ||
+      "The customer updated this while you were editing; here is their version.",
+  );
 }
 
 function renderPerms(session) {
@@ -580,6 +776,15 @@ function status(msg) {
   const t = state.terminals.find((x) => x.term);
   if (t) t.term.write(`\r\n\x1b[90m» ${msg}\x1b[0m\r\n`);
   else console.log("[get-an-expert]", msg);
+}
+
+let toastTimer = null;
+function showToast(msg) {
+  const node = el("toast");
+  node.textContent = msg;
+  node.classList.remove("hidden");
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => node.classList.add("hidden"), 6000);
 }
 
 /* ── Bottom panel tabs ────────────────────────────────────────────── */
@@ -1275,12 +1480,38 @@ el("end-btn").addEventListener("click", () => {
   onSessionEnded(sessionId, "you ended the session", null);
 });
 
+el("issue-edit-btn").addEventListener("click", openIssueEditor);
+el("issue-save-btn").addEventListener("click", saveIssue);
+el("issue-cancel-btn").addEventListener("click", closeIssueEditor);
+el("issue-editor-input").addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    closeIssueEditor();
+  }
+});
+
+el("deliver-btn").addEventListener("click", openDeliverEditor);
+el("deliver-send-btn").addEventListener("click", sendDeliver);
+el("deliver-cancel-btn").addEventListener("click", closeDeliverEditor);
+el("deliver-input").addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    closeDeliverEditor();
+  }
+});
+
 function onSessionEnded(sessionId, reason, durationMs) {
   if (sessionId !== state.activeId) return;
   status(`Session ended (${reason ?? "done"}). Duration: ${formatDuration(durationMs)}. All access revoked.`);
   teardownPeer();
   resetWorkspace();
   state.activeId = null;
+  state.issueText = "";
+  state.issueBaseAt = undefined;
+  closeIssueEditor();
+  closeDeliverEditor();
+  setDeliverStatus("", null);
+  renderIssue();
   el("ws-active").classList.add("hidden");
   el("ws-body").classList.add("hidden");
   el("ws-idle").classList.remove("hidden");

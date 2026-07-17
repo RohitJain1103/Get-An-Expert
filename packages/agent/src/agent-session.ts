@@ -10,9 +10,10 @@ import {
   type ResumeRecord,
 } from "@get-an-expert/core/relay";
 import { buildChatUrl } from "./chat-url";
+import { buildContextMarkdown, type ContextInput } from "./context";
 import { createExpertServer } from "./expert-server";
 import { PermissionGate, type Grant, type Scope } from "./permissions";
-import { RelayClient, type RelayConnection } from "./relay-client";
+import { RelayClient, type ContextManifest, type RelayConnection } from "./relay-client";
 import { SessionLog } from "./session";
 import { AgentTools } from "./tools";
 import { AutoBrowserController } from "./browser-auto";
@@ -20,7 +21,12 @@ import { PtyBridge } from "./pty";
 import { DataChannelTransport } from "./webrtc/transport";
 import { NodePeer } from "./webrtc/peer";
 import type { RawChannel } from "./webrtc/channel";
-import type { ActivityEntry, BrowserController, SessionSummary } from "./types";
+import type {
+  ActivityEntry,
+  BrowserController,
+  PublicExpertProfile,
+  SessionSummary,
+} from "./types";
 
 export interface AgentSessionOptions {
   relayUrl: string;
@@ -36,8 +42,9 @@ export interface AgentSessionOptions {
   relayClientFactory?: (relayUrl: string) => RelayConnection;
   /** Notified whenever the live activity log gains an entry. */
   onActivity?: (entry: ActivityEntry) => void;
-  /** Notified when the expert connects / disconnects / the session ends. */
-  onExpertJoined?: (expertName: string) => void;
+  /** Notified when the expert connects / disconnects / the session ends. The
+   * profile is present when a roster expert claimed the session. */
+  onExpertJoined?: (expertName: string, profile?: PublicExpertProfile) => void;
   onSessionEnded?: (reason: string | undefined) => void;
   log?: (line: string) => void;
 }
@@ -69,6 +76,10 @@ export class AgentSession {
 
   #state: SessionState = "idle";
   #expertName?: string;
+  #expertProfile?: PublicExpertProfile;
+  /** The last delivered fix and whether the customer confirmed it, surfaced in
+   * expert_status. Undefined until the expert first delivers. */
+  #lastDelivery?: { summary: string; accepted?: boolean };
   #peer?: Peer;
   #expertServer?: McpServer;
   #ptys = new Set<PtyBridge>();
@@ -76,6 +87,9 @@ export class AgentSession {
   #contextWritten = false;
   /** The issue text and request time, kept so the resume record can be rebuilt. */
   #issue?: string;
+  /** The inputs the CONTEXT.md was built from, kept so an issue edit can rebuild
+   * it in place (patching just the issue) without re-reading the transcript. */
+  #contextInput?: ContextInput;
   #requestedAt = 0;
   readonly #browser: BrowserController;
 
@@ -111,6 +125,18 @@ export class AgentSession {
     return this.#expertName;
   }
 
+  /** The connected expert's public profile, when a roster expert claimed the
+   * session. Undefined while waiting, after they leave, or on older relays. */
+  get expertProfile(): PublicExpertProfile | undefined {
+    return this.#expertProfile;
+  }
+
+  /** The last delivered fix (summary + whether the customer confirmed it), for
+   * expert_status. Undefined until the expert delivers. */
+  get lastDelivery(): { summary: string; accepted?: boolean } | undefined {
+    return this.#lastDelivery;
+  }
+
   /** Hosted chat-page URL for this session, or undefined when the relay
    * didn't mint a customer token (old relays) or registration hasn't run. */
   get chatUrl(): string | undefined {
@@ -123,9 +149,13 @@ export class AgentSession {
   /** Wire the relay events once (shared by requestExpert and resumeExpert). */
   #wireRelayEvents(): void {
     this.#relay.on({
-      onExpertJoined: (name) => this.#onExpertJoined(name),
+      onExpertJoined: (name, profile) => this.#onExpertJoined(name, profile),
       onExpertLeft: () => this.#onExpertLeft(),
       onSignal: (payload) => this.#peer?.handleSignal(payload),
+      onIssueUpdated: (issue) => this.#onIssueUpdated(issue),
+      onDelivered: (summary) => this.#onDelivered(summary),
+      onDeliveryAccepted: () => this.#onDeliveryResponse(true),
+      onDeliveryDeclined: () => this.#onDeliveryResponse(false),
       onSessionEnded: (reason) => this.#finish(reason, false),
       onReconnecting: (attempt) => this.#onReconnecting(attempt),
       onResumed: (status) => this.#onResumed(status),
@@ -142,8 +172,13 @@ export class AgentSession {
     });
   }
 
-  /** Register the session with the relay and wait for an expert to claim it. */
-  async requestExpert(issue?: string): Promise<{ sessionId: string }> {
+  /** Register the session with the relay and wait for an expert to claim it. The
+   * context manifest (truthful CONTEXT.md counts) rides along on the register so
+   * the customer chat page can show it as chips. */
+  async requestExpert(
+    issue?: string,
+    contextManifest?: ContextManifest,
+  ): Promise<{ sessionId: string }> {
     if (this.#state !== "idle") {
       throw new Error(`Cannot request an expert from state "${this.#state}"`);
     }
@@ -154,6 +189,7 @@ export class AgentSession {
       customerName: this.#opts.customerName,
       projectDir: this.#opts.projectDir,
       issue,
+      contextManifest,
     });
     this.#state = "waiting";
     this.#startedAt = Date.now();
@@ -223,8 +259,9 @@ export class AgentSession {
     // terminal on it) is peer-to-peer and independent of this relay socket —
     // the relay only carries signaling and lifecycle. Killing the peer here
     // was what closed the expert's terminal mid-command on every transient
-    // relay blip. Keep the session as-is; the relay holds the claim through
-    // its grace window, and we resume the socket underneath a live peer.
+    // relay blip. Keep the session as-is (expert name and profile included);
+    // the relay holds the claim through its grace window, and we resume the
+    // socket underneath a live peer.
     if (attempt === 1 && this.#state === "connected") {
       this.#handleActivity({
         at: Date.now(),
@@ -303,7 +340,10 @@ export class AgentSession {
     state: SessionState;
     sessionId?: string;
     expertName?: string;
+    expertProfile?: PublicExpertProfile;
     chatUrl?: string;
+    issue?: string;
+    lastDelivery?: { summary: string; accepted?: boolean };
     permissions: Grant;
     recentActivity: ActivityEntry[];
   } {
@@ -311,7 +351,10 @@ export class AgentSession {
       state: this.#state,
       sessionId: this.#relay.sessionId,
       expertName: this.#expertName,
+      expertProfile: this.#expertProfile,
       chatUrl: this.chatUrl,
+      issue: this.#issue,
+      lastDelivery: this.#lastDelivery,
       permissions: this.#gate.snapshot(),
       recentActivity: this.#log.entries().slice(-20),
     };
@@ -336,6 +379,56 @@ export class AgentSession {
       kind: "context",
       summary: "Session context written: .get-an-expert/CONTEXT.md",
     });
+  }
+
+  /**
+   * Assemble and write CONTEXT.md from its source inputs, keeping those inputs
+   * so a later issue edit can rebuild the file in place. The caller (index.ts)
+   * uses this instead of building the markdown itself, so the session owns the
+   * one path that produces CONTEXT.md.
+   */
+  async writeContextFrom(input: ContextInput): Promise<void> {
+    this.#contextInput = input;
+    this.#issue = input.issue;
+    await this.writeContext(buildContextMarkdown(input).markdown);
+  }
+
+  /**
+   * The issue was edited (customer or expert). Adopt the new text and, if
+   * CONTEXT.md was already assembled, rebuild it in place so the expert's
+   * hand-off file always matches the edited issue. Fires before the session is
+   * claimed too (a waiting-state customer edit), in which case there is no file
+   * yet and we only update the tracked issue.
+   */
+  #onIssueUpdated(issue: string): void {
+    this.#issue = issue;
+    if (!this.#contextInput) {
+      this.#persistStatus();
+      return;
+    }
+    this.#contextInput = { ...this.#contextInput, issue };
+    this.#logLine("issue edited; rebuilding CONTEXT.md");
+    void this.writeContext(buildContextMarkdown(this.#contextInput).markdown).catch((err) =>
+      this.#logLine(`context rebuild failed: ${err instanceof Error ? err.message : String(err)}`),
+    );
+  }
+
+  /** The expert delivered a fix. Record the summary so expert_status can report
+   * it; a fresh deliver replaces the previous one and clears any prior response. */
+  #onDelivered(summary: string): void {
+    this.#lastDelivery = { summary };
+    this.#logLine("expert delivered a fix");
+    this.#persistStatus();
+  }
+
+  /** The customer accepted or declined the delivered fix. Accepting does not end
+   * the session (decision 2026-07-17); it only marks the delivery confirmed. */
+  #onDeliveryResponse(accepted: boolean): void {
+    if (this.#lastDelivery) {
+      this.#lastDelivery = { ...this.#lastDelivery, accepted };
+    }
+    this.#logLine(accepted ? "customer confirmed the fix" : "customer declined the delivery");
+    this.#persistStatus();
   }
 
   /**
@@ -402,16 +495,17 @@ export class AgentSession {
     }
   }
 
-  #onExpertJoined(name: string): void {
+  #onExpertJoined(name: string, profile?: PublicExpertProfile): void {
     // Defensive: a fresh expert-joined should only arrive when there's no live
     // peer (a prior expert-left tore it down). If one somehow still exists,
     // drop it first so a new signaling exchange can't leak the old peer.
     if (this.#peer) this.#teardownPeer();
     this.#expertName = name;
+    this.#expertProfile = profile;
     this.#state = "connected";
     this.#persistStatus();
     this.#logLine(`expert ${name} joined; establishing peer connection`);
-    this.#opts.onExpertJoined?.(name);
+    this.#opts.onExpertJoined?.(name, profile);
 
     const makePeer =
       this.#opts.peerFactory ??
@@ -461,6 +555,7 @@ export class AgentSession {
   #onExpertLeft(): void {
     this.#logLine("expert left; tearing down peer connection");
     this.#expertName = undefined;
+    this.#expertProfile = undefined;
     this.#teardownPeer();
     if (this.#state === "connected") this.#state = "waiting";
     this.#persistStatus();

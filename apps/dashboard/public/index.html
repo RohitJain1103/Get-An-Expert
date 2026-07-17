@@ -31,8 +31,14 @@
     <label>Expert token
       <input id="expert-token" type="password" placeholder="paste your token" spellcheck="false" />
     </label>
-    <label>Your name
-      <input id="expert-name" type="text" placeholder="e.g. Priya Sharma" spellcheck="false" />
+    <div class="who-block">
+      <span class="who-label">Who are you?</span>
+      <div class="who-grid" id="who-grid">
+        <div class="who-loading">Loading experts…</div>
+      </div>
+    </div>
+    <label>Someone else
+      <input id="expert-name" type="text" placeholder="type your name instead" spellcheck="false" />
     </label>
     <button id="connect-btn" class="primary">Connect</button>
     <div class="gate-error" id="gate-error"></div>
@@ -53,9 +59,31 @@
       <div class="ws-active hidden" id="ws-active">
         <span class="dot amber"></span>
         <span id="ws-title">—</span>
+        <span class="ws-issue" id="ws-issue"></span>
+        <button id="issue-edit-btn" class="small ghost hidden">Edit issue</button>
+        <button id="deliver-btn" class="small hidden">Deliver</button>
+        <span class="deliver-status" id="deliver-status"></span>
         <span class="perms" id="ws-perms"></span>
         <span class="spacer"></span>
         <button id="end-btn" class="danger small">End session</button>
+      </div>
+    </div>
+
+    <div class="issue-editor hidden" id="issue-editor">
+      <textarea id="issue-editor-input" rows="3" maxlength="2000" aria-label="Edit the customer's issue"></textarea>
+      <div class="issue-editor-acts">
+        <button id="issue-save-btn" class="small">Save</button>
+        <button id="issue-cancel-btn" class="small ghost">Cancel</button>
+      </div>
+    </div>
+
+    <div class="issue-editor hidden" id="deliver-editor">
+      <textarea id="deliver-input" rows="3" maxlength="2000"
+        placeholder="What did you change? The customer sees this word for word."
+        aria-label="What you delivered"></textarea>
+      <div class="issue-editor-acts">
+        <button id="deliver-send-btn" class="small">Send</button>
+        <button id="deliver-cancel-btn" class="small ghost">Cancel</button>
       </div>
     </div>
 
@@ -112,6 +140,8 @@
     </div>
   </section>
 </div>
+
+<div class="toast hidden" id="toast" role="status" aria-live="polite"></div>
 
 <script src="vendor/xterm.js"></script>
 <script src="vendor/addon-fit.js"></script>

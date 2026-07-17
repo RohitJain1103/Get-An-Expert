@@ -41,11 +41,24 @@ export type ChatMessage = z.infer<typeof chatMessageSchema>;
 
 /* ── Messages the agent (customer machine) may send ─────────────── */
 
+/**
+ * Truthful, count-bearing description of what the expert's CONTEXT.md contains,
+ * surfaced as chips on the customer chat page. Each count is optional: the
+ * customer renders a chip only for a field that is actually a number, so an
+ * absent count never fabricates a figure.
+ */
+export const contextManifestSchema = z.object({
+  conversationMessages: z.number().int().min(0).optional(),
+  secretsRedacted: z.number().int().min(0).optional(),
+});
+export type ContextManifest = z.infer<typeof contextManifestSchema>;
+
 const agentRegister = z.object({
   type: z.literal("register"),
   customerName: z.string().min(1).max(120),
   projectDir: z.string().min(1).max(500),
   issue: z.string().max(2000).optional(),
+  contextManifest: contextManifestSchema.optional(),
 });
 
 /**
@@ -92,6 +105,10 @@ const expertAuth = z.object({
   type: z.literal("auth"),
   token: z.string().min(1).max(200),
   name: z.string().min(1).max(120),
+  // Self-selected roster identity (org-trust decision 2026-07-17): the shared
+  // token stays unchanged; the expert picks who they are at login and the
+  // relay adopts that profile. Unknown ids fall back to the declared name.
+  expertId: z.string().min(1).max(40).optional(),
 });
 
 const expertClaim = z.object({
@@ -122,6 +139,29 @@ const expertEnd = z.object({
   reason: z.string().max(200).optional(),
 });
 
+/**
+ * Edit the shared issue text from the expert side. `baseAt` is the
+ * `issueEditedAt` the expert last saw; the server rejects the edit when a
+ * customer has edited more recently (customer always wins, see server.ts).
+ */
+const expertEditIssue = z.object({
+  type: z.literal("edit-issue"),
+  sessionId: z.string().min(1).max(80),
+  text: z.string().min(1).max(2000),
+  baseAt: z.number().optional(),
+});
+
+/**
+ * Mark the claimed work delivered. `summary` is the plain-language "what I
+ * changed" the customer reads word for word; the relay redacts it (same
+ * treatment as chat) before storing or fanning it out.
+ */
+const expertDeliver = z.object({
+  type: z.literal("deliver"),
+  sessionId: z.string().min(1).max(80),
+  summary: z.string().min(1).max(2000),
+});
+
 export const expertMessageSchema = z.discriminatedUnion("type", [
   expertAuth,
   expertClaim,
@@ -129,6 +169,8 @@ export const expertMessageSchema = z.discriminatedUnion("type", [
   expertSignal,
   expertChat,
   expertEnd,
+  expertEditIssue,
+  expertDeliver,
 ]);
 export type ExpertMessage = z.infer<typeof expertMessageSchema>;
 
@@ -145,9 +187,51 @@ const customerChat = z.object({
   text: z.string().min(1).max(2000),
 });
 
+/**
+ * Edit the shared issue text from the customer side. The socket's hello
+ * already bound it to a session, so no sessionId is needed. Customer edits are
+ * never rejected (customer always wins, see server.ts).
+ */
+const customerEditIssue = z.object({
+  type: z.literal("edit-issue"),
+  text: z.string().min(1).max(2000),
+});
+
+/**
+ * Respond to a delivered fix. `accepted` true is "Yes, that solved it" (the
+ * payoff screen); false is a blame-free "Not yet" that reopens working state.
+ * Accepting does NOT end the session or revoke access (decision 2026-07-17).
+ */
+const customerDeliveryResponse = z.object({
+  type: z.literal("delivery-response"),
+  accepted: z.boolean(),
+});
+
+/**
+ * Optional, one-time session rating, valid only after an accepted delivery.
+ * Sent to the expert as an event; never persisted or aggregated anywhere
+ * (decision 2026-07-17).
+ */
+const customerRate = z.object({
+  type: z.literal("rate"),
+  rating: z.number().int().min(1).max(5),
+});
+
+/**
+ * End the session from the customer side. No fields: the socket's hello already
+ * bound it to a session. The relay ends it exactly like an expert end-session.
+ */
+const customerEnd = z.object({
+  type: z.literal("end"),
+});
+
 export const customerMessageSchema = z.discriminatedUnion("type", [
   customerHello,
   customerChat,
+  customerEditIssue,
+  customerDeliveryResponse,
+  customerRate,
+  customerEnd,
 ]);
 export type CustomerMessage = z.infer<typeof customerMessageSchema>;
 

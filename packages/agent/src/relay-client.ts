@@ -1,11 +1,25 @@
 import WebSocket from "ws";
 import type { Grant } from "./permissions";
+import type { PublicExpertProfile } from "./types";
 
 export interface RelayClientEvents {
-  onExpertJoined?: (expertName: string) => void;
+  /** The relay sends the expert's display name and, when the session is claimed
+   * by a roster expert, their public profile (absent on older relays). */
+  onExpertJoined?: (expertName: string, profile?: PublicExpertProfile) => void;
   onExpertLeft?: () => void;
   onSignal?: (payload: unknown) => void;
   onSessionEnded?: (reason: string | undefined) => void;
+  /** The shared issue text was edited (by the customer or the expert). The
+   * agent rebuilds CONTEXT.md so the hand-off file reflects the edit. */
+  onIssueUpdated?: (issue: string) => void;
+  /** The expert marked the work delivered, with the plain-language summary the
+   * customer sees. */
+  onDelivered?: (summary: string) => void;
+  /** The customer accepted the delivered fix ("Yes, that solved it"). */
+  onDeliveryAccepted?: () => void;
+  /** The customer declined the delivered fix ("Not yet"). Blame-free: the
+   * expert can deliver again after more work. */
+  onDeliveryDeclined?: () => void;
   /** The connection closed for good (intentional end, or never registered). */
   onClose?: () => void;
   /** A reconnect attempt is starting after an unexpected drop. */
@@ -16,10 +30,19 @@ export interface RelayClientEvents {
   onResumeFailed?: () => void;
 }
 
+/** Count-bearing description of the expert's CONTEXT.md, sent at register and
+ * shown to the customer as chips. Structural copy of the relay's shape (apps/relay
+ * is not a workspace dependency of this package). */
+export interface ContextManifest {
+  conversationMessages?: number;
+  secretsRedacted?: number;
+}
+
 export interface RegisterInput {
   customerName: string;
   projectDir: string;
   issue?: string;
+  contextManifest?: ContextManifest;
 }
 
 /** The subset of the relay connection AgentSession depends on (injectable). */
@@ -155,6 +178,7 @@ export class RelayClient implements RelayConnection {
           customerName: first.input.customerName,
           projectDir: first.input.projectDir,
           issue: first.input.issue,
+          contextManifest: first.input.contextManifest,
         });
       } else {
         this.#rawSend(ws, {
@@ -201,10 +225,22 @@ export class RelayClient implements RelayConnection {
         this.#events.onResumeFailed?.();
         return;
       case "expert-joined":
-        this.#events.onExpertJoined?.(msg.expertName);
+        this.#events.onExpertJoined?.(msg.expertName, msg.expert);
         return;
       case "expert-left":
         this.#events.onExpertLeft?.();
+        return;
+      case "issue-updated":
+        if (typeof msg.issue === "string") this.#events.onIssueUpdated?.(msg.issue);
+        return;
+      case "delivered":
+        if (typeof msg.summary === "string") this.#events.onDelivered?.(msg.summary);
+        return;
+      case "delivery-accepted":
+        this.#events.onDeliveryAccepted?.();
+        return;
+      case "delivery-declined":
+        this.#events.onDeliveryDeclined?.();
         return;
       case "signal":
         this.#events.onSignal?.(msg.payload);

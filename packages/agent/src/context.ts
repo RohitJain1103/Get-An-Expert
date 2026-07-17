@@ -56,6 +56,25 @@ export interface ContextInput {
   requestedAt: number;
 }
 
+/** The assembled hand-off file plus the counts the customer chat page renders
+ * as truthful chips. `conversationMessages` counts the dialogue turns actually
+ * rendered into the transcript; `secretsRedacted` is how many secrets the
+ * redactor removed from the whole document. */
+export interface BuiltContext {
+  markdown: string;
+  conversationMessages: number;
+  secretsRedacted: number;
+}
+
+/** Count the dialogue turns transcriptToMarkdown rendered: one per "**User:**"
+ * or "**Assistant:**" section header (line-anchored, so the truncation note and
+ * body prose never match). */
+export function countConversationMessages(transcriptMarkdown?: string): number {
+  if (!transcriptMarkdown) return 0;
+  const matches = transcriptMarkdown.match(/^\*\*(?:User|Assistant):\*\*/gm);
+  return matches ? matches.length : 0;
+}
+
 /** Local state directory shared with the plugin hooks. */
 function stateHome(): string {
   return process.env.GET_AN_EXPERT_HOME?.trim() || join(homedir(), ".get-an-expert");
@@ -211,9 +230,10 @@ export function readProjectOverview(
  * summary, the project overview (omitted when none), and the conversation
  * transcript (with an explicit fallback line when unavailable). The whole
  * document is secret-redacted before it is returned, and a footnote reports
- * how many secrets were removed.
+ * how many secrets were removed. Returns the markdown alongside the two counts
+ * the customer chat page renders as chips.
  */
-export function buildContextMarkdown(input: ContextInput): string {
+export function buildContextMarkdown(input: ContextInput): BuiltContext {
   const parts: string[] = [
     "# Get An Expert — session context",
     [
@@ -239,6 +259,10 @@ export function buildContextMarkdown(input: ContextInput): string {
 
   const { text, redactions } = redactText(parts.join("\n\n"));
   const count = redactions.reduce((n, r) => n + r.count, 0);
-  if (count === 0) return `${text}\n`;
-  return `${text}\n\n_${count} secret${count === 1 ? " was" : "s were"} redacted._\n`;
+  const conversationMessages = countConversationMessages(input.transcriptMarkdown);
+  const markdown =
+    count === 0
+      ? `${text}\n`
+      : `${text}\n\n_${count} secret${count === 1 ? " was" : "s were"} redacted._\n`;
+  return { markdown, conversationMessages, secretsRedacted: count };
 }

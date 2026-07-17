@@ -18,6 +18,7 @@ import {
   type SessionPersistence,
 } from "./persistence";
 import { serveStatic } from "./static";
+import { ROSTER, findExpert, type PublicExpertProfile } from "./roster";
 
 /** Default max age of a queued request before the sweep expires it (72h). */
 export const DEFAULT_MAX_AGE_MS = 72 * 60 * 60 * 1000;
@@ -59,6 +60,8 @@ export interface Relay {
 
 interface ExpertConn {
   name: string;
+  /** The roster profile this expert self-selected at login, if any. */
+  profile?: PublicExpertProfile;
   claimed: Set<string>;
 }
 
@@ -111,6 +114,14 @@ export function createRelay(options: RelayOptions): Relay {
     if (req.url === "/healthz") {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ ok: true, sessions: store.queue().length }));
+      return;
+    }
+    // Public roster of experts, for the customer chat bench and the dashboard
+    // identity picker. Marketing data only: no token or code material lives on
+    // a PublicExpertProfile, so this is safe to serve unauthenticated.
+    if (new URL(req.url ?? "/", "http://relay.local").pathname === "/api/roster") {
+      res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify(ROSTER));
       return;
     }
     if (options.dashboardDir) {
@@ -288,6 +299,26 @@ export function createRelay(options: RelayOptions): Relay {
     if (expertWs) sendTo(expertWs, { type: "chat", sessionId, message });
   }
 
+  /**
+   * Fan an accepted issue edit out to everyone who cares: the customer's agent
+   * (so it rebuilds CONTEXT.md), the claiming expert, and every customer chat
+   * socket (including the editor, since the echo is the single render path). The
+   * issue is already redacted by the time it is stored.
+   */
+  function broadcastIssueUpdated(session: Session): void {
+    const payload = {
+      type: "issue-updated",
+      issue: session.issue ?? "",
+      by: session.issueEditedBy,
+      at: session.issueEditedAt,
+    };
+    const agentWs = agents.get(session.id);
+    if (agentWs) sendTo(agentWs, payload);
+    const expertWs = expertFor(session.id);
+    if (expertWs) sendTo(expertWs, payload);
+    notifyChatSockets(session.id, payload);
+  }
+
   function endSession(sessionId: string, reason: string | undefined, notify: {
     agent?: boolean;
     expert?: boolean;
@@ -382,6 +413,7 @@ export function createRelay(options: RelayOptions): Relay {
           customerName: msg.customerName,
           projectDir: msg.projectDir,
           issue: msg.issue,
+          contextManifest: msg.contextManifest,
         });
         sessionId = session.id;
         agents.set(sessionId, ws);
@@ -498,7 +530,16 @@ export function createRelay(options: RelayOptions): Relay {
           return;
         }
         clearTimeout(authTimer);
-        const fresh: ExpertConn = { name: msg.name, claimed: new Set() };
+        // Roster identity (ours) resolves the display name; the reattach loop
+        // (origin/main) rebinds sessions dropped during a socket blip. They
+        // compose: build the connection with the profile, then reattach using
+        // the RESOLVED name, which is what was stored on the session at claim.
+        const profile = msg.expertId ? findExpert(msg.expertId) : undefined;
+        const fresh: ExpertConn = {
+          name: profile?.name ?? msg.name,
+          profile,
+          claimed: new Set(),
+        };
         experts.set(ws, fresh);
         // Re-attach active sessions this expert dropped within grace: the P2P
         // work never stopped, only the signaling socket needed rebinding.
@@ -508,20 +549,20 @@ export function createRelay(options: RelayOptions): Relay {
         // still their OWN session (name match + reattach refuses anything else).
         for (const sessionId of [...expertGrace.keys()]) {
           const s = store.get(sessionId);
-          if (s?.status !== "active" || s.expertName !== msg.name) continue;
+          if (s?.status !== "active" || s.expertName !== fresh.name) continue;
           if (expertFor(sessionId)) continue; // someone already live on it
           clearExpertGrace(sessionId);
-          store.reattach(sessionId, msg.name);
+          store.reattach(sessionId, fresh.name);
           fresh.claimed.add(sessionId);
           // Silent rebind: the dashboard's RTCPeerConnection is independent of
           // this signaling socket and survives the blip, so we do NOT force a
           // re-handshake (that would tear down a healthy peer). Signaling just
           // resumes on the new socket. The agent is never told anything changed.
-          log(`expert ${msg.name} re-attached to session ${sessionId}`);
+          log(`expert ${fresh.name} re-attached to session ${sessionId}`);
         }
-        sendTo(ws, { type: "auth-ok", name: msg.name });
+        sendTo(ws, { type: "auth-ok", name: fresh.name, expert: profile });
         sendTo(ws, { type: "queue", sessions: store.queue().map(queueEntry) });
-        log(`expert ${msg.name} connected`);
+        log(`expert ${fresh.name} connected`);
         return;
       }
 
@@ -541,7 +582,7 @@ export function createRelay(options: RelayOptions): Relay {
             return;
           }
           try {
-            store.claim(msg.sessionId, conn.name);
+            store.claim(msg.sessionId, conn.name, conn.profile?.id);
           } catch (err) {
             sendTo(ws, {
               type: "claim-failed",
@@ -563,11 +604,16 @@ export function createRelay(options: RelayOptions): Relay {
           });
           const agentWs = agents.get(msg.sessionId);
           if (agentWs) {
-            sendTo(agentWs, { type: "expert-joined", expertName: conn.name });
+            sendTo(agentWs, {
+              type: "expert-joined",
+              expertName: conn.name,
+              expert: conn.profile,
+            });
           }
           notifyChatSockets(msg.sessionId, {
             type: "expert-joined",
             expertName: conn.name,
+            expert: conn.profile,
           });
           broadcastQueue();
           return;
@@ -601,6 +647,53 @@ export function createRelay(options: RelayOptions): Relay {
           if (!conn.claimed.has(msg.sessionId)) return;
           conn.claimed.delete(msg.sessionId);
           endSession(msg.sessionId, msg.reason, { agent: true });
+          return;
+        }
+        case "edit-issue": {
+          if (!conn.claimed.has(msg.sessionId)) return; // not yours to edit
+          const session = store.get(msg.sessionId);
+          if (!session || session.status !== "active") return;
+          if (!allowChat(ws)) return; // rate limited (shares the chat bucket)
+          // Customer always wins: reject an expert edit whose baseAt predates
+          // the customer's most recent edit. A missing baseAt against a live
+          // customer edit is treated as stale (the expert can't prove they saw
+          // it). Expert-over-expert and edits on a fresh issue are last-write-wins.
+          const stale =
+            session.issueEditedBy === "customer" &&
+            session.issueEditedAt !== undefined &&
+            (msg.baseAt === undefined || msg.baseAt < session.issueEditedAt);
+          if (stale) {
+            sendTo(ws, {
+              type: "edit-rejected",
+              reason:
+                "The customer updated this while you were editing; here is their version.",
+              issue: session.issue ?? "",
+              at: session.issueEditedAt,
+              by: session.issueEditedBy,
+            });
+            return;
+          }
+          const { text } = redactText(msg.text);
+          const updated = store.setIssue(msg.sessionId, text, "expert");
+          persist(updated);
+          broadcastIssueUpdated(updated);
+          return;
+        }
+        case "deliver": {
+          if (!conn.claimed.has(msg.sessionId)) return; // not yours to deliver
+          const session = store.get(msg.sessionId);
+          if (!session || session.status !== "active") return;
+          if (!allowChat(ws)) return; // rate limited (shares the chat bucket)
+          // Redact the summary the same way as chat: the customer reads it word
+          // for word, so a stray secret in it must not reach them.
+          const { text } = redactText(msg.summary);
+          const updated = store.setDelivery(msg.sessionId, text);
+          persist(updated);
+          const at = updated.delivery?.at ?? Date.now();
+          const payload = { type: "delivered", summary: text, at };
+          notifyChatSockets(msg.sessionId, payload);
+          const agentWs = agents.get(msg.sessionId);
+          if (agentWs) sendTo(agentWs, payload);
           return;
         }
       }
@@ -682,6 +775,18 @@ export function createRelay(options: RelayOptions): Relay {
           // Seed the live activity feed for a customer who opens (or reopens)
           // the page after the expert has already started working.
           activity: session.activity.slice(-50),
+          // Expert card when claimed, the full bench always, and the granted
+          // scopes + current issue so a reload restores the whole chat state.
+          expert: session.expertId ? findExpert(session.expertId) : undefined,
+          bench: ROSTER,
+          permissions: session.permissions,
+          issue: session.issue,
+          issueEditedAt: session.issueEditedAt,
+          issueEditedBy: session.issueEditedBy,
+          contextManifest: session.contextManifest,
+          // The whole delivery record, so a reload restores the delivered card
+          // (unresponded) or the accepted screen (accepted).
+          delivery: session.delivery,
         });
         log(`customer chat socket joined session ${sessionId}`);
         return;
@@ -700,6 +805,69 @@ export function createRelay(options: RelayOptions): Relay {
           }
           if (!allowChat(ws)) return; // rate limited
           acceptChat(sessionId, "customer", session.customerName, msg.text);
+          return;
+        }
+        case "edit-issue": {
+          const session = store.get(sessionId);
+          if (!session || session.status === "ended") return; // gone/ended: refuse silently
+          if (!allowChat(ws)) return; // rate limited (shares the chat bucket)
+          // Customer edits are never rejected; they set the new baseline that a
+          // concurrent expert edit is measured against.
+          const { text } = redactText(msg.text);
+          const updated = store.setIssue(sessionId, text, "customer");
+          persist(updated);
+          broadcastIssueUpdated(updated);
+          return;
+        }
+        case "delivery-response": {
+          const session = store.get(sessionId);
+          if (!session || session.status !== "active") return;
+          if (!allowChat(ws)) return; // rate limited (shares the chat bucket)
+          let updated: Session;
+          try {
+            updated = store.respondDelivery(sessionId, msg.accepted);
+          } catch {
+            return; // no delivery / already responded: ignore silently
+          }
+          // Accepting does NOT end the session or revoke access (decision
+          // 2026-07-17). Just persist the outcome and fan it out.
+          persist(updated);
+          const at = updated.delivery?.respondedAt ?? Date.now();
+          const payload = {
+            type: msg.accepted ? "delivery-accepted" : "delivery-declined",
+            at,
+          };
+          const agentWs = agents.get(sessionId);
+          if (agentWs) sendTo(agentWs, payload);
+          const expertWs = expertFor(sessionId);
+          if (expertWs) sendTo(expertWs, payload);
+          notifyChatSockets(sessionId, payload);
+          return;
+        }
+        case "rate": {
+          const session = store.get(sessionId);
+          if (!session || session.status !== "active") return;
+          if (!allowChat(ws)) return; // rate limited (shares the chat bucket)
+          try {
+            store.setRating(sessionId, msg.rating);
+          } catch {
+            return; // rate before accept / double-rate: ignore silently
+          }
+          // The rating is a fire-once event to the claiming expert only: never
+          // persisted, never aggregated, never shown to other chat sockets
+          // (decision 2026-07-17).
+          const expertWs = expertFor(sessionId);
+          if (expertWs) sendTo(expertWs, { type: "rated", rating: msg.rating });
+          return;
+        }
+        case "end": {
+          // The customer ends their own session: same fan-out and teardown as an
+          // expert end-session (agent + claiming expert + all chat sockets get
+          // session-ended; store.end + persistence removal).
+          endSession(sessionId, "customer ended the session", {
+            agent: true,
+            expert: true,
+          });
           return;
         }
       }
