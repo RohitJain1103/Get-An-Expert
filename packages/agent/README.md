@@ -2,7 +2,7 @@
 
 **On-demand expert assistance where the expert works directly on your machine — through scoped, consent-based, revocable access.**
 
-You're stuck on a bug in Claude Code, Codex, Cursor, or Windsurf. Get An Expert brings a real human expert into your session. They don't screen-share and talk you through keystrokes, and they don't clone your repo to reproduce the bug on their machine. They connect to *your* machine and work in the exact environment where the bug lives — reading files, running commands, checking the browser — inside the scopes you approve, with a live log of every action, and you can revoke access at any time.
+You're stuck — on a bug, or just want a second pair of eyes — in Claude Code, Codex, Cursor, or Windsurf. Get An Expert brings a real human expert into your session. They don't screen-share and talk you through keystrokes, and they don't clone your repo to reproduce the bug on their machine. They connect to *your* machine and work in the exact environment where the bug lives — reading files, running commands, checking the browser — inside the scopes you approve, with a live log of every action, and you can revoke access at any time.
 
 This package is the **Get An Expert agent**: an MCP server that runs inside your AI coding tool.
 
@@ -68,7 +68,7 @@ Plus MCP tools: `list_files`, `read_file`, `write_file`, `run_command`, `browser
 ## Security model
 
 - **Scoped:** files and terminal are confined to the project directory; path traversal out is refused. Browser access is pinned to the one port you approved.
-- **Consent-based:** the scope prompt is a real MCP elicitation in your own client. If your client can't prompt you, nothing is granted (fail-closed).
+- **Consent-based:** where your client supports it, the scope prompt is a real MCP elicitation. Where it doesn't, the assistant relays a plain-language scope description and your explicit reply in chat grants it instead. Either way, nothing is granted without your explicit approval.
 - **Revocable:** revoking a scope makes the expert's next matching tool call fail immediately.
 - **Per-session:** ending the session revokes all access.
 - **Visible:** you get a live log of every expert action (action + target — never the file contents or command output themselves).

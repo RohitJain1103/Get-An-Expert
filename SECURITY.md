@@ -12,10 +12,12 @@ The agent lets a remote human expert act on your machine to help you fix a bug.
 Because that is powerful, the whole design is built around your consent and
 control:
 
-- **Nothing runs without your approval.** Access is requested inline in your own
-  AI coding tool via MCP elicitation. You approve individual scopes — Files,
-  Terminal, Browser — before anyone connects. If your client can't prompt you,
-  nothing is granted (fail-closed).
+- **Nothing runs without your approval.** You approve individual scopes —
+  Files, Terminal, Browser — before anyone connects. Where your AI coding tool
+  supports MCP elicitation, that approval happens via an inline prompt. Where
+  it doesn't, the assistant relays a plain-language description of the scopes
+  and your explicit reply in chat is what grants them — either way, nothing is
+  granted without an explicit approval from you.
 - **Scoped.** Files and terminal are confined to the project directory; paths
   that escape it are refused. Browser access is pinned to the one localhost port
   you approved.
