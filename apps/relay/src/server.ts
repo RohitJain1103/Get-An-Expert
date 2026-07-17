@@ -267,7 +267,12 @@ export function createRelay(options: RelayOptions): Relay {
 
   function expertFor(sessionId: string): WebSocket | undefined {
     for (const [ws, conn] of experts) {
-      if (conn.claimed.has(sessionId)) return ws;
+      // Skip a claimed-but-dead socket. After a dashboard reconnect the old
+      // socket lingers in the map until its close fires; routing the agent's
+      // answer to it — or treating it as "already live" during reattach, which
+      // would strand the new socket with an empty claim set and drop its
+      // signals — breaks the handshake. Only ever return an OPEN socket.
+      if (conn.claimed.has(sessionId) && ws.readyState === ws.OPEN) return ws;
     }
     return undefined;
   }
@@ -467,6 +472,12 @@ export function createRelay(options: RelayOptions): Relay {
 
     ws.on("close", () => {
       if (!sessionId) return;
+      // Ignore a superseded socket. If the agent already reconnected (a resume
+      // set a newer socket for this session), this stale close — which can fire
+      // up to ~2min late on the heartbeat — must NOT delete the live mapping or
+      // mark the session offline. Only the socket that currently owns the
+      // session may run the offline/grace path.
+      if (agents.get(sessionId) !== ws) return;
       const session = store.get(sessionId);
       if (!session || session.status === "ended") return;
       // The core of the durable inbox: a dropped customer socket no longer ends

@@ -826,6 +826,36 @@ describe("durable inbox", () => {
     expect(relay.store.get(sessionId)?.online).toBe(true);
   });
 
+  it("a superseded agent socket's late close does not strand the resumed socket", async () => {
+    // Reproduces the reconnect race that broke files/terminal on a fresh claim.
+    // Routine relay-WS blips make the agent reconnect with a NEW socket, but the
+    // OLD socket's close can fire much later (on the heartbeat). That stale close
+    // must not delete the live mapping — otherwise the expert's WebRTC offer is
+    // routed to nothing, no answer comes back, and the browser reports
+    // "Peer connection failed" while the session still shows active.
+    const { agent, sessionId, resumeToken } = await registeredAgent();
+    const { expert } = await authedExpert();
+    send(expert, { type: "claim", sessionId });
+    await waitFor(expert, (m) => m.type === "claimed");
+    await waitFor(agent, (m) => m.type === "expert-joined");
+
+    // Agent reconnects (new socket) while the old one is still registered.
+    const agent2 = await connect("/agent");
+    send(agent2, { type: "resume", sessionId, resumeToken });
+    await waitFor(agent2, (m) => m.type === "resumed");
+
+    // The superseded socket finally closes — must be a no-op for routing.
+    agent.close();
+    await waitForClose(agent);
+
+    // The offer still reaches the live (resumed) socket, and it stays online.
+    const offer = { kind: "description", sdpType: "offer", sdp: "v=0" };
+    send(expert, { type: "signal", sessionId, payload: offer });
+    const sig = await waitFor(agent2, (m) => m.type === "signal");
+    expect(sig.payload).toEqual(offer);
+    expect(relay.store.get(sessionId)?.online).toBe(true);
+  });
+
   it("rejects a resume with the wrong token and leaves the socket open to register", async () => {
     const { agent, sessionId } = await registeredAgent();
     agent.close();
