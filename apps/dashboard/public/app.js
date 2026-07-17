@@ -159,7 +159,10 @@ function connect() {
   // Provisional label until auth-ok returns the authoritative name (the roster
   // name when a face was picked). A typed name is used verbatim.
   state.expertName = name;
-  state.connParams = { url, token, name };
+  // Persist expertId too: openSocket() re-reads connParams on every (re)connect,
+  // so the picked roster identity must survive here — and referencing it below
+  // would otherwise throw ReferenceError (it's scoped to connect()).
+  state.connParams = { url, token, name, expertId };
   state.authFailed = false;
   state.reconnectAttempts = 0;
   if (state.reconnectTimer) {
@@ -171,7 +174,7 @@ function connect() {
 }
 
 function openSocket() {
-  const { url, token, name } = state.connParams;
+  const { url, token, name, expertId } = state.connParams;
   let ws;
   try {
     ws = new WebSocket(`${url}/expert`);
