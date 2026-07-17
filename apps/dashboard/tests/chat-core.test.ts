@@ -371,14 +371,14 @@ describe("contextChips", () => {
     ]);
   });
 
-  it("renders a zero count honestly rather than hiding it", () => {
+  it("hides the secrets chip when nothing was redacted", () => {
+    // "0 secrets removed" reads as a warning, not reassurance, so it is omitted.
     expect(
       contextChips({ conversationMessages: 0, secretsRedacted: 0 }),
     ).toEqual([
       "Your agent's summary",
       "This conversation, 0 messages",
       "A short overview of your project",
-      "0 secrets removed",
     ]);
   });
 
