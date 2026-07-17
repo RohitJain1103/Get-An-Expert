@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createPersistence } from "./persistence";
-import { DEFAULT_MAX_AGE_MS, createRelay } from "./server";
+import { DEFAULT_ACTIVE_GRACE_MS, DEFAULT_MAX_AGE_MS, createRelay } from "./server";
 
 const port = Number(process.env.PORT ?? 8787);
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -18,6 +18,14 @@ function resolveMaxAgeMs(): number {
   if (!raw) return DEFAULT_MAX_AGE_MS;
   const ms = Number(raw);
   return Number.isFinite(ms) && ms > 0 ? ms : DEFAULT_MAX_AGE_MS;
+}
+
+/** Grace window before a dropped socket releases an active session's claim. */
+function resolveActiveGraceMs(): number {
+  const raw = process.env.GET_AN_EXPERT_ACTIVE_GRACE_MS;
+  if (!raw) return DEFAULT_ACTIVE_GRACE_MS;
+  const ms = Number(raw);
+  return Number.isFinite(ms) && ms > 0 ? ms : DEFAULT_ACTIVE_GRACE_MS;
 }
 
 // Bind to loopback by default. The relay can grant terminal/file access to a
@@ -63,6 +71,7 @@ const relay = createRelay({
     console.log(`[relay] ${line}`),
   ),
   maxAgeMs: resolveMaxAgeMs(),
+  activeGraceMs: resolveActiveGraceMs(),
   log: (line) => console.log(`[relay] ${line}`),
 });
 

@@ -22,6 +22,9 @@ import { serveStatic } from "./static";
 /** Default max age of a queued request before the sweep expires it (72h). */
 export const DEFAULT_MAX_AGE_MS = 72 * 60 * 60 * 1000;
 
+/** Grace window before a dropped socket releases an ACTIVE session's claim. */
+export const DEFAULT_ACTIVE_GRACE_MS = 3 * 60 * 1000;
+
 export interface RelayOptions {
   /** Tokens that authenticate experts. */
   expertTokens: string[];
@@ -35,6 +38,14 @@ export interface RelayOptions {
   persistence?: SessionPersistence;
   /** Max age of a queued request before it is expired. Defaults to 72h. */
   maxAgeMs?: number;
+  /**
+   * How long an ACTIVE session tolerates a dropped agent or expert socket
+   * before the claim is released. The WebRTC peer is independent of these
+   * sockets and usually survives a relay-WS blip — releasing immediately
+   * guillotined live sessions (the expert's terminal killed mid-command) on
+   * every transient drop. Defaults to 3 minutes.
+   */
+  activeGraceMs?: number;
   /** Called for operational logging. Never receives signal payloads. */
   log?: (line: string) => void;
 }
@@ -65,9 +76,28 @@ export function createRelay(options: RelayOptions): Relay {
   const log = options.log ?? (() => {});
   const persistence = options.persistence ?? new MemoryPersistence();
   const maxAgeMs = options.maxAgeMs ?? DEFAULT_MAX_AGE_MS;
+  const activeGraceMs = options.activeGraceMs ?? DEFAULT_ACTIVE_GRACE_MS;
   const agents = new Map<string, WebSocket>(); // sessionId -> agent socket
   const experts = new Map<WebSocket, ExpertConn>(); // authed experts
   const chatSockets = new Map<string, Set<WebSocket>>(); // sessionId -> customer chat sockets
+  // Pending "the other side dropped" timers for ACTIVE sessions. While one of
+  // these is armed the session stays claimed — the P2P link between expert and
+  // customer keeps working without the relay, so a transient socket drop must
+  // not tear the session down. Cleared on resume/re-attach/re-claim/end.
+  const agentGrace = new Map<string, NodeJS.Timeout>(); // sessionId -> release timer
+  const expertGrace = new Map<string, NodeJS.Timeout>(); // sessionId -> release timer
+
+  function clearAgentGrace(sessionId: string): void {
+    const t = agentGrace.get(sessionId);
+    if (t) clearTimeout(t);
+    agentGrace.delete(sessionId);
+  }
+
+  function clearExpertGrace(sessionId: string): void {
+    const t = expertGrace.get(sessionId);
+    if (t) clearTimeout(t);
+    expertGrace.delete(sessionId);
+  }
 
   /** Mirror a session's durable metadata to storage; never throws into callers. */
   function persist(session: Session | undefined): void {
@@ -122,18 +152,23 @@ export function createRelay(options: RelayOptions): Relay {
   // proxies/load balancers after a few minutes. Ping every interval and drop
   // peers that stop ponging.
   const HEARTBEAT_MS = 30_000;
-  const alive = new WeakSet<WebSocket>();
+  // Three missed pongs (~90s) before terminating: one miss is routine (an
+  // event-loop stall, transient congestion) and single-strike termination
+  // was killing healthy sockets — and with them, live expert sessions.
+  const MAX_MISSED_PONGS = 3;
+  const missedPongs = new WeakMap<WebSocket, number>();
   function trackHeartbeat(ws: WebSocket): void {
-    alive.add(ws);
-    ws.on("pong", () => alive.add(ws));
+    missedPongs.set(ws, 0);
+    ws.on("pong", () => missedPongs.set(ws, 0));
   }
   const heartbeat = setInterval(() => {
     for (const ws of wss.clients) {
-      if (!alive.has(ws)) {
+      const missed = (missedPongs.get(ws) ?? 0) + 1;
+      if (missed > MAX_MISSED_PONGS) {
         ws.terminate();
         continue;
       }
-      alive.delete(ws);
+      missedPongs.set(ws, missed);
       try {
         ws.ping();
       } catch {
@@ -257,6 +292,9 @@ export function createRelay(options: RelayOptions): Relay {
     agent?: boolean;
     expert?: boolean;
   }): void {
+    // An explicit end wins over any pending grace-expiry release.
+    clearAgentGrace(sessionId);
+    clearExpertGrace(sessionId);
     const session = store.end(sessionId, reason);
     if (!session) return;
     const durationMs = (session.endedAt ?? Date.now()) - session.createdAt;
@@ -320,6 +358,9 @@ export function createRelay(options: RelayOptions): Relay {
           }
           sessionId = existing.id;
           agents.set(sessionId, ws);
+          // Back within the grace window: the claim was never released, the
+          // expert never notified — the blip stays invisible.
+          clearAgentGrace(sessionId);
           const back = store.setOnline(sessionId, true);
           sendTo(ws, {
             type: "resumed",
@@ -401,22 +442,35 @@ export function createRelay(options: RelayOptions): Relay {
       // reconnects (resume) when the machine is back.
       store.setOnline(sessionId, false);
       agents.delete(sessionId);
-      if (session.status === "active") {
-        // Customer dropped mid-session: the WebRTC peer is gone, so release the
-        // claim back to the queue and return the expert to idle. Re-claimable
-        // once the customer reconnects.
-        store.release(sessionId);
-        const expertWs = expertFor(sessionId);
-        if (expertWs) {
-          sendTo(expertWs, {
-            type: "session-ended",
-            sessionId,
-            reason:
-              "Customer went offline — the request is back in the queue and will reconnect when they return.",
-          });
-          experts.get(expertWs)?.claimed.delete(sessionId);
-        }
-        notifyChatSockets(sessionId, { type: "expert-left" });
+      if (session.status === "active" && !agentGrace.has(sessionId)) {
+        // Customer's relay socket dropped mid-session — but the WebRTC peer is
+        // independent of this socket and usually still alive (the expert may
+        // be typing in the terminal right now). Hold the claim for a grace
+        // window; only if the agent doesn't resume in time is the claim
+        // released and everyone told.
+        const id = sessionId;
+        const timer = setTimeout(() => {
+          agentGrace.delete(id);
+          const s = store.get(id);
+          if (!s || s.status !== "active" || s.online) return;
+          store.release(id);
+          persist(store.get(id));
+          const expertWs = expertFor(id);
+          if (expertWs) {
+            sendTo(expertWs, {
+              type: "session-ended",
+              sessionId: id,
+              reason:
+                "Customer went offline — the request is back in the queue and will reconnect when they return.",
+            });
+            experts.get(expertWs)?.claimed.delete(id);
+          }
+          notifyChatSockets(id, { type: "expert-left" });
+          broadcastQueue();
+          log(`session ${id} released (customer offline past grace)`);
+        }, activeGraceMs);
+        timer.unref?.();
+        agentGrace.set(id, timer);
       }
       persist(store.get(sessionId));
       log(`session ${sessionId} offline (customer disconnected)`);
@@ -444,7 +498,27 @@ export function createRelay(options: RelayOptions): Relay {
           return;
         }
         clearTimeout(authTimer);
-        experts.set(ws, { name: msg.name, claimed: new Set() });
+        const fresh: ExpertConn = { name: msg.name, claimed: new Set() };
+        experts.set(ws, fresh);
+        // Re-attach active sessions this expert dropped within grace: the P2P
+        // work never stopped, only the signaling socket needed rebinding.
+        // Only sessions in expertGrace are eligible — a session is in the grace
+        // map ONLY after its expert socket closed, so this can never rebind a
+        // session whose expert is still live (that's the hijack guard). It's
+        // still their OWN session (name match + reattach refuses anything else).
+        for (const sessionId of [...expertGrace.keys()]) {
+          const s = store.get(sessionId);
+          if (s?.status !== "active" || s.expertName !== msg.name) continue;
+          if (expertFor(sessionId)) continue; // someone already live on it
+          clearExpertGrace(sessionId);
+          store.reattach(sessionId, msg.name);
+          fresh.claimed.add(sessionId);
+          // Silent rebind: the dashboard's RTCPeerConnection is independent of
+          // this signaling socket and survives the blip, so we do NOT force a
+          // re-handshake (that would tear down a healthy peer). Signaling just
+          // resumes on the new socket. The agent is never told anything changed.
+          log(`expert ${msg.name} re-attached to session ${sessionId}`);
+        }
         sendTo(ws, { type: "auth-ok", name: msg.name });
         sendTo(ws, { type: "queue", sessions: store.queue().map(queueEntry) });
         log(`expert ${msg.name} connected`);
@@ -476,6 +550,9 @@ export function createRelay(options: RelayOptions): Relay {
             });
             return;
           }
+          // Claiming a (waiting) session drops any stale expert-drop grace
+          // timer left over from a prior claimant, so it can't fire later.
+          clearExpertGrace(msg.sessionId);
           conn.claimed.add(msg.sessionId);
           persist(store.get(msg.sessionId));
           sendTo(ws, { type: "claimed", sessionId: msg.sessionId });
@@ -535,15 +612,28 @@ export function createRelay(options: RelayOptions): Relay {
       experts.delete(ws);
       if (!conn) return;
       for (const sessionId of conn.claimed) {
-        if (store.get(sessionId)?.status === "active") {
+        if (store.get(sessionId)?.status !== "active") continue;
+        if (expertGrace.has(sessionId)) continue;
+        // Expert's relay socket dropped mid-session — the P2P peer usually
+        // survives the blip, and the dashboard re-auths on reconnect. Hold
+        // the claim for a grace window (re-attached on auth by name, or via
+        // an explicit re-claim); release only if they stay gone.
+        const timer = setTimeout(() => {
+          expertGrace.delete(sessionId);
+          const s = store.get(sessionId);
+          if (!s || s.status !== "active") return;
+          if (expertFor(sessionId)) return; // re-attached meanwhile
           store.release(sessionId);
           persist(store.get(sessionId));
           const agentWs = agents.get(sessionId);
           if (agentWs) sendTo(agentWs, { type: "expert-left" });
           notifyChatSockets(sessionId, { type: "expert-left" });
-        }
+          broadcastQueue();
+          log(`session ${sessionId} released (expert offline past grace)`);
+        }, activeGraceMs);
+        timer.unref?.();
+        expertGrace.set(sessionId, timer);
       }
-      if (conn.claimed.size > 0) broadcastQueue();
       log(`expert ${conn.name} disconnected`);
     });
   }

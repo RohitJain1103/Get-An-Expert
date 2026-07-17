@@ -77,6 +77,43 @@ describe("SessionStore.claim", () => {
     expect(() => store.claim(s.id, "Other Expert")).toThrow(/already/i);
   });
 
+  it("rejects re-claiming an active session even by the same expert (no live takeover)", () => {
+    const store = makeStore();
+    const s = register(store);
+    store.claim(s.id, "Priya Sharma");
+    // Reconnect must go through reattach, never claim — claim never transfers
+    // or refreshes an active session, so a same-name claim can't seize a live one.
+    expect(() => store.claim(s.id, "Priya Sharma")).toThrow(/already/i);
+  });
+});
+
+describe("SessionStore.reattach", () => {
+  it("refreshes claimedAt for the owning expert's active session", () => {
+    const store = makeStore();
+    const s = register(store);
+    const claimed = store.claim(s.id, "Priya Sharma");
+    const again = store.reattach(s.id, "Priya Sharma");
+    expect(again.status).toBe("active");
+    expect(again.expertName).toBe("Priya Sharma");
+    expect(again.claimedAt).toBeGreaterThanOrEqual(claimed.claimedAt!);
+  });
+
+  it("refuses to reattach a different expert (no cross-expert takeover)", () => {
+    const store = makeStore();
+    const s = register(store);
+    store.claim(s.id, "Priya Sharma");
+    expect(() => store.reattach(s.id, "Someone Else")).toThrow(/not an active session/i);
+  });
+
+  it("refuses to reattach a waiting or ended session", () => {
+    const store = makeStore();
+    const s = register(store);
+    expect(() => store.reattach(s.id, "Priya Sharma")).toThrow(/not an active session/i);
+    store.claim(s.id, "Priya Sharma");
+    store.end(s.id);
+    expect(() => store.reattach(s.id, "Priya Sharma")).toThrow(/not an active session/i);
+  });
+
   it("rejects claiming an unknown session", () => {
     const store = makeStore();
     expect(() => store.claim("nope", "Priya Sharma")).toThrow(/unknown/i);
