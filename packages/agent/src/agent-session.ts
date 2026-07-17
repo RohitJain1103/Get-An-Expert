@@ -247,6 +247,20 @@ export class AgentSession {
     return this.#gate.snapshot();
   }
 
+  /**
+   * Record how scope consent was obtained as an audit entry in the activity
+   * log (which also flows to session status and the customer's live view).
+   * Distinguishes a host-verified elicitation approval from a model-mediated
+   * chat reply, so an anomalous grant is detectable after the fact.
+   */
+  recordConsent(via: "host approval prompt" | "your reply in chat"): void {
+    this.#handleActivity({
+      at: Date.now(),
+      kind: "consent",
+      summary: `Access approved via ${via}.`,
+    });
+  }
+
   /** Revoke one scope (or all) immediately. */
   revoke(scope: Scope | "all"): Grant {
     if (scope === "all") this.#gate.revokeAll();

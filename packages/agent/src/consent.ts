@@ -124,3 +124,28 @@ export function buildDeclinedMessage(): string {
 export function buildElicitationFailedMessage(): string {
   return "The approval prompt could not be completed, so nothing was granted. Ask for expert help again to retry.";
 }
+
+/**
+ * How scope consent was obtained. Recorded in the audit log so a host-verified
+ * elicitation approval (the client's own UI returned the checkboxes) can be
+ * told apart from a model-mediated chat reply (the assistant supplied the
+ * booleans) during incident review — the latter is a weaker trust model.
+ */
+export type ConsentMechanism = "elicitation" | "chat-fallback";
+
+/**
+ * Whether a pending plain-language confirmation may be finalized against the
+ * current session. Requires a pending confirmation, an active (non-ended,
+ * non-idle) session, and — critically — that the pending confirmation belongs
+ * to THAT session (matching sessionId). Keying to the session id means a stale
+ * confirmation left over from a previous session can never grant access in a
+ * new one, rather than relying on the state check alone. Fails closed.
+ */
+export function canFinalizePending(
+  pending: { sessionId: string | undefined } | undefined,
+  session: { state: string; sessionId: string | undefined } | undefined,
+): boolean {
+  if (!pending || !session) return false;
+  if (session.state === "ended" || session.state === "idle") return false;
+  return pending.sessionId !== undefined && pending.sessionId === session.sessionId;
+}
