@@ -14,10 +14,15 @@ control:
 
 - **Nothing runs without your approval.** You approve individual scopes —
   Files, Terminal, Browser — before anyone connects. Where your AI coding tool
-  supports MCP elicitation, that approval happens via an inline prompt. Where
-  it doesn't, the assistant relays a plain-language description of the scopes
-  and your explicit reply in chat is what grants them — either way, nothing is
-  granted without an explicit approval from you.
+  supports MCP elicitation, that approval happens via an inline prompt the host
+  renders and returns — a control the assistant cannot influence. Where it
+  doesn't (e.g. some desktop GUIs), the assistant instead relays a plain-language
+  description of the scopes and your explicit reply in chat is what grants them.
+  Be aware this fallback is **model-mediated**: the assistant interprets your
+  reply, so on those hosts the strength of the approval depends on the assistant
+  behaving correctly, not on a host-enforced control. Which path granted access
+  is recorded in the activity log either way. If you want the strongest guarantee,
+  use a client that supports inline elicitation (the Claude Code terminal does).
 - **Scoped.** Files and terminal are confined to the project directory; paths
   that escape it are refused. Browser access is pinned to the one localhost port
   you approved.

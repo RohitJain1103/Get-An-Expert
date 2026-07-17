@@ -9,7 +9,9 @@ import {
   buildDeclinedMessage,
   buildElicitationFailedMessage,
   buildScopesMessage,
+  canFinalizePending,
   resolveScopeElicitation,
+  type ConsentMechanism,
   type ScopeConsent,
 } from "./consent";
 import {
@@ -184,7 +186,8 @@ server.registerTool(
       case "unsupported":
         // Not a decision by anyone — the host just can't show a prompt.
         // Keep the session queued; confirm_expert_scopes finishes it later.
-        pendingConfirmation = { dir, port, issue, summary };
+        // Bind it to this session id so a stale confirmation can't be replayed.
+        pendingConfirmation = { dir, port, issue, summary, sessionId: session.sessionId };
         return {
           content: [
             { type: "text" as const, text: buildScopesMessage(dir, port) },
@@ -200,7 +203,12 @@ server.registerTool(
         session = undefined;
         return text(buildDeclinedMessage());
       case "granted":
-        return finalizeGrant(session, outcome.consent, { issue, summary, projectDir: dir });
+        return finalizeGrant(session, outcome.consent, {
+          issue,
+          summary,
+          projectDir: dir,
+          mechanism: "elicitation",
+        });
     }
   },
 );
@@ -214,6 +222,9 @@ interface PendingConfirmation {
   port: number;
   issue: string | undefined;
   summary: string;
+  /** The session this confirmation belongs to — a confirmation can only
+   * finalize the same session that created it (see canFinalizePending). */
+  sessionId: string | undefined;
 }
 let pendingConfirmation: PendingConfirmation | undefined;
 
@@ -234,7 +245,10 @@ server.registerTool(
     annotations: { readOnlyHint: false, openWorldHint: true },
   },
   async ({ files, terminal, browser, conversation }) => {
-    if (!pendingConfirmation || !session || session.state === "ended" || session.state === "idle") {
+    // Fails closed unless there's a pending confirmation bound to THIS active
+    // session — so a confirmation left over from an ended/replaced session
+    // can't grant access in a new one.
+    if (!pendingConfirmation || !session || !canFinalizePending(pendingConfirmation, session)) {
       return text("No pending scope confirmation. Call request_expert_help first.");
     }
     const { dir, port, issue, summary } = pendingConfirmation;
@@ -249,7 +263,7 @@ server.registerTool(
     return finalizeGrant(
       session,
       { grant, shareTranscript: conversation },
-      { issue, summary, projectDir: dir },
+      { issue, summary, projectDir: dir, mechanism: "chat-fallback" },
     );
   },
 );
@@ -335,9 +349,19 @@ server.registerTool(
 async function finalizeGrant(
   activeSession: AgentSession,
   consent: ScopeConsent,
-  input: { issue: string | undefined; summary: string; projectDir: string },
+  input: {
+    issue: string | undefined;
+    summary: string;
+    projectDir: string;
+    mechanism: ConsentMechanism;
+  },
 ) {
   activeSession.grant(consent.grant);
+  // Audit which consent path granted access, so a host-verified approval is
+  // distinguishable from a model-mediated chat reply after the fact.
+  activeSession.recordConsent(
+    input.mechanism === "elicitation" ? "host approval prompt" : "your reply in chat",
+  );
 
   // Hand-off context for the expert — local + peer-to-peer only, and never
   // allowed to block the request: any failure degrades the file instead.
@@ -355,6 +379,7 @@ async function finalizeGrant(
     chatUrl,
     projectDir: input.projectDir,
     granted: consent.grant,
+    consentVia: input.mechanism,
     context,
     message: queueMessage(chatUrl),
   });

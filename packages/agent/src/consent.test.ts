@@ -4,6 +4,7 @@ import {
   buildDeclinedMessage,
   buildElicitationFailedMessage,
   buildScopesMessage,
+  canFinalizePending,
   resolveScopeElicitation,
 } from "./consent";
 
@@ -45,6 +46,35 @@ describe("SCOPES_CONFIRM_GUIDANCE", () => {
   it("references confirm_expert_scopes and waiting for the user's reply", () => {
     expect(SCOPES_CONFIRM_GUIDANCE).toContain("confirm_expert_scopes");
     expect(SCOPES_CONFIRM_GUIDANCE.toLowerCase()).toContain("wait for their");
+  });
+});
+
+describe("canFinalizePending", () => {
+  const pending = { sessionId: "sess-1" };
+  const active = { state: "waiting", sessionId: "sess-1" };
+
+  it("allows finalizing when a pending confirmation matches the active session", () => {
+    expect(canFinalizePending(pending, active)).toBe(true);
+    expect(canFinalizePending(pending, { state: "connected", sessionId: "sess-1" })).toBe(true);
+  });
+
+  it("fails closed with no pending confirmation or no session", () => {
+    expect(canFinalizePending(undefined, active)).toBe(false);
+    expect(canFinalizePending(pending, undefined)).toBe(false);
+  });
+
+  it("rejects an ended or idle session (e.g. after end_session)", () => {
+    expect(canFinalizePending(pending, { state: "ended", sessionId: "sess-1" })).toBe(false);
+    expect(canFinalizePending(pending, { state: "idle", sessionId: "sess-1" })).toBe(false);
+  });
+
+  it("rejects a confirmation from a different session (no replay across sessions)", () => {
+    expect(canFinalizePending(pending, { state: "waiting", sessionId: "sess-2" })).toBe(false);
+  });
+
+  it("rejects when either session id is missing", () => {
+    expect(canFinalizePending({ sessionId: undefined }, active)).toBe(false);
+    expect(canFinalizePending(pending, { state: "waiting", sessionId: undefined })).toBe(false);
   });
 });
 
