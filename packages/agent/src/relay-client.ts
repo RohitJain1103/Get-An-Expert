@@ -22,10 +22,19 @@ export interface RelayClientEvents {
   onResumeFailed?: () => void;
 }
 
+/** Count-bearing description of the expert's CONTEXT.md, sent at register and
+ * shown to the customer as chips. Structural copy of the relay's shape (apps/relay
+ * is not a workspace dependency of this package). */
+export interface ContextManifest {
+  conversationMessages?: number;
+  secretsRedacted?: number;
+}
+
 export interface RegisterInput {
   customerName: string;
   projectDir: string;
   issue?: string;
+  contextManifest?: ContextManifest;
 }
 
 /** The subset of the relay connection AgentSession depends on (injectable). */
@@ -161,6 +170,7 @@ export class RelayClient implements RelayConnection {
           customerName: first.input.customerName,
           projectDir: first.input.projectDir,
           issue: first.input.issue,
+          contextManifest: first.input.contextManifest,
         });
       } else {
         this.#rawSend(ws, {

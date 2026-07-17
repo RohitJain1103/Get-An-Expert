@@ -372,6 +372,7 @@ export function createRelay(options: RelayOptions): Relay {
           customerName: msg.customerName,
           projectDir: msg.projectDir,
           issue: msg.issue,
+          contextManifest: msg.contextManifest,
         });
         sessionId = session.id;
         agents.set(sessionId, ws);
@@ -671,6 +672,7 @@ export function createRelay(options: RelayOptions): Relay {
           issue: session.issue,
           issueEditedAt: session.issueEditedAt,
           issueEditedBy: session.issueEditedBy,
+          contextManifest: session.contextManifest,
         });
         log(`customer chat socket joined session ${sessionId}`);
         return;

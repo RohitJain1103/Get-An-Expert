@@ -27,11 +27,9 @@
   const CTX_NOTE =
     "This is the summary. They get the full detail. Change it anytime, before or after someone picks it up.";
   const CTX_SAVED = "Updated. The expert sees this now.";
-  // Chips that are categorically true without a per-session count. The two
-  // count-bearing chips in the spec ("47 messages", "3 secrets removed") are
-  // omitted until a wire contract carries the real numbers: a hardcoded count
-  // would be a fabricated figure on every session.
-  const CTX_CHIPS = ["Your agent's summary", "A short overview of your project"];
+  // The context chips (including the count-bearing "This conversation, N
+  // messages" and "N secrets removed") are built by GaeChat.contextChips from
+  // the manifest the relay carries, so a count is shown only when it is real.
   const STEPS_HEADING = "What happens next";
   const STEPS = [
     "One expert picks this up.",
@@ -221,7 +219,7 @@
     }
     if (state.issue) box.append(el("div", "c-ctx-issue", state.issue));
     const chips = el("div", "c-chips");
-    contextChips().forEach((t) => {
+    G.contextChips(state.manifest).forEach((t) => {
       const c = el("span", "c-chip");
       c.append(el("span", "tk", "✓")); // check mark
       c.append(el("span", null, t));
@@ -241,12 +239,6 @@
     acts.append(edit);
     box.append(acts);
     return box;
-  }
-
-  // The always-true chips, kept as a helper so Track E's count-bearing chips
-  // ("This conversation, N messages", "N secrets removed") can slot in.
-  function contextChips() {
-    return CTX_CHIPS.slice();
   }
 
   function stepsCard() {

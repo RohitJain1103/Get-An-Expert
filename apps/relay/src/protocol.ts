@@ -41,11 +41,24 @@ export type ChatMessage = z.infer<typeof chatMessageSchema>;
 
 /* ── Messages the agent (customer machine) may send ─────────────── */
 
+/**
+ * Truthful, count-bearing description of what the expert's CONTEXT.md contains,
+ * surfaced as chips on the customer chat page. Each count is optional: the
+ * customer renders a chip only for a field that is actually a number, so an
+ * absent count never fabricates a figure.
+ */
+export const contextManifestSchema = z.object({
+  conversationMessages: z.number().int().min(0).optional(),
+  secretsRedacted: z.number().int().min(0).optional(),
+});
+export type ContextManifest = z.infer<typeof contextManifestSchema>;
+
 const agentRegister = z.object({
   type: z.literal("register"),
   customerName: z.string().min(1).max(120),
   projectDir: z.string().min(1).max(500),
   issue: z.string().max(2000).optional(),
+  contextManifest: contextManifestSchema.optional(),
 });
 
 /**

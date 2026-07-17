@@ -13,7 +13,7 @@ import { buildChatUrl } from "./chat-url";
 import { buildContextMarkdown, type ContextInput } from "./context";
 import { createExpertServer } from "./expert-server";
 import { PermissionGate, type Grant, type Scope } from "./permissions";
-import { RelayClient, type RelayConnection } from "./relay-client";
+import { RelayClient, type ContextManifest, type RelayConnection } from "./relay-client";
 import { SessionLog } from "./session";
 import { AgentTools } from "./tools";
 import { AutoBrowserController } from "./browser-auto";
@@ -160,8 +160,13 @@ export class AgentSession {
     });
   }
 
-  /** Register the session with the relay and wait for an expert to claim it. */
-  async requestExpert(issue?: string): Promise<{ sessionId: string }> {
+  /** Register the session with the relay and wait for an expert to claim it. The
+   * context manifest (truthful CONTEXT.md counts) rides along on the register so
+   * the customer chat page can show it as chips. */
+  async requestExpert(
+    issue?: string,
+    contextManifest?: ContextManifest,
+  ): Promise<{ sessionId: string }> {
     if (this.#state !== "idle") {
       throw new Error(`Cannot request an expert from state "${this.#state}"`);
     }
@@ -172,6 +177,7 @@ export class AgentSession {
       customerName: this.#opts.customerName,
       projectDir: this.#opts.projectDir,
       issue,
+      contextManifest,
     });
     this.#state = "waiting";
     this.#startedAt = Date.now();
@@ -354,7 +360,7 @@ export class AgentSession {
   async writeContextFrom(input: ContextInput): Promise<void> {
     this.#contextInput = input;
     this.#issue = input.issue;
-    await this.writeContext(buildContextMarkdown(input));
+    await this.writeContext(buildContextMarkdown(input).markdown);
   }
 
   /**
@@ -372,7 +378,7 @@ export class AgentSession {
     }
     this.#contextInput = { ...this.#contextInput, issue };
     this.#logLine("issue edited; rebuilding CONTEXT.md");
-    void this.writeContext(buildContextMarkdown(this.#contextInput)).catch((err) =>
+    void this.writeContext(buildContextMarkdown(this.#contextInput).markdown).catch((err) =>
       this.#logLine(`context rebuild failed: ${err instanceof Error ? err.message : String(err)}`),
     );
   }

@@ -50,6 +50,24 @@ describe("SessionStore.create", () => {
     const b = register(store);
     expect(a.customerToken).not.toBe(b.customerToken);
   });
+
+  it("stores the context manifest when provided", () => {
+    const store = makeStore();
+    const s = store.create({
+      customerName: "Dana",
+      projectDir: "~/p",
+      contextManifest: { conversationMessages: 12, secretsRedacted: 2 },
+    }).session;
+    expect(s.contextManifest).toEqual({
+      conversationMessages: 12,
+      secretsRedacted: 2,
+    });
+  });
+
+  it("leaves the manifest undefined when none is provided", () => {
+    const store = makeStore();
+    expect(register(store).contextManifest).toBeUndefined();
+  });
 });
 
 describe("SessionStore.claim", () => {

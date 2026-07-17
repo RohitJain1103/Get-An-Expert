@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import "../public/chat-core.js";
 
 const GaeChat = (globalThis as any).GaeChat;
-const { parseLink, initials, firstName, validProfile, reduce, editPayload } =
+const { parseLink, initials, firstName, validProfile, reduce, editPayload, contextChips } =
   GaeChat;
 
 // PublicExpertProfile fixture, verbatim per the Wire Contracts section.
@@ -134,6 +134,14 @@ describe("reduce", () => {
     expect(s.permissions).toEqual({ files: true, terminal: true, browser: true });
     expect(s.issue).toBe("Login drops on refresh.");
     expect(s.feed).toEqual([]);
+  });
+
+  it("hello-ok stores the context manifest for the chips", () => {
+    const s = reduce(undefined, {
+      ...helloWaiting,
+      contextManifest: { conversationMessages: 12, secretsRedacted: 1 },
+    });
+    expect(s.manifest).toEqual({ conversationMessages: 12, secretsRedacted: 1 });
   });
 
   it("expert-joined moves waiting to claimed and stores the profile", () => {
@@ -328,5 +336,53 @@ describe("editPayload", () => {
   it("returns undefined for non-string input", () => {
     expect(editPayload(undefined)).toBeUndefined();
     expect(editPayload(42)).toBeUndefined();
+  });
+});
+
+/* ── contextChips ───────────────────────────────────────────────────── */
+
+describe("contextChips", () => {
+  it("shows only the always-true chips when there is no manifest", () => {
+    expect(contextChips(undefined)).toEqual([
+      "Your agent's summary",
+      "A short overview of your project",
+    ]);
+  });
+
+  it("adds the count chips when both fields are numbers", () => {
+    expect(
+      contextChips({ conversationMessages: 47, secretsRedacted: 3 }),
+    ).toEqual([
+      "Your agent's summary",
+      "This conversation, 47 messages",
+      "A short overview of your project",
+      "3 secrets removed",
+    ]);
+  });
+
+  it("renders a zero count honestly rather than hiding it", () => {
+    expect(
+      contextChips({ conversationMessages: 0, secretsRedacted: 0 }),
+    ).toEqual([
+      "Your agent's summary",
+      "This conversation, 0 messages",
+      "A short overview of your project",
+      "0 secrets removed",
+    ]);
+  });
+
+  it("omits a chip whose field is absent or not a number", () => {
+    expect(contextChips({ secretsRedacted: 2 })).toEqual([
+      "Your agent's summary",
+      "A short overview of your project",
+      "2 secrets removed",
+    ]);
+    expect(
+      contextChips({ conversationMessages: 5, secretsRedacted: "x" }),
+    ).toEqual([
+      "Your agent's summary",
+      "This conversation, 5 messages",
+      "A short overview of your project",
+    ]);
   });
 });

@@ -332,6 +332,31 @@ describe("claim carries the roster profile", () => {
     expect(hello.issue).toBe("Build failing");
   });
 
+  it("carries the register context manifest through to hello-ok", async () => {
+    const agent = await connect("/agent");
+    send(agent, {
+      type: "register",
+      customerName: "Jordan Lee",
+      projectDir: "~/projects/landing-page",
+      issue: "Build failing",
+      contextManifest: { conversationMessages: 47, secretsRedacted: 3 },
+    });
+    const reg = await nextMessage(agent);
+    expect(reg.type).toBe("registered");
+
+    const customer = await connect("/customer");
+    send(customer, {
+      type: "hello",
+      sessionId: reg.sessionId,
+      token: reg.customerToken,
+    });
+    const hello = await waitFor(customer, (m) => m.type === "hello-ok");
+    expect(hello.contextManifest).toEqual({
+      conversationMessages: 47,
+      secretsRedacted: 3,
+    });
+  });
+
   it("hello-ok bench never includes token material", async () => {
     const { sessionId, customerToken } = await registeredAgent();
     const customer = await connect("/customer");

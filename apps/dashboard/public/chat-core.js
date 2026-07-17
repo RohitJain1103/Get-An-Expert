@@ -72,8 +72,27 @@
       bench: [],
       permissions: undefined,
       issue: undefined,
+      manifest: undefined,
       feed: [],
     };
+  }
+
+  /* ── Context chips: the two always-true chips, with count-bearing chips
+     interleaved only when the manifest actually carries a number. A number
+     (including 0) renders; an absent or non-number field shows no chip, so a
+     count is never fabricated. Order matches the visual spec. ────────────── */
+
+  function contextChips(manifest) {
+    var m = manifest || {};
+    var chips = ["Your agent's summary"];
+    if (typeof m.conversationMessages === "number") {
+      chips.push("This conversation, " + m.conversationMessages + " messages");
+    }
+    chips.push("A short overview of your project");
+    if (typeof m.secretsRedacted === "number") {
+      chips.push(m.secretsRedacted + " secrets removed");
+    }
+    return chips;
   }
 
   function phaseFromStatus(status) {
@@ -115,6 +134,7 @@
           bench: Array.isArray(msg.bench) ? msg.bench.filter(validProfile) : [],
           permissions: msg.permissions,
           issue: typeof msg.issue === "string" ? msg.issue : undefined,
+          manifest: msg.contextManifest,
           feed: feedFromHello(msg.history, msg.activity),
         };
       }
@@ -211,6 +231,7 @@
     validProfile: validProfile,
     reduce: reduce,
     editPayload: editPayload,
+    contextChips: contextChips,
     initialState: initialState,
   };
 

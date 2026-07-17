@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   NO_PERMISSIONS,
   type ChatMessage,
+  type ContextManifest,
   type Permissions,
 } from "./protocol";
 
@@ -28,6 +29,9 @@ export interface Session {
    * by the customer-always-wins conflict rule. */
   issueEditedAt?: number;
   issueEditedBy?: "customer" | "expert";
+  /** Count-bearing description of the expert's CONTEXT.md, sent at register and
+   * echoed to the customer chat page as truthful chips. */
+  contextManifest?: ContextManifest;
   status: SessionStatus;
   /**
    * Whether the customer's agent socket is currently attached. A request stays
@@ -66,6 +70,7 @@ export interface CreateSessionInput {
   customerName: string;
   projectDir: string;
   issue?: string;
+  contextManifest?: ContextManifest;
 }
 
 /** Keep at most this many activity summaries per session. */
@@ -95,6 +100,7 @@ export class SessionStore {
       customerName: input.customerName,
       projectDir: input.projectDir,
       issue: input.issue,
+      contextManifest: input.contextManifest,
       status: "waiting",
       online: true,
       createdAt: now,
