@@ -38,6 +38,7 @@ import {
   queueMessage,
   statusMessage,
 } from "./messages";
+import { openUrl } from "./open-url";
 import type { Grant } from "./permissions";
 import { cleanupWebrtc } from "./webrtc/peer";
 
@@ -373,6 +374,18 @@ async function finalizeGrant(
   });
 
   const chatUrl = activeSession.chatUrl;
+  // Best-effort auto-open of the chat page. A throw here must never fail the
+  // request: openUrl already never throws, but the guard keeps that promise
+  // even if that ever changes. The chat URL is always in the message below,
+  // whether or not a tab opened, so failure costs one click, never access.
+  let opened = false;
+  if (chatUrl) {
+    try {
+      opened = openUrl(chatUrl, { relayOrigin: relayHttpOrigin() });
+    } catch {
+      opened = false;
+    }
+  }
   return json({
     status: "waiting-for-expert",
     sessionId: activeSession.sessionId,
@@ -381,7 +394,7 @@ async function finalizeGrant(
     granted: consent.grant,
     consentVia: input.mechanism,
     context,
-    message: queueMessage(chatUrl),
+    message: queueMessage(chatUrl, opened),
   });
 }
 
@@ -439,6 +452,16 @@ async function writeSessionContext(
 
 function errText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * The relay's http(s) origin, derived from the configured relay URL the same
+ * way chat-url.ts builds the chat page URL: normalize ws(s) to http(s), then
+ * take the origin. openUrl only opens URLs whose origin equals this, so the
+ * auto-open can never be steered to some other host.
+ */
+function relayHttpOrigin(): string {
+  return new URL(relayUrl().trim().replace(/^ws/, "http")).origin;
 }
 
 /**

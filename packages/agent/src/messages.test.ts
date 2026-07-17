@@ -7,19 +7,22 @@ import {
 } from "./messages";
 
 describe("queueMessage", () => {
-  it("makes the walk-away promise explicit", () => {
-    const msg = queueMessage();
-    expect(msg).toContain("walk away");
-    expect(msg).toContain("machine on and awake");
-    expect(msg).toContain("expert_status");
+  it("says a tab is opening when one was launched", () => {
+    expect(queueMessage("https://r.example/chat#a.b", true)).toBe(
+      "Opening your expert chat now. Your request is queued and stays queued if you close it. Link: https://r.example/chat#a.b",
+    );
   });
 
-  it("omits the chat-link clause when no chat URL exists", () => {
-    expect(queueMessage()).not.toContain("chat link");
+  it("gives the link to open manually when a tab could not open", () => {
+    expect(queueMessage("https://r.example/chat#a.b", false)).toBe(
+      "Your request is queued. Open your expert chat here: https://r.example/chat#a.b",
+    );
   });
 
-  it("mentions the chat link when a chat URL exists", () => {
-    expect(queueMessage("https://relay.example.com/chat#abc.def")).toContain("chat link");
+  it("keeps a plain queue line when there is no chat url", () => {
+    expect(queueMessage(undefined)).toBe(
+      "You're in the expert queue. Check back anytime with expert_status.",
+    );
   });
 });
 
@@ -54,7 +57,7 @@ describe("statusMessage", () => {
 
 describe("END_SESSION_MESSAGE", () => {
   it("confirms all access is revoked", () => {
-    expect(END_SESSION_MESSAGE).toBe("Session ended — all expert access is revoked.");
+    expect(END_SESSION_MESSAGE).toBe("Session ended. All expert access is revoked.");
   });
 });
 
