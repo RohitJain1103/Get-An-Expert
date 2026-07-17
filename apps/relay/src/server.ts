@@ -18,6 +18,7 @@ import {
   type SessionPersistence,
 } from "./persistence";
 import { serveStatic } from "./static";
+import { ROSTER, findExpert, type PublicExpertProfile } from "./roster";
 
 /** Default max age of a queued request before the sweep expires it (72h). */
 export const DEFAULT_MAX_AGE_MS = 72 * 60 * 60 * 1000;
@@ -48,6 +49,8 @@ export interface Relay {
 
 interface ExpertConn {
   name: string;
+  /** The roster profile this expert self-selected at login, if any. */
+  profile?: PublicExpertProfile;
   claimed: Set<string>;
 }
 
@@ -81,6 +84,14 @@ export function createRelay(options: RelayOptions): Relay {
     if (req.url === "/healthz") {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ ok: true, sessions: store.queue().length }));
+      return;
+    }
+    // Public roster of experts, for the customer chat bench and the dashboard
+    // identity picker. Marketing data only: no token or code material lives on
+    // a PublicExpertProfile, so this is safe to serve unauthenticated.
+    if (new URL(req.url ?? "/", "http://relay.local").pathname === "/api/roster") {
+      res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify(ROSTER));
       return;
     }
     if (options.dashboardDir) {
@@ -444,8 +455,13 @@ export function createRelay(options: RelayOptions): Relay {
           return;
         }
         clearTimeout(authTimer);
-        experts.set(ws, { name: msg.name, claimed: new Set() });
-        sendTo(ws, { type: "auth-ok", name: msg.name });
+        const profile = msg.expertId ? findExpert(msg.expertId) : undefined;
+        experts.set(ws, {
+          name: profile?.name ?? msg.name,
+          profile,
+          claimed: new Set(),
+        });
+        sendTo(ws, { type: "auth-ok", name: profile?.name ?? msg.name, expert: profile });
         sendTo(ws, { type: "queue", sessions: store.queue().map(queueEntry) });
         log(`expert ${msg.name} connected`);
         return;
@@ -467,7 +483,7 @@ export function createRelay(options: RelayOptions): Relay {
             return;
           }
           try {
-            store.claim(msg.sessionId, conn.name);
+            store.claim(msg.sessionId, conn.name, conn.profile?.id);
           } catch (err) {
             sendTo(ws, {
               type: "claim-failed",
@@ -486,11 +502,16 @@ export function createRelay(options: RelayOptions): Relay {
           });
           const agentWs = agents.get(msg.sessionId);
           if (agentWs) {
-            sendTo(agentWs, { type: "expert-joined", expertName: conn.name });
+            sendTo(agentWs, {
+              type: "expert-joined",
+              expertName: conn.name,
+              expert: conn.profile,
+            });
           }
           notifyChatSockets(msg.sessionId, {
             type: "expert-joined",
             expertName: conn.name,
+            expert: conn.profile,
           });
           broadcastQueue();
           return;
@@ -592,6 +613,12 @@ export function createRelay(options: RelayOptions): Relay {
           // Seed the live activity feed for a customer who opens (or reopens)
           // the page after the expert has already started working.
           activity: session.activity.slice(-50),
+          // Expert card when claimed, the full bench always, and the granted
+          // scopes + current issue so a reload restores the whole chat state.
+          expert: session.expertId ? findExpert(session.expertId) : undefined,
+          bench: ROSTER,
+          permissions: session.permissions,
+          issue: session.issue,
         });
         log(`customer chat socket joined session ${sessionId}`);
         return;

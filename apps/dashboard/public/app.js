@@ -26,6 +26,8 @@ const Viewer = window.GaeViewer;
 const state = {
   ws: null,
   expertName: "",
+  // Roster id the expert picked on the who-are-you grid (null = typed a name).
+  selectedExpertId: null,
   sessions: new Map(), // sessionId -> queue entry
   activeId: null,
   pc: null,
@@ -73,15 +75,77 @@ el("expert-token").addEventListener("keydown", (e) => {
   if (e.key === "Enter") connect();
 });
 
+// Who-are-you picker: fetch the public roster and let the expert pick their
+// face. Picking one sends its id as `expertId` at auth, so the relay adopts
+// that roster identity (name, photo, card) for everyone downstream. Typing a
+// name in the "Someone else" field instead clears any pick.
+loadRoster();
+
+async function loadRoster() {
+  const grid = el("who-grid");
+  try {
+    const res = await fetch("/api/roster");
+    if (!res.ok) throw new Error(`roster ${res.status}`);
+    const roster = await res.json();
+    if (!Array.isArray(roster) || roster.length === 0) {
+      grid.innerHTML = '<div class="who-loading">No experts to pick from.</div>';
+      return;
+    }
+    grid.innerHTML = "";
+    for (const expert of roster) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "who-card";
+      btn.dataset.id = expert.id;
+      btn.innerHTML =
+        `<img class="who-photo" src="${escapeHtml(expert.photo)}" alt="" />` +
+        `<span class="who-name">${escapeHtml(expert.name)}</span>` +
+        `<span class="who-tag">${escapeHtml(expert.tag)}</span>`;
+      btn.addEventListener("click", () => selectExpert(expert));
+      grid.appendChild(btn);
+    }
+  } catch {
+    grid.innerHTML =
+      '<div class="who-loading">Could not load the roster. Type your name below instead.</div>';
+  }
+}
+
+function selectExpert(expert) {
+  state.selectedExpertId = expert.id;
+  for (const card of document.querySelectorAll(".who-card")) {
+    card.classList.toggle("selected", card.dataset.id === expert.id);
+  }
+  // Picking a face wins over a typed name: clear the free-text fallback.
+  el("expert-name").value = "";
+  el("gate-error").textContent = "";
+}
+
+// Typing in the fallback field clears any picked face (last action wins).
+el("expert-name").addEventListener("input", () => {
+  if (el("expert-name").value.trim()) {
+    state.selectedExpertId = null;
+    for (const card of document.querySelectorAll(".who-card")) {
+      card.classList.remove("selected");
+    }
+  }
+});
+
 function connect() {
   const url = el("relay-url").value.trim().replace(/^http/, "ws").replace(/\/+$/, "");
   const token = el("expert-token").value.trim();
   const name = el("expert-name").value.trim();
+  const expertId = state.selectedExpertId;
   el("gate-error").textContent = "";
-  if (!token || !name) {
-    el("gate-error").textContent = "Enter your token and name.";
+  if (!token) {
+    el("gate-error").textContent = "Enter your token.";
     return;
   }
+  if (!expertId && !name) {
+    el("gate-error").textContent = "Pick who you are, or type a name.";
+    return;
+  }
+  // Provisional label until auth-ok returns the authoritative name (the roster
+  // name when a face was picked). A typed name is used verbatim.
   state.expertName = name;
   setConn("connecting", "Connecting…");
 
@@ -96,7 +160,9 @@ function connect() {
   state.ws = ws;
 
   ws.addEventListener("open", () => {
-    ws.send(JSON.stringify({ type: "auth", token, name }));
+    const auth = { type: "auth", token, name };
+    if (expertId) auth.expertId = expertId;
+    ws.send(JSON.stringify(auth));
   });
   ws.addEventListener("message", (ev) => {
     let msg;
@@ -131,6 +197,10 @@ function relaySend(msg) {
 function handleRelay(msg) {
   switch (msg.type) {
     case "auth-ok":
+      // Adopt the authoritative name from the relay: when a roster face was
+      // picked this is the profile name (e.g. "Rohit Jain"), which the queue's
+      // mine-detection compares against. Falls back to the typed name.
+      if (msg.name) state.expertName = msg.name;
       setConn("online", `Connected as ${state.expertName}`);
       el("gate").classList.add("hidden");
       el("app").classList.remove("hidden");

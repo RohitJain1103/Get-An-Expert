@@ -178,6 +178,32 @@ describe("expert auth", () => {
   });
 });
 
+describe("expert roster identity", () => {
+  it("auth with an expertId adopts the roster identity", async () => {
+    const expert = await connect("/expert");
+    send(expert, { type: "auth", token: TOKEN, name: "Whoever", expertId: "rohit" });
+    const ok = await waitFor(expert, (m) => m.type === "auth-ok");
+    expect(ok.name).toBe("Rohit Jain");
+    expect(ok.expert).toEqual(expect.objectContaining({ id: "rohit" }));
+  });
+
+  it("auth without expertId keeps today's self-declared name", async () => {
+    const expert = await connect("/expert");
+    send(expert, { type: "auth", token: TOKEN, name: "Whoever" });
+    const ok = await waitFor(expert, (m) => m.type === "auth-ok");
+    expect(ok.name).toBe("Whoever");
+    expect(ok.expert).toBeUndefined();
+  });
+
+  it("auth with an unknown expertId falls back to the declared name", async () => {
+    const expert = await connect("/expert");
+    send(expert, { type: "auth", token: TOKEN, name: "Whoever", expertId: "nobody" });
+    const ok = await waitFor(expert, (m) => m.type === "auth-ok");
+    expect(ok.name).toBe("Whoever");
+    expect(ok.expert).toBeUndefined();
+  });
+});
+
 describe("customer activity feed", () => {
   async function registerWithToken() {
     const agent = await connect("/agent");
@@ -257,6 +283,61 @@ describe("claiming sessions", () => {
     send(expert, { type: "release", sessionId });
     await waitFor(agent, (m) => m.type === "expert-left");
     expect(relay.store.get(sessionId)?.status).toBe("waiting");
+  });
+});
+
+describe("claim carries the roster profile", () => {
+  async function rohitExpert() {
+    const expert = await connect("/expert");
+    send(expert, { type: "auth", token: TOKEN, name: "Whoever", expertId: "rohit" });
+    await waitFor(expert, (m) => m.type === "auth-ok");
+    await waitFor(expert, (m) => m.type === "queue");
+    return expert;
+  }
+
+  it("claim fans the full profile out to agent and chat sockets", async () => {
+    const { agent, sessionId, customerToken } = await registeredAgent();
+    const customer = await connect("/customer");
+    send(customer, { type: "hello", sessionId, token: customerToken });
+    await waitFor(customer, (m) => m.type === "hello-ok");
+
+    const expert = await rohitExpert();
+    send(expert, { type: "claim", sessionId });
+
+    const toAgent = await waitFor(agent, (m) => m.type === "expert-joined");
+    expect(toAgent.expertName).toBe("Rohit Jain");
+    expect(toAgent.expert).toEqual(
+      expect.objectContaining({ photo: "/experts/rohit.jpg" }),
+    );
+    const toChat = await waitFor(customer, (m) => m.type === "expert-joined");
+    expect(toChat.expert).toEqual(expect.objectContaining({ id: "rohit" }));
+  });
+
+  it("hello-ok includes bench, permissions, issue, and expert when claimed", async () => {
+    const { agent, sessionId, customerToken } = await registeredAgent();
+    send(agent, {
+      type: "metadata",
+      permissions: { files: true, terminal: false, browser: false },
+    });
+    const expert = await rohitExpert();
+    send(expert, { type: "claim", sessionId });
+    await waitFor(expert, (m) => m.type === "claimed");
+
+    const customer = await connect("/customer");
+    send(customer, { type: "hello", sessionId, token: customerToken });
+    const hello = await waitFor(customer, (m) => m.type === "hello-ok");
+    expect(hello.bench).toHaveLength(6);
+    expect(hello.expert?.id).toBe("rohit");
+    expect(hello.permissions).toEqual(expect.objectContaining({ files: true }));
+    expect(hello.issue).toBe("Build failing");
+  });
+
+  it("hello-ok bench never includes token material", async () => {
+    const { sessionId, customerToken } = await registeredAgent();
+    const customer = await connect("/customer");
+    send(customer, { type: "hello", sessionId, token: customerToken });
+    const hello = await waitFor(customer, (m) => m.type === "hello-ok");
+    expect(JSON.stringify(hello)).not.toContain(TOKEN);
   });
 });
 
@@ -370,6 +451,19 @@ describe("http", () => {
   it("responds to /healthz", async () => {
     const res = await fetch(`${baseUrl}/healthz`);
     expect(res.status).toBe(200);
+  });
+
+  it("GET /api/roster returns the six public profiles and nothing secret", async () => {
+    const res = await fetch(`${baseUrl}/api/roster`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toMatch(/application\/json/);
+    const body = await res.json();
+    expect(Array.isArray(body)).toBe(true);
+    expect(body).toHaveLength(6);
+    expect(body.map((e: any) => e.id)).toEqual([
+      "rohit", "aakash", "senjal", "inigo", "hardik", "pulkit",
+    ]);
+    expect(JSON.stringify(body)).not.toContain(TOKEN);
   });
 
   it("refuses path traversal outside the dashboard dir", async () => {

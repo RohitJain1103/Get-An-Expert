@@ -31,8 +31,14 @@
     <label>Expert token
       <input id="expert-token" type="password" placeholder="paste your token" spellcheck="false" />
     </label>
-    <label>Your name
-      <input id="expert-name" type="text" placeholder="e.g. Priya Sharma" spellcheck="false" />
+    <div class="who-block">
+      <span class="who-label">Who are you?</span>
+      <div class="who-grid" id="who-grid">
+        <div class="who-loading">Loading experts…</div>
+      </div>
+    </div>
+    <label>Someone else
+      <input id="expert-name" type="text" placeholder="type your name instead" spellcheck="false" />
     </label>
     <button id="connect-btn" class="primary">Connect</button>
     <div class="gate-error" id="gate-error"></div>

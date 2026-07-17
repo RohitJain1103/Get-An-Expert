@@ -83,6 +83,24 @@ describe("SessionStore.claim", () => {
   });
 });
 
+describe("SessionStore expert identity", () => {
+  it("claim stores expertId and release clears it", () => {
+    const store = makeStore();
+    const s = register(store);
+    store.claim(s.id, "Rohit Jain", "rohit");
+    expect(store.get(s.id)?.expertId).toBe("rohit");
+    store.release(s.id);
+    expect(store.get(s.id)?.expertId).toBeUndefined();
+  });
+
+  it("claim without an expertId leaves it undefined", () => {
+    const store = makeStore();
+    const s = register(store);
+    store.claim(s.id, "Priya Sharma");
+    expect(store.get(s.id)?.expertId).toBeUndefined();
+  });
+});
+
 describe("SessionStore.release", () => {
   it("returns an active session to waiting and clears the expert", () => {
     const store = makeStore();
