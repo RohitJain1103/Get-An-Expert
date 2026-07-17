@@ -53,8 +53,10 @@ class FakeRelay implements RelayConnection {
   close(): void {
     this.closed = true;
   }
-  // Test controls for the relay-driven events.
-  fireExpertJoined(name: string, profile?: unknown): void {
+  // Test controls for the relay-driven events. Default name supports the
+  // reconnect tests that fire without args; the optional profile supports the
+  // roster-identity tests.
+  fireExpertJoined(name = "Priya Sharma", profile?: unknown): void {
     this.events.onExpertJoined?.(name, profile as never);
   }
   fireExpertLeft(): void {
@@ -63,8 +65,8 @@ class FakeRelay implements RelayConnection {
   fireReconnecting(): void {
     this.events.onReconnecting?.(1);
   }
-  fireResumed(): void {
-    this.events.onResumed?.({ status: "waiting" });
+  fireResumed(status: { status?: string; expertName?: string } = { status: "waiting" }): void {
+    this.events.onResumed?.(status);
   }
   fireResumeFailed(): void {
     this.events.onResumeFailed?.();
@@ -228,6 +230,32 @@ describe("AgentSession resume persistence", () => {
 });
 
 describe("AgentSession reconnect", () => {
+  /** A session whose peers are observable, wired to a controllable relay. */
+  function sessionWithPeers(relay: FakeRelay) {
+    const peers: { closed: boolean }[] = [];
+    const session = new AgentSession({
+      relayUrl: "ws://relay.test",
+      projectDir,
+      customerName: "Jordan Lee",
+      browser: fakeBrowser,
+      relayClientFactory: () => relay,
+      peerFactory: () => {
+        const peer = {
+          closed: false,
+          onChannel: () => {},
+          onError: () => {},
+          handleSignal: () => {},
+          close() {
+            this.closed = true;
+          },
+        };
+        peers.push(peer);
+        return peer;
+      },
+    });
+    return { session, peers };
+  }
+
   it("stays alive (not ended) while the relay client reconnects", async () => {
     const relay = new FakeRelay();
     const session = makeSessionWithRelay(relay);
@@ -236,6 +264,40 @@ describe("AgentSession reconnect", () => {
     expect(session.state).not.toBe("ended");
     // The resume record survives so the reconnect can rejoin.
     expect(readResume()).not.toBeNull();
+  });
+
+  it("keeps the live peer (and terminal) alive across a relay blip", async () => {
+    const relay = new FakeRelay();
+    const { session, peers } = sessionWithPeers(relay);
+    await session.requestExpert("x");
+    relay.fireExpertJoined();
+    expect(peers).toHaveLength(1);
+
+    relay.fireReconnecting();
+    // The root-cause fix: a relay-socket blip must NOT tear down the P2P peer.
+    expect(peers[0]!.closed).toBe(false);
+    expect(session.state).toBe("connected");
+
+    // Resuming to a still-active session leaves the peer untouched.
+    relay.fireResumed({ status: "active", expertName: "Priya Sharma" });
+    expect(peers[0]!.closed).toBe(false);
+    expect(session.state).toBe("connected");
+    await session.end("done");
+  });
+
+  it("tears the kept peer down if the expert was released during the outage", async () => {
+    const relay = new FakeRelay();
+    const { session, peers } = sessionWithPeers(relay);
+    await session.requestExpert("x");
+    relay.fireExpertJoined();
+    relay.fireReconnecting();
+    expect(peers[0]!.closed).toBe(false);
+
+    // Stayed offline past grace: the relay resumes us to a waiting session.
+    relay.fireResumed({ status: "waiting" });
+    expect(peers[0]!.closed).toBe(true);
+    expect(session.state).toBe("waiting");
+    await session.end("done");
   });
 
   it("re-reports the approved scopes when the relay resumes", async () => {
@@ -470,5 +532,42 @@ describe("AgentSession delivery status", () => {
     expect(session.lastDelivery).toEqual({ summary: "attempt one", accepted: false });
 
     await session.end();
+  });
+});
+
+describe("AgentSession expert re-join", () => {
+  it("tears down the stale peer when the expert re-claims (fresh expert-joined)", async () => {
+    const relay = new FakeRelay();
+    const peers: { closed: boolean }[] = [];
+    const session = new AgentSession({
+      relayUrl: "ws://relay.test",
+      projectDir,
+      customerName: "Jordan Lee",
+      browser: fakeBrowser,
+      relayClientFactory: () => relay,
+      peerFactory: () => {
+        const peer = {
+          closed: false,
+          onChannel: () => {},
+          onError: () => {},
+          handleSignal: () => {},
+          close() {
+            this.closed = true;
+          },
+        };
+        peers.push(peer);
+        return peer;
+      },
+    });
+    await session.requestExpert("bug");
+    relay.fireExpertJoined();
+    expect(peers).toHaveLength(1);
+    // Dashboard refresh: the same expert re-claims — a second expert-joined
+    // arrives while the first peer still exists.
+    relay.fireExpertJoined();
+    expect(peers).toHaveLength(2);
+    expect(peers[0]!.closed).toBe(true);
+    expect(peers[1]!.closed).toBe(false);
+    await session.end("test over");
   });
 });

@@ -1,7 +1,9 @@
-import type {
-  ClientCapabilities,
-  ElicitRequestFormParams,
-  ElicitResult,
+import {
+  ErrorCode,
+  McpError,
+  type ClientCapabilities,
+  type ElicitRequestFormParams,
+  type ElicitResult,
 } from "@modelcontextprotocol/sdk/types.js";
 import type { Grant } from "./permissions";
 
@@ -15,11 +17,17 @@ export interface ScopeConsent {
 
 /**
  * How scope consent was resolved:
- * - "unsupported": the host doesn't advertise MCP elicitation. Not a
- *   decision by anyone — the caller should fall back to a plain-language
- *   confirmation instead of failing.
+ * - "unsupported": the host doesn't advertise MCP elicitation — or advertises
+ *   it but rejects the call as method-not-found. Not a decision by anyone —
+ *   the caller should fall back to a plain-language confirmation instead of
+ *   failing.
  * - "failed": the host advertised elicitation but the call itself threw.
  *   Transient; distinct from a decline so the user knows to just retry.
+ * - "dismissed": the prompt came back without a human answer — a cancel
+ *   (form dismissed, or auto-cancelled by a host that never rendered it),
+ *   or a decline faster than a human could have read the form. The caller
+ *   should fall back to a plain-language confirmation that offers an
+ *   explicit way to decline.
  * - "declined": the user was asked (via elicitation) and said no, or
  *   approved zero scopes.
  * - "granted": the user approved at least one scope.
@@ -27,8 +35,21 @@ export interface ScopeConsent {
 export type ElicitOutcome =
   | { kind: "unsupported" }
   | { kind: "failed" }
+  | { kind: "dismissed" }
   | { kind: "declined" }
   | { kind: "granted"; consent: ScopeConsent };
+
+/**
+ * Fastest a human could plausibly read the four-checkbox approval form and
+ * decline it. Hosts that advertise elicitation but never render the form
+ * (e.g. the Claude Code desktop GUI) auto-answer in milliseconds; treating
+ * those as real declines made requests fail closed with no prompt ever shown.
+ * Err high: a wrong "dismissed" costs one polite re-ask in chat, a wrong
+ * "declined" makes expert help unusable on that host. Only non-accept answers
+ * are time-gated — a host forging accepts could equally forge the chat
+ * fallback, so gating accepts would add friction without adding safety.
+ */
+export const MIN_HUMAN_DECLINE_MS = 2000;
 
 /**
  * Resolve scope consent via native MCP elicitation, when the host supports
@@ -40,10 +61,16 @@ export async function resolveScopeElicitation(input: {
   port: number;
   capabilities: ClientCapabilities | undefined;
   elicit: (params: ElicitRequestFormParams) => Promise<ElicitResult>;
+  /** Clock for the human-decline heuristic; injectable for tests. Defaults
+   * to performance.now (monotonic) so a wall-clock jump during the prompt
+   * can't misclassify an auto-decline as a human one. */
+  now?: () => number;
 }): Promise<ElicitOutcome> {
   if (!input.capabilities?.elicitation) {
     return { kind: "unsupported" };
   }
+  const now = input.now ?? (() => performance.now());
+  const startedAt = now();
   try {
     const result = await input.elicit({
       message:
@@ -75,6 +102,12 @@ export async function resolveScopeElicitation(input: {
         required: ["files", "terminal", "browser", "conversation"],
       },
     });
+    if (result.action === "cancel") return { kind: "dismissed" };
+    if (result.action === "decline") {
+      return now() - startedAt < MIN_HUMAN_DECLINE_MS
+        ? { kind: "dismissed" }
+        : { kind: "declined" };
+    }
     if (result.action !== "accept" || !result.content) return { kind: "declined" };
     const files = result.content.files === true;
     const terminal = result.content.terminal === true;
@@ -86,21 +119,46 @@ export async function resolveScopeElicitation(input: {
       kind: "granted",
       consent: { grant, shareTranscript: result.content.conversation === true },
     };
-  } catch {
+  } catch (err) {
+    if (err instanceof McpError && err.code === ErrorCode.MethodNotFound) {
+      return { kind: "unsupported" };
+    }
+    // The SDK refuses locally with a plain Error when the client's declared
+    // elicitation capability lacks the mode we need (e.g. advertises url but
+    // not form): "Client does not support form elicitation." Same meaning as
+    // never advertising it. If the SDK ever rewords this, we just fall back
+    // to "failed" — no worse than before.
+    if (err instanceof Error && /does not support .*elicitation/i.test(err.message)) {
+      return { kind: "unsupported" };
+    }
     return { kind: "failed" };
   }
 }
 
 /**
- * Plain-language scope description for hosts that don't support inline
- * elicitation. The assistant relays this verbatim and waits for the user's
- * explicit reply before calling confirm_expert_scopes.
+ * Plain-language scope description for hosts where the inline prompt isn't
+ * usable — "unsupported" (host doesn't offer one) or "dismissed" (the prompt
+ * came back unanswered, e.g. auto-cancelled by a host that never rendered
+ * it, or closed by the user — so that variant offers an explicit way out).
+ * The assistant relays this verbatim and waits for the user's explicit reply
+ * before calling confirm_expert_scopes.
  */
-export function buildScopesMessage(dir: string, port: number): string {
+export function buildScopesMessage(
+  dir: string,
+  port: number,
+  reason: "unsupported" | "dismissed" = "unsupported",
+): string {
+  const lead =
+    reason === "dismissed"
+      ? `An expert wants to help, scoped to ${dir}. The approval prompt was closed ` +
+        `without an answer (on some clients it never actually appears), so tell me ` +
+        `in plain language which of these you approve — nothing is granted until ` +
+        `you say so, and if you meant to decline, just say no:`
+      : `An expert wants to help, scoped to ${dir}. Your client can't show an inline ` +
+        `approval prompt, so tell me in plain language which of these you approve — ` +
+        `nothing is granted until you say so:`;
   return (
-    `An expert wants to help, scoped to ${dir}. Your client can't show an inline ` +
-    `approval prompt, so tell me in plain language which of these you approve — ` +
-    `nothing is granted until you say so:\n\n` +
+    `${lead}\n\n` +
     `- Files: read & edit files in ${dir}\n` +
     `- Terminal: run terminal commands\n` +
     `- Browser: view the browser at localhost:${port}\n\n` +

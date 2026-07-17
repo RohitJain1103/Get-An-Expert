@@ -186,6 +186,24 @@ export class SessionStore {
     });
   }
 
+  /**
+   * Re-attach the owning expert to their still-active session after their relay
+   * socket dropped (a reconnect / dashboard refresh within the grace window).
+   * This is NOT a claim: it never transfers ownership. It refreshes claimedAt
+   * only when the caller has already verified — against live socket state the
+   * store can't see — that this is the same expert whose socket is gone. The
+   * authorization check lives in the relay (grace pending + no live socket);
+   * the store just refuses to touch anything that isn't this expert's active
+   * session, so a stale/racing call can never mutate someone else's session.
+   */
+  reattach(id: string, expertName: string): Session {
+    const session = this.#require(id);
+    if (session.status !== "active" || session.expertName !== expertName) {
+      throw new Error(`Session ${id} is not an active session owned by ${expertName}`);
+    }
+    return this.#update({ ...session, claimedAt: Date.now() });
+  }
+
   release(id: string): Session {
     const session = this.#require(id);
     if (session.status === "ended") return session;

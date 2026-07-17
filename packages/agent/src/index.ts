@@ -192,13 +192,15 @@ server.registerTool(
     });
     switch (outcome.kind) {
       case "unsupported":
-        // Not a decision by anyone — the host just can't show a prompt.
+      case "dismissed":
+        // Not a decision by anyone — the host can't show a prompt, or answered
+        // it unrendered (some GUIs advertise elicitation but auto-cancel it).
         // Keep the session queued; confirm_expert_scopes finishes it later.
         // Bind it to this session id so a stale confirmation can't be replayed.
         pendingConfirmation = { dir, port, issue, summary, sessionId: session.sessionId };
         return {
           content: [
-            { type: "text" as const, text: buildScopesMessage(dir, port) },
+            { type: "text" as const, text: buildScopesMessage(dir, port, outcome.kind) },
             { type: "text" as const, text: SCOPES_CONFIRM_GUIDANCE },
           ],
         };
@@ -241,7 +243,7 @@ server.registerTool(
   {
     title: "Confirm expert access scopes",
     description:
-      "Finalizes scopes for a pending request after relaying the plain-language scope description from request_expert_help and getting the user's reply. Only call after request_expert_help returned that description (i.e. this host has no inline approval prompt). Set each field true only if the user explicitly approved it; default anything unaddressed to false.",
+      "Finalizes scopes for a pending request after relaying the plain-language scope description from request_expert_help and getting the user's reply. Only call after request_expert_help returned that description (the host has no usable inline approval prompt — it can't show one, or the prompt came back unanswered). Set each field true only if the user explicitly approved it; default anything unaddressed to false.",
     inputSchema: {
       files: z.boolean().describe("User approved file read/edit access."),
       terminal: z.boolean().describe("User approved running terminal commands."),

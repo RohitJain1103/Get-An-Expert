@@ -35,7 +35,9 @@ beforeEach(async () => {
   relays = [];
   sockets = [];
   buffers = new Map();
-  ({ relay, wsUrl, baseUrl } = await launch());
+  // Tiny active-session grace: legacy disconnect tests assert the post-grace
+  // release; grace-specific tests launch their own relays with explicit values.
+  ({ relay, wsUrl, baseUrl } = await launch({ activeGraceMs: 50 }));
 });
 
 afterEach(async () => {
@@ -672,7 +674,7 @@ describe("session metadata", () => {
 });
 
 describe("session end", () => {
-  it("keeps the request in the queue (offline) and returns the expert to idle when the agent disconnects", async () => {
+  it("keeps the request in the queue (offline) and returns the expert to idle when the agent stays gone past grace", async () => {
     const { agent, sessionId } = await registeredAgent();
     const { expert } = await authedExpert();
     send(expert, { type: "claim", sessionId });
@@ -702,7 +704,7 @@ describe("session end", () => {
     expect(relay.store.get(sessionId)?.status).toBe("ended");
   });
 
-  it("returns claimed sessions to waiting when the expert disconnects", async () => {
+  it("returns claimed sessions to waiting when the expert stays gone past grace", async () => {
     const { agent, sessionId } = await registeredAgent();
     const { expert } = await authedExpert();
     send(expert, { type: "claim", sessionId });
@@ -898,5 +900,164 @@ describe("durable inbox", () => {
     expect(restored?.customerName).toBe("Restored Dana");
     expect(restored?.online).toBe(false);
     expect(booted.store.queue().map((s) => s.id)).toContain("sess_restored");
+  });
+});
+
+describe("active session grace", () => {
+  /** Register + claim on a specific relay, returning all the moving parts. */
+  async function activePair(url: string) {
+    const agent = await connect("/agent", url);
+    send(agent, {
+      type: "register",
+      customerName: "Jordan Lee",
+      projectDir: "~/projects/landing-page",
+      issue: "Build failing",
+    });
+    const reg = await nextMessage(agent);
+    expect(reg.type).toBe("registered");
+    const expert = await connect("/expert", url);
+    send(expert, { type: "auth", token: TOKEN, name: "Priya Sharma" });
+    await waitFor(expert, (m) => m.type === "auth-ok");
+    send(expert, { type: "claim", sessionId: reg.sessionId });
+    await waitFor(expert, (m) => m.type === "claimed");
+    await waitFor(agent, (m) => m.type === "expert-joined");
+    return {
+      agent,
+      expert,
+      sessionId: reg.sessionId as string,
+      customerToken: reg.customerToken as string,
+      resumeToken: reg.resumeToken as string,
+    };
+  }
+
+  it("keeps an active session claimed across an agent blip within grace", async () => {
+    const { relay: r, wsUrl: url } = await launch({ activeGraceMs: 60_000 });
+    const { agent, expert, sessionId, resumeToken } = await activePair(url);
+
+    agent.terminate();
+    await pollUntil(() => r.store.get(sessionId)?.online === false);
+    // Still active, still Priya's — no release during grace.
+    expect(r.store.get(sessionId)?.status).toBe("active");
+    expect(r.store.get(sessionId)?.expertName).toBe("Priya Sharma");
+
+    const back = await connect("/agent", url);
+    send(back, { type: "resume", sessionId, resumeToken });
+    const resumed = await waitFor(back, (m) => m.type === "resumed");
+    expect(resumed.status).toBe("active");
+    expect(resumed.expertName).toBe("Priya Sharma");
+
+    // Signaling still routes expert -> (new) agent socket.
+    send(expert, { type: "signal", sessionId, payload: { kind: "ping" } });
+    const sig = await waitFor(back, (m) => m.type === "signal");
+    expect(sig.payload).toEqual({ kind: "ping" });
+
+    // The expert never heard a whisper of the blip.
+    const expertSaw = buffers.get(expert)!.map((m) => m.type);
+    expect(expertSaw).not.toContain("session-ended");
+    expect(expertSaw).not.toContain("expert-left");
+  });
+
+  it("releases the claim when the agent stays gone past grace", async () => {
+    const { relay: r, wsUrl: url } = await launch({ activeGraceMs: 60 });
+    const { agent, expert, sessionId, customerToken } = await activePair(url);
+    const chat = await connect("/customer", url);
+    send(chat, { type: "hello", sessionId, token: customerToken });
+    await waitFor(chat, (m) => m.type === "hello-ok");
+
+    agent.terminate();
+    await pollUntil(() => r.store.get(sessionId)?.status === "waiting");
+    const ended = await waitFor(expert, (m) => m.type === "session-ended");
+    expect(ended.reason).toMatch(/offline/i);
+    await waitFor(chat, (m) => m.type === "expert-left");
+    expect(r.store.get(sessionId)?.expertName).toBeUndefined();
+  });
+
+  it("re-attaches a re-authed expert to their active session within grace", async () => {
+    const { relay: r, wsUrl: url } = await launch({ activeGraceMs: 60_000 });
+    const { agent, expert, sessionId } = await activePair(url);
+
+    expert.terminate();
+    // Reconnect as the same expert name; no claim message sent — re-attach is
+    // automatic on auth for a session still in grace.
+    const back = await connect("/expert", url);
+    send(back, { type: "auth", token: TOKEN, name: "Priya Sharma" });
+    await waitFor(back, (m) => m.type === "auth-ok");
+
+    // Session never left active, expert never reported gone, and the agent's
+    // live peer is left untouched — no NEW expert-joined arrives (activePair
+    // already consumed the initial one), so the rebind is silent.
+    expect(r.store.get(sessionId)?.status).toBe("active");
+    expect(buffers.get(agent)!.map((m) => m.type)).not.toContain("expert-joined");
+    expect(buffers.get(agent)!.map((m) => m.type)).not.toContain("expert-left");
+
+    // Signaling now routes agent -> the re-attached expert socket.
+    send(agent, { type: "signal", payload: { kind: "pong" } });
+    const sig = await waitFor(back, (m) => m.type === "signal");
+    expect(sig.payload).toEqual({ kind: "pong" });
+  });
+
+  it("releases and notifies when the expert stays gone past grace", async () => {
+    const { relay: r, wsUrl: url } = await launch({ activeGraceMs: 60 });
+    const { agent, expert, sessionId, customerToken } = await activePair(url);
+    const chat = await connect("/customer", url);
+    send(chat, { type: "hello", sessionId, token: customerToken });
+    await waitFor(chat, (m) => m.type === "hello-ok");
+
+    expert.terminate();
+    await pollUntil(() => r.store.get(sessionId)?.status === "waiting");
+    await waitFor(agent, (m) => m.type === "expert-left");
+    await waitFor(chat, (m) => m.type === "expert-left");
+  });
+
+  it("refuses to reattach or claim a LIVE session by name (no hijack while the owner is connected)", async () => {
+    const { relay: r, wsUrl: url } = await launch({ activeGraceMs: 60_000 });
+    const { sessionId } = await activePair(url);
+
+    // A second token holder impersonating the owner's name, while the real
+    // expert's socket is still open (session NOT in grace).
+    const rival = await connect("/expert", url);
+    send(rival, { type: "auth", token: TOKEN, name: "Priya Sharma" });
+    await waitFor(rival, (m) => m.type === "auth-ok");
+    // An explicit claim of the live session is refused outright...
+    send(rival, { type: "claim", sessionId });
+    const failed = await waitFor(rival, (m) => m.type === "claim-failed");
+    expect(failed.reason).toMatch(/already/i);
+    // ...and auth never silently re-attached it (no claimed frame).
+    expect(buffers.get(rival)!.map((m) => m.type)).not.toContain("claimed");
+    // The real owner still holds it.
+    expect(r.store.get(sessionId)?.expertName).toBe("Priya Sharma");
+  });
+
+  it("does not reattach a dropped session to a DIFFERENT name within grace", async () => {
+    const { relay: r, wsUrl: url } = await launch({ activeGraceMs: 60_000 });
+    const { agent, expert, sessionId } = await activePair(url);
+
+    expert.close();
+    await waitForClose(expert);
+    // The rival's connect + auth round-trip gives the relay ample turns to
+    // process the close and arm expert grace before the auth re-attach runs.
+    const rival = await connect("/expert", url);
+    send(rival, { type: "auth", token: TOKEN, name: "Someone Else" });
+    await waitFor(rival, (m) => m.type === "auth-ok");
+    // Different name: no re-attach, session stays owned by the original expert
+    // until its own grace expiry; the agent hears no fresh expert-joined
+    // (activePair already consumed the initial one).
+    expect(buffers.get(rival)!.map((m) => m.type)).not.toContain("claimed");
+    expect(buffers.get(agent)!.map((m) => m.type)).not.toContain("expert-joined");
+    expect(r.store.get(sessionId)?.expertName).toBe("Priya Sharma");
+  });
+
+  it("an explicit end during grace wins — no release resurrects the session", async () => {
+    const { relay: r, wsUrl: url } = await launch({ activeGraceMs: 60 });
+    const { agent, expert, sessionId } = await activePair(url);
+
+    agent.terminate();
+    await pollUntil(() => r.store.get(sessionId)?.online === false);
+    send(expert, { type: "end-session", sessionId, reason: "wrapping up" });
+    await pollUntil(() => r.store.get(sessionId)?.status === "ended");
+
+    // Wait out the grace window: the end must stick.
+    await new Promise((res) => setTimeout(res, 150));
+    expect(r.store.get(sessionId)?.status).toBe("ended");
   });
 });

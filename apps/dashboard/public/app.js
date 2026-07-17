@@ -28,6 +28,13 @@ const state = {
   expertName: "",
   // Roster id the expert picked on the who-are-you grid (null = typed a name).
   selectedExpertId: null,
+  // Auto-reconnect: the relay holds active claims through a grace window and
+  // re-attaches on auth, so a transient socket drop must retry — not strand
+  // the expert while their P2P session is still alive underneath.
+  connParams: null, // { url, token, name } from the last successful connect()
+  reconnectAttempts: 0,
+  reconnectTimer: null,
+  authFailed: false,
   sessions: new Map(), // sessionId -> queue entry
   activeId: null,
   pc: null,
@@ -152,8 +159,19 @@ function connect() {
   // Provisional label until auth-ok returns the authoritative name (the roster
   // name when a face was picked). A typed name is used verbatim.
   state.expertName = name;
+  state.connParams = { url, token, name };
+  state.authFailed = false;
+  state.reconnectAttempts = 0;
+  if (state.reconnectTimer) {
+    clearTimeout(state.reconnectTimer);
+    state.reconnectTimer = null;
+  }
   setConn("connecting", "Connecting…");
+  openSocket();
+}
 
+function openSocket() {
+  const { url, token, name } = state.connParams;
   let ws;
   try {
     ws = new WebSocket(`${url}/expert`);
@@ -182,12 +200,30 @@ function connect() {
     handleRelay(msg);
   });
   ws.addEventListener("error", () => {
-    el("gate-error").textContent = "Could not reach the relay.";
-    setConn("error", "Error");
+    if (state.reconnectAttempts === 0) {
+      el("gate-error").textContent = "Could not reach the relay.";
+      setConn("error", "Error");
+    }
   });
   ws.addEventListener("close", () => {
-    setConn("offline", "Disconnected");
+    if (ws !== state.ws) return; // superseded by a newer socket
+    scheduleReconnect();
   });
+}
+
+function scheduleReconnect() {
+  // Bad token: retrying would just re-fail — wait for the human.
+  if (state.authFailed || !state.connParams || state.reconnectTimer) {
+    if (!state.reconnectTimer) setConn("offline", "Disconnected");
+    return;
+  }
+  const attempt = ++state.reconnectAttempts;
+  const delay = Math.min(1000 * 2 ** (attempt - 1), 15_000);
+  setConn("connecting", `Reconnecting… (attempt ${attempt})`);
+  state.reconnectTimer = setTimeout(() => {
+    state.reconnectTimer = null;
+    openSocket();
+  }, delay);
 }
 
 function setConn(kind, label) {
@@ -209,11 +245,13 @@ function handleRelay(msg) {
       // picked this is the profile name (e.g. "Rohit Jain"), which the queue's
       // mine-detection compares against. Falls back to the typed name.
       if (msg.name) state.expertName = msg.name;
+      state.reconnectAttempts = 0;
       setConn("online", `Connected as ${state.expertName}`);
       el("gate").classList.add("hidden");
       el("app").classList.remove("hidden");
       break;
     case "auth-failed":
+      state.authFailed = true;
       el("gate-error").textContent = "Authentication failed. Check your token.";
       setConn("error", "Auth failed");
       break;

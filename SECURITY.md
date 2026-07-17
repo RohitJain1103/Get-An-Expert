@@ -16,8 +16,14 @@ control:
   Files, Terminal, Browser — before anyone connects. Where your AI coding tool
   supports MCP elicitation, that approval happens via an inline prompt the host
   renders and returns — a control the assistant cannot influence. Where it
-  doesn't (e.g. some desktop GUIs), the assistant instead relays a plain-language
-  description of the scopes and your explicit reply in chat is what grants them.
+  doesn't — or where the host claims support but the prompt comes back
+  unanswered without ever being shown (some desktop GUIs auto-cancel it) — the
+  assistant instead relays a plain-language description of the scopes and your
+  explicit reply in chat is what grants them. "Unanswered" includes a prompt
+  answer that arrives faster than a person could plausibly have read the form
+  (about two seconds): it is re-asked in chat rather than trusted, so a
+  lightning-fast decline on a working client gets the model-mediated re-ask
+  instead of ending host-enforced — saying no there still grants nothing.
   Be aware this fallback is **model-mediated**: the assistant interprets your
   reply, so on those hosts the strength of the approval depends on the assistant
   behaving correctly, not on a host-enforced control. Which path granted access

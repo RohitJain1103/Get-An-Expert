@@ -255,21 +255,37 @@ export class AgentSession {
 
   #onReconnecting(attempt: number): void {
     this.#logLine(`relay connection lost; reconnecting (attempt ${attempt})`);
-    // The peer died with the dropped socket. Return to waiting until we resume
-    // (and, if an expert was live, they re-claim once the customer is back).
-    this.#teardownPeer();
-    if (this.#state === "connected") {
-      this.#expertName = undefined;
-      this.#expertProfile = undefined;
-      this.#state = "waiting";
-      this.#persistStatus();
+    // Do NOT tear the peer down. The WebRTC connection (and the expert's live
+    // terminal on it) is peer-to-peer and independent of this relay socket —
+    // the relay only carries signaling and lifecycle. Killing the peer here
+    // was what closed the expert's terminal mid-command on every transient
+    // relay blip. Keep the session as-is (expert name and profile included);
+    // the relay holds the claim through its grace window, and we resume the
+    // socket underneath a live peer.
+    if (attempt === 1 && this.#state === "connected") {
+      this.#handleActivity({
+        at: Date.now(),
+        kind: "reconnect",
+        summary:
+          "Relay link briefly dropped — reconnecting. The expert's session stays live.",
+      });
     }
   }
 
-  #onResumed(_status: { status?: string; expertName?: string }): void {
+  #onResumed(status: { status?: string; expertName?: string }): void {
     this.#logLine("relay connection resumed — request is back online");
     // Re-sync the relay's view of the approved scopes after the reconnect.
     this.#relay.reportPermissions(this.#gate.snapshot());
+    // If the claim was released while we were away (we stayed offline past the
+    // relay's grace, so the expert was returned to the queue), the peer we kept
+    // is now talking to nothing — tear it down and go back to waiting. A fresh
+    // expert-joined will rebuild it when someone claims again.
+    if (status.status === "waiting" && this.#state === "connected") {
+      this.#logLine("expert was released during the outage; returning to waiting");
+      this.#teardownPeer();
+      this.#expertName = undefined;
+      this.#state = "waiting";
+    }
     this.#persistStatus();
   }
 
@@ -480,6 +496,10 @@ export class AgentSession {
   }
 
   #onExpertJoined(name: string, profile?: PublicExpertProfile): void {
+    // Defensive: a fresh expert-joined should only arrive when there's no live
+    // peer (a prior expert-left tore it down). If one somehow still exists,
+    // drop it first so a new signaling exchange can't leak the old peer.
+    if (this.#peer) this.#teardownPeer();
     this.#expertName = name;
     this.#expertProfile = profile;
     this.#state = "connected";

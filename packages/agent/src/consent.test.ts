@@ -1,5 +1,7 @@
+import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { describe, expect, it, vi } from "vitest";
 import {
+  MIN_HUMAN_DECLINE_MS,
   SCOPES_CONFIRM_GUIDANCE,
   buildDeclinedMessage,
   buildElicitationFailedMessage,
@@ -39,6 +41,20 @@ describe("buildScopesMessage", () => {
     expect(msg.toLowerCase()).not.toContain("already granted");
     expect(msg.toLowerCase()).not.toContain("has been granted");
     expect(msg.toLowerCase()).toContain("nothing is granted until you say so");
+  });
+
+  it("offers a dismissed variant that keeps the scopes and an explicit way out", () => {
+    const msg = buildScopesMessage("/Users/pat/project", 4000, "dismissed");
+    expect(msg).toContain("/Users/pat/project");
+    expect(msg).toContain("localhost:4000");
+    expect(msg).toMatch(/files/i);
+    expect(msg).toMatch(/terminal/i);
+    expect(msg).toMatch(/browser/i);
+    expect(msg.toLowerCase()).toContain("nothing is granted until you say so");
+    // The prompt may have been deliberately dismissed — never pressure past a no.
+    expect(msg.toLowerCase()).toContain("just say no");
+    // Unlike the unsupported variant, don't claim the client can't show prompts.
+    expect(msg.toLowerCase()).not.toContain("can't show");
   });
 });
 
@@ -88,14 +104,111 @@ describe("resolveScopeElicitation", () => {
     expect(elicit).not.toHaveBeenCalled();
   });
 
-  it("returns declined when the user explicitly declines", async () => {
+  it("returns declined when the user declines at a human pace", async () => {
+    const elicit = vi.fn().mockResolvedValue({ action: "decline" });
+    const now = vi.fn().mockReturnValueOnce(1000).mockReturnValueOnce(1000 + 5000);
+    const outcome = await resolveScopeElicitation({
+      ...base,
+      capabilities: { elicitation: {} },
+      elicit,
+      now,
+    });
+    expect(outcome).toEqual({ kind: "declined" });
+  });
+
+  it("returns declined at exactly the human-decline threshold", async () => {
+    const elicit = vi.fn().mockResolvedValue({ action: "decline" });
+    const now = vi.fn().mockReturnValueOnce(0).mockReturnValueOnce(MIN_HUMAN_DECLINE_MS);
+    const outcome = await resolveScopeElicitation({
+      ...base,
+      capabilities: { elicitation: {} },
+      elicit,
+      now,
+    });
+    expect(outcome).toEqual({ kind: "declined" });
+  });
+
+  it("returns dismissed when a decline arrives faster than a human could read the form", async () => {
+    // Hosts that advertise elicitation but never render it (e.g. the Claude
+    // Code desktop GUI) auto-answer in milliseconds.
+    const elicit = vi.fn().mockResolvedValue({ action: "decline" });
+    const now = vi.fn().mockReturnValueOnce(1000).mockReturnValueOnce(1050);
+    const outcome = await resolveScopeElicitation({
+      ...base,
+      capabilities: { elicitation: {} },
+      elicit,
+      now,
+    });
+    expect(outcome).toEqual({ kind: "dismissed" });
+  });
+
+  it("treats an un-injected instant decline as dismissed (default Date.now wiring)", async () => {
     const elicit = vi.fn().mockResolvedValue({ action: "decline" });
     const outcome = await resolveScopeElicitation({
       ...base,
       capabilities: { elicitation: {} },
       elicit,
     });
-    expect(outcome).toEqual({ kind: "declined" });
+    expect(outcome).toEqual({ kind: "dismissed" });
+  });
+
+  it("returns dismissed on cancel regardless of timing", async () => {
+    const elicit = vi.fn().mockResolvedValue({ action: "cancel" });
+    const slow = vi.fn().mockReturnValueOnce(0).mockReturnValueOnce(60_000);
+    expect(
+      await resolveScopeElicitation({
+        ...base,
+        capabilities: { elicitation: {} },
+        elicit,
+        now: slow,
+      }),
+    ).toEqual({ kind: "dismissed" });
+    expect(
+      await resolveScopeElicitation({ ...base, capabilities: { elicitation: {} }, elicit }),
+    ).toEqual({ kind: "dismissed" });
+  });
+
+  it("returns unsupported when the SDK refuses locally over a missing elicitation mode", async () => {
+    // @modelcontextprotocol/sdk throws a plain Error (not McpError) when the
+    // client advertises elicitation without the form mode we need.
+    const elicit = vi
+      .fn()
+      .mockRejectedValue(new Error("Client does not support form elicitation."));
+    const outcome = await resolveScopeElicitation({
+      ...base,
+      capabilities: { elicitation: {} },
+      elicit,
+    });
+    expect(outcome).toEqual({ kind: "unsupported" });
+  });
+
+  it("returns unsupported when the client rejects elicitation as method-not-found", async () => {
+    // A host that advertises the capability but never implemented the method
+    // behaves like one that never advertised it.
+    const elicit = vi
+      .fn()
+      .mockRejectedValue(new McpError(ErrorCode.MethodNotFound, "Method not found"));
+    const outcome = await resolveScopeElicitation({
+      ...base,
+      capabilities: { elicitation: {} },
+      elicit,
+    });
+    expect(outcome).toEqual({ kind: "unsupported" });
+  });
+
+  it("does not time-gate accepts — an instant accept is still granted", async () => {
+    const elicit = vi.fn().mockResolvedValue({
+      action: "accept",
+      content: { files: true, terminal: true, browser: false, conversation: false },
+    });
+    const now = vi.fn().mockReturnValue(1000);
+    const outcome = await resolveScopeElicitation({
+      ...base,
+      capabilities: { elicitation: {} },
+      elicit,
+      now,
+    });
+    expect(outcome.kind).toBe("granted");
   });
 
   it("returns declined when the user accepts but approves nothing", async () => {
