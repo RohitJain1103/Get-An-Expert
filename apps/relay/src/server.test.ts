@@ -467,6 +467,153 @@ describe("two-way issue editing", () => {
   });
 });
 
+describe("delivery lifecycle", () => {
+  async function rohitExpert() {
+    const expert = await connect("/expert");
+    send(expert, { type: "auth", token: TOKEN, name: "Whoever", expertId: "rohit" });
+    await waitFor(expert, (m) => m.type === "auth-ok");
+    await waitFor(expert, (m) => m.type === "queue");
+    return expert;
+  }
+
+  /** Register, claim (as Rohit), and open a customer chat socket. */
+  async function claimedSession() {
+    const { agent, sessionId, customerToken } = await registeredAgent();
+    const expert = await rohitExpert();
+    send(expert, { type: "claim", sessionId });
+    await waitFor(expert, (m) => m.type === "claimed");
+    await waitFor(agent, (m) => m.type === "expert-joined");
+    const customer = await connect("/customer");
+    send(customer, { type: "hello", sessionId, token: customerToken });
+    await waitFor(customer, (m) => m.type === "hello-ok");
+    return { agent, expert, customer, sessionId };
+  }
+
+  it("deliver fans a delivered event to the customer chat and the agent", async () => {
+    const { agent, expert, customer, sessionId } = await claimedSession();
+    send(expert, { type: "deliver", sessionId, summary: "Renamed HeroImg and re-ran the build" });
+
+    const toChat = await waitFor(customer, (m) => m.type === "delivered");
+    expect(toChat.summary).toBe("Renamed HeroImg and re-ran the build");
+    expect(typeof toChat.at).toBe("number");
+    const toAgent = await waitFor(agent, (m) => m.type === "delivered");
+    expect(toAgent.summary).toBe("Renamed HeroImg and re-ran the build");
+    expect(relay.store.get(sessionId)?.delivery?.summary).toBe(
+      "Renamed HeroImg and re-ran the build",
+    );
+  });
+
+  it("redacts the delivery summary before storing or fanning it out", async () => {
+    const { agent, expert, customer, sessionId } = await claimedSession();
+    const secret = `sk-ant-${"a".repeat(24)}`;
+    send(expert, { type: "deliver", sessionId, summary: `done, token ${secret}` });
+
+    const toChat = await waitFor(customer, (m) => m.type === "delivered");
+    expect(toChat.summary).not.toContain(secret);
+    expect(toChat.summary).toContain("done");
+    await waitFor(agent, (m) => m.type === "delivered");
+    expect(relay.store.get(sessionId)?.delivery?.summary).not.toContain(secret);
+  });
+
+  it("ignores a deliver from an expert who did not claim the session", async () => {
+    const { sessionId, customer } = await claimedSession();
+    // A second expert authenticates but never claims this session.
+    const other = await connect("/expert");
+    send(other, { type: "auth", token: TOKEN, name: "Someone Else" });
+    await waitFor(other, (m) => m.type === "auth-ok");
+    send(other, { type: "deliver", sessionId, summary: "not my session" });
+
+    // Give the relay a moment; the customer must not receive a delivered event.
+    await new Promise((r) => setTimeout(r, 60));
+    const gotDelivered = (buffers.get(customer) ?? []).some((m) => m.type === "delivered");
+    expect(gotDelivered).toBe(false);
+    expect(relay.store.get(sessionId)?.delivery).toBeUndefined();
+  });
+
+  it("accepting fans delivery-accepted to expert, agent, and chat; no revoke", async () => {
+    const { agent, expert, customer, sessionId } = await claimedSession();
+    send(expert, { type: "deliver", sessionId, summary: "the fix" });
+    await waitFor(customer, (m) => m.type === "delivered");
+
+    send(customer, { type: "delivery-response", accepted: true });
+    const toExpert = await waitFor(expert, (m) => m.type === "delivery-accepted");
+    expect(typeof toExpert.at).toBe("number");
+    await waitFor(agent, (m) => m.type === "delivery-accepted");
+    await waitFor(customer, (m) => m.type === "delivery-accepted");
+    // Accepting does not end the session.
+    expect(relay.store.get(sessionId)?.status).toBe("active");
+    expect(relay.store.get(sessionId)?.delivery?.accepted).toBe(true);
+  });
+
+  it("declining fans delivery-declined and leaves the session working", async () => {
+    const { agent, expert, customer, sessionId } = await claimedSession();
+    send(expert, { type: "deliver", sessionId, summary: "the fix" });
+    await waitFor(customer, (m) => m.type === "delivered");
+
+    send(customer, { type: "delivery-response", accepted: false });
+    await waitFor(expert, (m) => m.type === "delivery-declined");
+    await waitFor(agent, (m) => m.type === "delivery-declined");
+    expect(relay.store.get(sessionId)?.status).toBe("active");
+    expect(relay.store.get(sessionId)?.delivery?.accepted).toBe(false);
+  });
+
+  it("rate after accept reaches only the expert and is not persisted", async () => {
+    const { expert, customer, sessionId } = await claimedSession();
+    send(expert, { type: "deliver", sessionId, summary: "the fix" });
+    await waitFor(customer, (m) => m.type === "delivered");
+    send(customer, { type: "delivery-response", accepted: true });
+    await waitFor(customer, (m) => m.type === "delivery-accepted");
+
+    send(customer, { type: "rate", rating: 5 });
+    const rated = await waitFor(expert, (m) => m.type === "rated");
+    expect(rated.rating).toBe(5);
+    // The customer never receives its own rating echo.
+    await new Promise((r) => setTimeout(r, 40));
+    const echoed = (buffers.get(customer) ?? []).some((m) => m.type === "rated");
+    expect(echoed).toBe(false);
+  });
+
+  it("ignores a rate before accept and a double rate", async () => {
+    const { expert, customer, sessionId } = await claimedSession();
+    send(expert, { type: "deliver", sessionId, summary: "the fix" });
+    await waitFor(customer, (m) => m.type === "delivered");
+
+    // Rate before accepting: ignored, no event to the expert.
+    send(customer, { type: "rate", rating: 4 });
+    await new Promise((r) => setTimeout(r, 40));
+    expect((buffers.get(expert) ?? []).some((m) => m.type === "rated")).toBe(false);
+
+    send(customer, { type: "delivery-response", accepted: true });
+    await waitFor(customer, (m) => m.type === "delivery-accepted");
+    send(customer, { type: "rate", rating: 5 });
+    // waitFor drains the first (valid) rated from the buffer.
+    const first = await waitFor(expert, (m) => m.type === "rated");
+    expect(first.rating).toBe(5);
+
+    // Second rate: ignored, so no further rated reaches the expert.
+    send(customer, { type: "rate", rating: 1 });
+    await new Promise((r) => setTimeout(r, 40));
+    const more = (buffers.get(expert) ?? []).filter((m) => m.type === "rated");
+    expect(more).toHaveLength(0);
+  });
+
+  it("hello-ok restores the delivery record after a reload", async () => {
+    const { expert, customer, sessionId } = await claimedSession();
+    send(expert, { type: "deliver", sessionId, summary: "the fix" });
+    await waitFor(customer, (m) => m.type === "delivered");
+    send(customer, { type: "delivery-response", accepted: true });
+    await waitFor(customer, (m) => m.type === "delivery-accepted");
+
+    // A reload: a fresh customer socket hellos the same session.
+    const reload = await connect("/customer");
+    const { customerToken } = relay.store.get(sessionId)!;
+    send(reload, { type: "hello", sessionId, token: customerToken });
+    const hello = await waitFor(reload, (m) => m.type === "hello-ok");
+    expect(hello.delivery?.summary).toBe("the fix");
+    expect(hello.delivery?.accepted).toBe(true);
+  });
+});
+
 describe("signaling passthrough", () => {
   it("routes signal payloads opaquely in both directions", async () => {
     const { agent, sessionId } = await registeredAgent();

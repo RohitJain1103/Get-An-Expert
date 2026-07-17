@@ -1,6 +1,6 @@
 import { Redis } from "@upstash/redis";
 import { NO_PERMISSIONS, type ContextManifest, type Permissions } from "./protocol";
-import type { Session } from "./sessions";
+import type { Delivery, Session } from "./sessions";
 
 /**
  * Durable session persistence for the relay.
@@ -27,6 +27,7 @@ export interface PersistedSession {
   status: Session["status"];
   expertName?: string;
   expertId?: string;
+  delivery?: Delivery;
   createdAt: number;
   updatedAt: number;
   claimedAt?: number;
@@ -57,6 +58,17 @@ export function toPersisted(session: Session): PersistedSession {
     status: session.status,
     expertName: session.expertName,
     expertId: session.expertId,
+    // Persist the delivery so the card / accepted screen survives a restart,
+    // but never the rating: it is a fire-once event to the expert, not a stored
+    // or aggregated outcome (decision 2026-07-17).
+    delivery: session.delivery
+      ? {
+          summary: session.delivery.summary,
+          at: session.delivery.at,
+          respondedAt: session.delivery.respondedAt,
+          accepted: session.delivery.accepted,
+        }
+      : undefined,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
     claimedAt: session.claimedAt,
@@ -85,6 +97,10 @@ export function fromPersisted(p: PersistedSession): Session {
     // The manifest describes CONTEXT.md, which the reconnecting agent still
     // holds, so it survives the restart too (resume carries no manifest).
     contextManifest: p.contextManifest,
+    // The delivery record describes work that was done and the customer's
+    // response to it, so it survives a restart and restores the delivered card
+    // or accepted screen when the customer reconnects.
+    delivery: p.delivery,
     status: "waiting",
     online: false,
     expertName: undefined,

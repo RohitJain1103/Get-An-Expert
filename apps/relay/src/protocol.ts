@@ -151,6 +151,17 @@ const expertEditIssue = z.object({
   baseAt: z.number().optional(),
 });
 
+/**
+ * Mark the claimed work delivered. `summary` is the plain-language "what I
+ * changed" the customer reads word for word; the relay redacts it (same
+ * treatment as chat) before storing or fanning it out.
+ */
+const expertDeliver = z.object({
+  type: z.literal("deliver"),
+  sessionId: z.string().min(1).max(80),
+  summary: z.string().min(1).max(2000),
+});
+
 export const expertMessageSchema = z.discriminatedUnion("type", [
   expertAuth,
   expertClaim,
@@ -159,6 +170,7 @@ export const expertMessageSchema = z.discriminatedUnion("type", [
   expertChat,
   expertEnd,
   expertEditIssue,
+  expertDeliver,
 ]);
 export type ExpertMessage = z.infer<typeof expertMessageSchema>;
 
@@ -186,6 +198,26 @@ const customerEditIssue = z.object({
 });
 
 /**
+ * Respond to a delivered fix. `accepted` true is "Yes, that solved it" (the
+ * payoff screen); false is a blame-free "Not yet" that reopens working state.
+ * Accepting does NOT end the session or revoke access (decision 2026-07-17).
+ */
+const customerDeliveryResponse = z.object({
+  type: z.literal("delivery-response"),
+  accepted: z.boolean(),
+});
+
+/**
+ * Optional, one-time session rating, valid only after an accepted delivery.
+ * Sent to the expert as an event; never persisted or aggregated anywhere
+ * (decision 2026-07-17).
+ */
+const customerRate = z.object({
+  type: z.literal("rate"),
+  rating: z.number().int().min(1).max(5),
+});
+
+/**
  * End the session from the customer side. No fields: the socket's hello already
  * bound it to a session. The relay ends it exactly like an expert end-session.
  */
@@ -197,6 +229,8 @@ export const customerMessageSchema = z.discriminatedUnion("type", [
   customerHello,
   customerChat,
   customerEditIssue,
+  customerDeliveryResponse,
+  customerRate,
   customerEnd,
 ]);
 export type CustomerMessage = z.infer<typeof customerMessageSchema>;

@@ -8,6 +8,20 @@ import {
 
 export type SessionStatus = "waiting" | "active" | "ended";
 
+/**
+ * The delivery record for a session: the expert's "what I changed" summary, the
+ * customer's accept/decline, and an optional one-time rating. A fresh deliver
+ * replaces this whole record (a declined delivery never auto-repeats; the
+ * expert sends a new one). The summary is redacted before it is stored.
+ */
+export interface Delivery {
+  summary: string;
+  at: number;
+  respondedAt?: number;
+  accepted?: boolean;
+  rating?: number;
+}
+
 /** SHA-256 of a resume token — the only form ever stored or persisted. */
 export function hashResumeToken(raw: string): string {
   return createHash("sha256").update(raw).digest("hex");
@@ -43,6 +57,9 @@ export interface Session {
   expertName?: string;
   /** Roster id of the claiming expert, when they self-selected an identity. */
   expertId?: string;
+  /** The delivered fix and the customer's response to it, once the expert marks
+   * the work done. Absent until the first deliver. */
+  delivery?: Delivery;
   createdAt: number;
   /** Epoch ms of the last mutation, so callers can show freshness. */
   updatedAt: number;
@@ -216,6 +233,58 @@ export class SessionStore {
       issue: text,
       issueEditedAt: Date.now(),
       issueEditedBy: by,
+    });
+  }
+
+  /**
+   * Record a delivered fix. Replaces any previous delivery outright: a fresh
+   * deliver clears an earlier decline (or accept) so the customer sees a clean
+   * new card. The relay redacts the summary before calling this.
+   */
+  setDelivery(id: string, summary: string): Session {
+    const session = this.#require(id);
+    return this.#update({
+      ...session,
+      delivery: { summary, at: Date.now() },
+    });
+  }
+
+  /**
+   * Record the customer's accept/decline of the current delivery. Throws when
+   * there is no delivery to respond to, or when it has already been responded
+   * to (one response per delivery; a fresh deliver resets this).
+   */
+  respondDelivery(id: string, accepted: boolean): Session {
+    const session = this.#require(id);
+    const delivery = session.delivery;
+    if (!delivery) throw new Error(`Session ${id} has no delivery to respond to`);
+    if (delivery.respondedAt !== undefined) {
+      throw new Error(`Session ${id} delivery already responded to`);
+    }
+    return this.#update({
+      ...session,
+      delivery: { ...delivery, respondedAt: Date.now(), accepted },
+    });
+  }
+
+  /**
+   * Record the optional one-time session rating. Valid only after an accepted
+   * delivery, and only once; invalid transitions throw. The rating is never
+   * persisted or aggregated (decision 2026-07-17): it rides straight to the
+   * expert as an event.
+   */
+  setRating(id: string, rating: number): Session {
+    const session = this.#require(id);
+    const delivery = session.delivery;
+    if (!delivery || delivery.accepted !== true) {
+      throw new Error(`Session ${id} cannot be rated before an accepted delivery`);
+    }
+    if (delivery.rating !== undefined) {
+      throw new Error(`Session ${id} has already been rated`);
+    }
+    return this.#update({
+      ...session,
+      delivery: { ...delivery, rating },
     });
   }
 
