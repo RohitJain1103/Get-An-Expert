@@ -244,6 +244,14 @@ button.icon-btn:hover { color: var(--text); background: var(--raised); }
 .issue-editor textarea:focus { outline: none; border-color: var(--amber); }
 .issue-editor-acts { display: flex; gap: 8px; }
 
+/* Delivery outcome line in the workspace header (accepted / declined / rated).
+   Quiet by default; a class colours it per outcome. */
+.deliver-status { font-family: var(--mono); font-size: 11px; color: var(--text2); }
+.deliver-status:not(:empty)::before { content: "· "; color: var(--text3); }
+.deliver-status.ok { color: var(--green); }
+.deliver-status.neutral { color: var(--text2); }
+.deliver-status.rated { color: var(--amber); }
+
 /* Toast: stale-edit refusal and other transient notices. */
 .toast {
   position: fixed;

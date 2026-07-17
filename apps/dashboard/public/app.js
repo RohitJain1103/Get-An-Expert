@@ -246,6 +246,17 @@ function handleRelay(msg) {
     case "edit-rejected":
       onEditRejected(msg);
       break;
+    case "delivery-accepted":
+      setDeliverStatus("Accepted. Nice work.", "ok");
+      break;
+    case "delivery-declined":
+      setDeliverStatus("Not solved yet. The customer is typing what's missing.", "neutral");
+      break;
+    case "rated":
+      if (typeof msg.rating === "number") {
+        setDeliverStatus(`Customer rated this session ${msg.rating}/5`, "rated");
+      }
+      break;
   }
 }
 
@@ -379,6 +390,8 @@ function openWorkspace(session) {
   state.issueText = session.issue || "";
   state.issueBaseAt = undefined;
   closeIssueEditor();
+  closeDeliverEditor();
+  setDeliverStatus("", null);
   renderIssue();
   renderPerms(session);
 }
@@ -389,8 +402,9 @@ function renderIssue() {
   const node = el("ws-issue");
   node.textContent = state.issueText || "";
   node.title = state.issueText || "";
-  // Only offer Edit on a live session, never on the idle/ended workspace.
+  // Only offer Edit / Deliver on a live session, never idle/ended.
   el("issue-edit-btn").classList.toggle("hidden", !state.activeId);
+  el("deliver-btn").classList.toggle("hidden", !state.activeId);
 }
 
 function openIssueEditor() {
@@ -430,6 +444,35 @@ function onIssueUpdated(msg) {
   if (typeof msg.issue === "string") state.issueText = msg.issue;
   if (typeof msg.at === "number") state.issueBaseAt = msg.at;
   renderIssue();
+}
+
+/* ── Deliver (expert marks the work done; customer accepts or declines) ── */
+
+function setDeliverStatus(text, kind) {
+  const node = el("deliver-status");
+  node.textContent = text;
+  node.className = "deliver-status" + (kind ? " " + kind : "");
+}
+
+function openDeliverEditor() {
+  if (!state.activeId) return;
+  closeIssueEditor();
+  el("deliver-input").value = "";
+  el("deliver-editor").classList.remove("hidden");
+  el("deliver-input").focus();
+}
+
+function closeDeliverEditor() {
+  el("deliver-editor").classList.add("hidden");
+}
+
+function sendDeliver() {
+  if (!state.activeId) return;
+  const summary = el("deliver-input").value.trim();
+  closeDeliverEditor();
+  if (!summary) return; // empty: treat as cancel (relay requires 1..2000)
+  relaySend({ type: "deliver", sessionId: state.activeId, summary: summary.slice(0, 2000) });
+  setDeliverStatus("Delivered. Waiting for the customer to confirm.", "neutral");
 }
 
 function onEditRejected(msg) {
@@ -1409,6 +1452,16 @@ el("issue-editor-input").addEventListener("keydown", (e) => {
   }
 });
 
+el("deliver-btn").addEventListener("click", openDeliverEditor);
+el("deliver-send-btn").addEventListener("click", sendDeliver);
+el("deliver-cancel-btn").addEventListener("click", closeDeliverEditor);
+el("deliver-input").addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    closeDeliverEditor();
+  }
+});
+
 function onSessionEnded(sessionId, reason, durationMs) {
   if (sessionId !== state.activeId) return;
   status(`Session ended (${reason ?? "done"}). Duration: ${formatDuration(durationMs)}. All access revoked.`);
@@ -1418,6 +1471,8 @@ function onSessionEnded(sessionId, reason, durationMs) {
   state.issueText = "";
   state.issueBaseAt = undefined;
   closeIssueEditor();
+  closeDeliverEditor();
+  setDeliverStatus("", null);
   renderIssue();
   el("ws-active").classList.add("hidden");
   el("ws-body").classList.add("hidden");
