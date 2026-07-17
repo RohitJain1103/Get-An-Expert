@@ -21,6 +21,8 @@ export interface PersistedSession {
   customerName: string;
   projectDir: string;
   issue?: string;
+  issueEditedAt?: number;
+  issueEditedBy?: "customer" | "expert";
   status: Session["status"];
   expertName?: string;
   expertId?: string;
@@ -48,6 +50,8 @@ export function toPersisted(session: Session): PersistedSession {
     customerName: session.customerName,
     projectDir: session.projectDir,
     issue: session.issue,
+    issueEditedAt: session.issueEditedAt,
+    issueEditedBy: session.issueEditedBy,
     status: session.status,
     expertName: session.expertName,
     expertId: session.expertId,
@@ -72,6 +76,10 @@ export function fromPersisted(p: PersistedSession): Session {
     customerName: p.customerName,
     projectDir: p.projectDir,
     issue: p.issue,
+    // The issue text and its edit metadata survive a restart: they describe the
+    // request itself, not the (torn-down) expert connection.
+    issueEditedAt: p.issueEditedAt,
+    issueEditedBy: p.issueEditedBy,
     status: "waiting",
     online: false,
     expertName: undefined,

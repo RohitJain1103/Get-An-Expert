@@ -101,6 +101,33 @@ describe("SessionStore expert identity", () => {
   });
 });
 
+describe("SessionStore.setIssue", () => {
+  it("sets the issue and stamps issueEditedAt and issueEditedBy", () => {
+    const store = makeStore();
+    const s = register(store);
+    const updated = store.setIssue(s.id, "new issue text", "customer");
+    expect(updated.issue).toBe("new issue text");
+    expect(updated.issueEditedBy).toBe("customer");
+    expect(updated.issueEditedAt).toBeGreaterThan(0);
+  });
+
+  it("does not mutate the previous snapshot", () => {
+    const store = makeStore();
+    const s = register(store);
+    store.setIssue(s.id, "edited by the expert", "expert");
+    expect(s.issue).toBe(
+      "TypeScript error: HeroImage is not exported from @/assets",
+    );
+    expect(s.issueEditedBy).toBeUndefined();
+    expect(s.issueEditedAt).toBeUndefined();
+  });
+
+  it("throws for unknown sessions", () => {
+    const store = makeStore();
+    expect(() => store.setIssue("nope", "x", "customer")).toThrow(/unknown/i);
+  });
+});
+
 describe("SessionStore.release", () => {
   it("returns an active session to waiting and clears the expert", () => {
     const store = makeStore();

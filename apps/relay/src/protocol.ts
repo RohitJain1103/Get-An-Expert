@@ -126,6 +126,18 @@ const expertEnd = z.object({
   reason: z.string().max(200).optional(),
 });
 
+/**
+ * Edit the shared issue text from the expert side. `baseAt` is the
+ * `issueEditedAt` the expert last saw; the server rejects the edit when a
+ * customer has edited more recently (customer always wins, see server.ts).
+ */
+const expertEditIssue = z.object({
+  type: z.literal("edit-issue"),
+  sessionId: z.string().min(1).max(80),
+  text: z.string().min(1).max(2000),
+  baseAt: z.number().optional(),
+});
+
 export const expertMessageSchema = z.discriminatedUnion("type", [
   expertAuth,
   expertClaim,
@@ -133,6 +145,7 @@ export const expertMessageSchema = z.discriminatedUnion("type", [
   expertSignal,
   expertChat,
   expertEnd,
+  expertEditIssue,
 ]);
 export type ExpertMessage = z.infer<typeof expertMessageSchema>;
 
@@ -149,9 +162,20 @@ const customerChat = z.object({
   text: z.string().min(1).max(2000),
 });
 
+/**
+ * Edit the shared issue text from the customer side. The socket's hello
+ * already bound it to a session, so no sessionId is needed. Customer edits are
+ * never rejected (customer always wins, see server.ts).
+ */
+const customerEditIssue = z.object({
+  type: z.literal("edit-issue"),
+  text: z.string().min(1).max(2000),
+});
+
 export const customerMessageSchema = z.discriminatedUnion("type", [
   customerHello,
   customerChat,
+  customerEditIssue,
 ]);
 export type CustomerMessage = z.infer<typeof customerMessageSchema>;
 

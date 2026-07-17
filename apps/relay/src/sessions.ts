@@ -23,6 +23,11 @@ export interface Session {
   customerName: string;
   projectDir: string;
   issue?: string;
+  /** Epoch ms of the last issue edit, and who made it. Absent until the issue
+   * is first edited (the original issue from register is not an "edit"). Used
+   * by the customer-always-wins conflict rule. */
+  issueEditedAt?: number;
+  issueEditedBy?: "customer" | "expert";
   status: SessionStatus;
   /**
    * Whether the customer's agent socket is currently attached. A request stays
@@ -191,6 +196,21 @@ export class SessionStore {
   setPermissions(id: string, permissions: Permissions): Session {
     const session = this.#require(id);
     return this.#update({ ...session, permissions: { ...permissions } });
+  }
+
+  /**
+   * Replace the issue text and stamp who edited it and when. The relay redacts
+   * the text before calling this (same treatment as chat), so the stored issue
+   * is already safe to fan out.
+   */
+  setIssue(id: string, text: string, by: "customer" | "expert"): Session {
+    const session = this.#require(id);
+    return this.#update({
+      ...session,
+      issue: text,
+      issueEditedAt: Date.now(),
+      issueEditedBy: by,
+    });
   }
 
   addChat(id: string, message: ChatMessage): Session {
