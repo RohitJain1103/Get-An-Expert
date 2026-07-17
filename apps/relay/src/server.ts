@@ -18,7 +18,7 @@ import {
   type SessionPersistence,
 } from "./persistence";
 import { serveStatic } from "./static";
-import { findExpert, type PublicExpertProfile } from "./roster";
+import { ROSTER, findExpert, type PublicExpertProfile } from "./roster";
 
 /** Default max age of a queued request before the sweep expires it (72h). */
 export const DEFAULT_MAX_AGE_MS = 72 * 60 * 60 * 1000;
@@ -84,6 +84,14 @@ export function createRelay(options: RelayOptions): Relay {
     if (req.url === "/healthz") {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ ok: true, sessions: store.queue().length }));
+      return;
+    }
+    // Public roster of experts, for the customer chat bench and the dashboard
+    // identity picker. Marketing data only: no token or code material lives on
+    // a PublicExpertProfile, so this is safe to serve unauthenticated.
+    if (new URL(req.url ?? "/", "http://relay.local").pathname === "/api/roster") {
+      res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify(ROSTER));
       return;
     }
     if (options.dashboardDir) {

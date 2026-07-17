@@ -398,6 +398,19 @@ describe("http", () => {
     expect(res.status).toBe(200);
   });
 
+  it("GET /api/roster returns the six public profiles and nothing secret", async () => {
+    const res = await fetch(`${baseUrl}/api/roster`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toMatch(/application\/json/);
+    const body = await res.json();
+    expect(Array.isArray(body)).toBe(true);
+    expect(body).toHaveLength(6);
+    expect(body.map((e: any) => e.id)).toEqual([
+      "rohit", "aakash", "senjal", "inigo", "hardik", "pulkit",
+    ]);
+    expect(JSON.stringify(body)).not.toContain(TOKEN);
+  });
+
   it("refuses path traversal outside the dashboard dir", async () => {
     const res = await fetch(`${baseUrl}/..%2f..%2f..%2fetc%2fpasswd`);
     expect(res.status).toBe(404);
