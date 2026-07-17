@@ -67,6 +67,20 @@ describe("RelayClient.register", () => {
     expect(client.sessionId).toBe("s1");
     expect(client.resumeToken).toBe("r1");
   });
+
+  it("includes the context manifest in the register frame when provided", () => {
+    const { client, created } = makeClient();
+    void client.register({
+      customerName: "A",
+      projectDir: "~/a",
+      contextManifest: { conversationMessages: 12, secretsRedacted: 2 },
+    });
+    created[0].open();
+    expect(JSON.parse(created[0].sent[0])).toMatchObject({
+      type: "register",
+      contextManifest: { conversationMessages: 12, secretsRedacted: 2 },
+    });
+  });
 });
 
 describe("RelayClient reconnect + resume", () => {

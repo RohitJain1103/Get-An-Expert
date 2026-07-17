@@ -26,11 +26,10 @@
   const CTX_HEADING = "What we've told the expert";
   const CTX_NOTE =
     "This is the summary. They get the full detail. Change it anytime, before or after someone picks it up.";
-  // Chips that are categorically true without a per-session count. The two
-  // count-bearing chips in the spec ("47 messages", "3 secrets removed") are
-  // omitted until a wire contract carries the real numbers: a hardcoded count
-  // would be a fabricated figure on every session.
-  const CTX_CHIPS = ["Your agent's summary", "A short overview of your project"];
+  const CTX_SAVED = "Updated. The expert sees this now.";
+  // The context chips (including the count-bearing "This conversation, N
+  // messages" and "N secrets removed") are built by GaeChat.contextChips from
+  // the manifest the relay carries, so a count is shown only when it is real.
   const STEPS_HEADING = "What happens next";
   const STEPS = [
     "One expert picks this up.",
@@ -127,6 +126,87 @@
   let ws = null;
   let reconnectTimer = null;
 
+  // Context editor state. ctxMode drives both the waiting context card and the
+  // claimed-state ctx-mini row. editDraft survives re-renders (a chat message
+  // arriving mid-edit must not wipe what the customer is typing). editorTextarea
+  // is the live node so render() can restore focus after rebuilding.
+  let ctxMode = "view"; // "view" | "edit" | "saved"
+  let editDraft = "";
+  let editorTextarea = null;
+
+  // End-session two-step confirm. "idle" shows the End session control; "armed"
+  // shows the inline "End session? Yes, end it / Keep going" confirm. Pure
+  // transitions live in GaeChat.nextEndStep (tested); this only holds the step.
+  let endStep = "idle"; // "idle" | "armed" | "ending"
+
+  function armEnd() {
+    endStep = G.nextEndStep(endStep, "arm");
+    render();
+  }
+
+  function cancelEnd() {
+    if (endStep !== "armed") return;
+    endStep = G.nextEndStep(endStep, "cancel");
+    render();
+  }
+
+  function confirmEnd() {
+    endStep = G.nextEndStep(endStep, "confirm");
+    if (endStep === "ending" && ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "end" }));
+    }
+    endStep = "idle"; // the session-ended echo collapses the pinned region
+    render();
+  }
+
+  function openEditor() {
+    editDraft = state.issue || "";
+    ctxMode = "edit";
+    render();
+  }
+
+  function cancelEditor() {
+    ctxMode = "view";
+    render();
+  }
+
+  function saveEditor(value) {
+    const payload = G.editPayload(value);
+    if (payload && ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(payload));
+      ctxMode = "saved"; // the issue-updated echo repaints the text
+    } else {
+      ctxMode = "view"; // empty edit or no socket: treat as cancel
+    }
+    render();
+  }
+
+  // The textarea + Save/Cancel, shared by the waiting card and the ctx-mini row.
+  // Esc cancels; input is mirrored into editDraft so a re-render keeps it.
+  function appendEditor(box) {
+    const ta = el("textarea", "c-edit");
+    ta.value = editDraft;
+    ta.setAttribute("aria-label", "Edit what the expert sees");
+    ta.addEventListener("input", () => {
+      editDraft = ta.value;
+    });
+    ta.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        cancelEditor();
+      }
+    });
+    editorTextarea = ta;
+    box.append(ta);
+    const acts = el("div", "c-ctx-acts");
+    const save = el("button", "c-btn", "Save");
+    save.addEventListener("click", () => saveEditor(ta.value));
+    const cancel = el("button", "c-btn ghost", "Cancel");
+    cancel.addEventListener("click", cancelEditor);
+    acts.append(save, cancel);
+    box.append(acts);
+  }
+
   /* ── Card builders ─────────────────────────────────────────────────── */
 
   function messageNode(m) {
@@ -158,9 +238,13 @@
   function contextCard() {
     const box = el("div", "c-ctx");
     box.append(el("div", "c-ctx-h", CTX_HEADING));
+    if (ctxMode === "edit") {
+      appendEditor(box);
+      return box;
+    }
     if (state.issue) box.append(el("div", "c-ctx-issue", state.issue));
     const chips = el("div", "c-chips");
-    CTX_CHIPS.forEach((t) => {
+    G.contextChips(state.manifest).forEach((t) => {
       const c = el("span", "c-chip");
       c.append(el("span", "tk", "✓")); // check mark
       c.append(el("span", null, t));
@@ -168,7 +252,17 @@
     });
     box.append(chips);
     box.append(el("div", "c-ctx-note", CTX_NOTE));
-    // Edit affordance is deferred to Track E; display-only here.
+    if (ctxMode === "saved") {
+      const ok = el("div", "c-saved");
+      ok.append(el("span", null, "✓"));
+      ok.append(el("span", null, CTX_SAVED));
+      box.append(ok);
+    }
+    const acts = el("div", "c-ctx-acts");
+    const edit = el("button", "c-btn ghost", "Edit");
+    edit.addEventListener("click", openEditor);
+    acts.append(edit);
+    box.append(acts);
     return box;
   }
 
@@ -265,20 +359,47 @@
 
   function accessBodyInto(node, perms) {
     node.replaceChildren();
-    if (!perms) return;
-    if (perms.files) node.append(el("span", "c-scope", "Files"));
-    if (perms.terminal) node.append(el("span", "c-scope", "Terminal"));
-    if (perms.browser) {
-      node.append(
-        el("span", "c-scope", perms.browserPort ? "Browser :" + perms.browserPort : "Browser"),
-      );
+    if (perms) {
+      if (perms.files) node.append(el("span", "c-scope", "Files"));
+      if (perms.terminal) node.append(el("span", "c-scope", "Terminal"));
+      if (perms.browser) {
+        node.append(
+          el("span", "c-scope", perms.browserPort ? "Browser :" + perms.browserPort : "Browser"),
+        );
+      }
     }
+    node.append(endControl());
   }
 
-  function ctxMiniInto(node, issue) {
+  // The End session control. Destructive and irreversible, so the first tap only
+  // arms an inline confirm (no browser confirm() dialog). Copy is exact.
+  function endControl() {
+    if (endStep === "armed") {
+      const wrap = el("div", "c-endconfirm");
+      wrap.append(el("span", "q", "End session?"));
+      const yes = el("button", "yes", "Yes, end it");
+      yes.addEventListener("click", confirmEnd);
+      const no = el("button", "no", "Keep going");
+      no.addEventListener("click", cancelEnd);
+      wrap.append(yes, no);
+      return wrap;
+    }
+    const btn = el("button", "c-endbtn", "End session");
+    btn.addEventListener("click", armEnd);
+    return btn;
+  }
+
+  function ctxMiniInto(node) {
     node.replaceChildren();
-    node.append(el("span", "t", issue || ""));
-    // Edit affordance is deferred to Track E; display-only here.
+    node.classList.toggle("editing", ctxMode === "edit");
+    if (ctxMode === "edit") {
+      appendEditor(node);
+      return;
+    }
+    node.append(el("span", "t", state.issue || ""));
+    const edit = el("button", null, "Edit");
+    edit.addEventListener("click", openEditor);
+    node.append(edit);
   }
 
   /* ── UI primitives ─────────────────────────────────────────────────── */
@@ -321,8 +442,21 @@
   /* ── Render ────────────────────────────────────────────────────────── */
 
   function render() {
+    editorTextarea = null;
     renderConn();
     renderBody();
+    // Keep the caret in the editor across rebuilds (a stray relay message must
+    // not steal focus from someone mid-edit).
+    if (ctxMode === "edit" && editorTextarea) {
+      const ta = editorTextarea;
+      ta.focus();
+      const end = ta.value.length;
+      try {
+        ta.setSelectionRange(end, end);
+      } catch {
+        /* not all inputs support selection ranges */
+      }
+    }
   }
 
   function renderConn() {
@@ -348,6 +482,9 @@
   }
 
   function renderBody() {
+    // The End control only lives in the claimed pinned region; drop any armed
+    // confirm the moment the session leaves that state.
+    if (state.phase !== "claimed") endStep = "idle";
     if (state.phase === "failed") {
       els.pinned.classList.add("hidden");
       setBanner(FAILED_BANNER, "muted");
@@ -390,9 +527,11 @@
     els.mini.classList.add("hidden");
     els.ctxMini.classList.remove("hidden");
     els.access.classList.remove("hidden");
-    els.access.open = false; // collapsed by default: check it, do not stare at it
+    // Collapsed by default (check it, do not stare at it), but held open while
+    // the End session confirm is armed so the confirm stays visible.
+    els.access.open = endStep === "armed";
     expertCardInto(els.expertCard, state.expert);
-    ctxMiniInto(els.ctxMini, state.issue);
+    ctxMiniInto(els.ctxMini);
     accessBodyInto(els.accessBody, state.permissions);
     setBanner(G.firstName(expertName()) + " is here and working on your machine.", "");
     enableComposer("Message your expert");
@@ -463,6 +602,14 @@
   }
 
   /* ── Sending (no optimistic render: wait for the echo) ─────────────── */
+
+  // Esc restores the armed End session confirm (matches the editor's Esc-cancel).
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && endStep === "armed") {
+      event.preventDefault();
+      cancelEnd();
+    }
+  });
 
   els.composer.addEventListener("submit", (event) => {
     event.preventDefault();

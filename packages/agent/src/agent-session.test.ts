@@ -72,6 +72,9 @@ class FakeRelay implements RelayConnection {
   fireSessionEnded(reason?: string): void {
     this.events.onSessionEnded?.(reason);
   }
+  fireIssueUpdated(issue: string): void {
+    this.events.onIssueUpdated?.(issue);
+  }
 }
 
 let projectDir: string;
@@ -311,6 +314,69 @@ describe("AgentSession expert profile", () => {
     expect(session.state).toBe("connected");
     expect(session.expertName).toBe("Someone");
     expect(session.expertProfile).toBeUndefined();
+
+    await session.end();
+  });
+});
+
+describe("AgentSession issue updates", () => {
+  const contextInput = () => ({
+    customerName: "Jordan Lee",
+    issue: "original issue text",
+    summary: "where they are stuck",
+    overview: null,
+    transcriptMarkdown: undefined,
+    requestedAt: Date.now(),
+  });
+
+  it("rebuilds CONTEXT.md and updates status().issue on issue-updated", async () => {
+    const relay = new FakeRelay();
+    const session = makeSessionWithRelay(relay);
+    await session.requestExpert("original issue text");
+    await session.writeContextFrom(contextInput());
+    const path = join(projectDir, ".get-an-expert", "CONTEXT.md");
+    expect(readFileSync(path, "utf8")).toContain("original issue text");
+
+    relay.fireIssueUpdated("the revised issue statement");
+    await new Promise((r) => setTimeout(r, 30));
+
+    expect(session.status().issue).toBe("the revised issue statement");
+    const md = readFileSync(path, "utf8");
+    expect(md).toContain("the revised issue statement");
+    expect(md).not.toContain("original issue text");
+
+    await session.end();
+  });
+
+  it("triggers exactly one context rebuild per issue update", async () => {
+    const entries: ActivityEntry[] = [];
+    const relay = new FakeRelay();
+    const session = new AgentSession({
+      relayUrl: "ws://relay.test",
+      projectDir,
+      customerName: "Jordan Lee",
+      browser: fakeBrowser,
+      relayClientFactory: () => relay,
+      onActivity: (e) => entries.push(e),
+    });
+    await session.requestExpert("original issue text");
+    await session.writeContextFrom(contextInput()); // first context write
+    relay.fireIssueUpdated("second version");
+    await new Promise((r) => setTimeout(r, 30));
+    const contextEntries = entries.filter((e) => e.kind === "context");
+    expect(contextEntries.length).toBe(2); // initial + one rebuild
+
+    await session.end();
+  });
+
+  it("updates the issue but writes no file when no context was assembled yet", async () => {
+    const relay = new FakeRelay();
+    const session = makeSessionWithRelay(relay);
+    await session.requestExpert("original issue text");
+    relay.fireIssueUpdated("edited before context existed");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(session.status().issue).toBe("edited before context existed");
+    expect(existsSync(join(projectDir, ".get-an-expert"))).toBe(false);
 
     await session.end();
   });

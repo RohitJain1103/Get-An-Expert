@@ -72,8 +72,27 @@
       bench: [],
       permissions: undefined,
       issue: undefined,
+      manifest: undefined,
       feed: [],
     };
+  }
+
+  /* ── Context chips: the two always-true chips, with count-bearing chips
+     interleaved only when the manifest actually carries a number. A number
+     (including 0) renders; an absent or non-number field shows no chip, so a
+     count is never fabricated. Order matches the visual spec. ────────────── */
+
+  function contextChips(manifest) {
+    var m = manifest || {};
+    var chips = ["Your agent's summary"];
+    if (typeof m.conversationMessages === "number") {
+      chips.push("This conversation, " + m.conversationMessages + " messages");
+    }
+    chips.push("A short overview of your project");
+    if (typeof m.secretsRedacted === "number") {
+      chips.push(m.secretsRedacted + " secrets removed");
+    }
+    return chips;
   }
 
   function phaseFromStatus(status) {
@@ -115,6 +134,7 @@
           bench: Array.isArray(msg.bench) ? msg.bench.filter(validProfile) : [],
           permissions: msg.permissions,
           issue: typeof msg.issue === "string" ? msg.issue : undefined,
+          manifest: msg.contextManifest,
           feed: feedFromHello(msg.history, msg.activity),
         };
       }
@@ -159,12 +179,49 @@
         });
       }
 
+      case "issue-updated": {
+        // Every accepted edit (ours or the expert's) echoes back here; the
+        // echo is the single render path, so the card never updates optimistically.
+        if (s.phase === "ended" || s.phase === "failed") return s;
+        return assign(s, {
+          issue: typeof msg.issue === "string" ? msg.issue : s.issue,
+        });
+      }
+
+      case "edit-rejected":
+        // The customer always wins, so a customer socket never receives this;
+        // the case keeps reduce total and leaves the issue untouched.
+        return s;
+
       case "session-ended":
         return assign(s, { phase: "ended" });
 
       default:
         return s; // unknown message types leave state unchanged
     }
+  }
+
+  /* ── Edit payload: trim, bound 1..2000, wrap as an edit-issue message ── */
+
+  function editPayload(text) {
+    if (typeof text !== "string") return undefined;
+    var trimmed = text.trim();
+    if (trimmed.length === 0) return undefined;
+    return { type: "edit-issue", text: trimmed.slice(0, 2000) };
+  }
+
+  /* ── End session two-step confirm state machine ─────────────────────────
+     Ending is destructive and irreversible, so a first tap only arms the
+     confirm; "confirm" is honoured only from the armed step, so a stray click
+     can never end a session. "cancel" (Keep going / Esc) returns to idle.
+     Steps: "idle" -> "armed" -> "ending". ──────────────────────────────── */
+
+  function nextEndStep(step, action) {
+    var s = step || "idle";
+    if (action === "arm") return "armed";
+    if (action === "cancel") return "idle";
+    if (action === "confirm") return s === "armed" ? "ending" : s;
+    return s;
   }
 
   // Shallow immutable update: never mutate the state the caller handed us.
@@ -187,6 +244,9 @@
     firstName: firstName,
     validProfile: validProfile,
     reduce: reduce,
+    editPayload: editPayload,
+    contextChips: contextChips,
+    nextEndStep: nextEndStep,
     initialState: initialState,
   };
 

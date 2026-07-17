@@ -73,6 +73,42 @@ describe("persisted session mapping", () => {
     expect(restored.expertName).toBeUndefined();
   });
 
+  it("round-trips issue edit metadata (issueEditedAt / issueEditedBy)", () => {
+    const store = new SessionStore();
+    const s = store.create({
+      customerName: "Dana",
+      projectDir: "~/p",
+      issue: "original issue",
+    }).session;
+    store.setIssue(s.id, "edited issue", "customer");
+    const persisted = toPersisted(store.get(s.id)!);
+    expect(persisted.issue).toBe("edited issue");
+    expect(persisted.issueEditedBy).toBe("customer");
+    expect(typeof persisted.issueEditedAt).toBe("number");
+    const restored = fromPersisted(persisted);
+    expect(restored.issue).toBe("edited issue");
+    expect(restored.issueEditedBy).toBe("customer");
+    expect(restored.issueEditedAt).toBe(persisted.issueEditedAt);
+  });
+
+  it("round-trips the context manifest", () => {
+    const store = new SessionStore();
+    const s = store.create({
+      customerName: "Dana",
+      projectDir: "~/p",
+      contextManifest: { conversationMessages: 8, secretsRedacted: 1 },
+    }).session;
+    const persisted = toPersisted(store.get(s.id)!);
+    expect(persisted.contextManifest).toEqual({
+      conversationMessages: 8,
+      secretsRedacted: 1,
+    });
+    expect(fromPersisted(persisted).contextManifest).toEqual({
+      conversationMessages: 8,
+      secretsRedacted: 1,
+    });
+  });
+
   it("serializes the expert roster id but clears it on hydrate (must re-claim)", () => {
     const store = new SessionStore();
     const s = store.create({ customerName: "Dana", projectDir: "~/p" }).session;

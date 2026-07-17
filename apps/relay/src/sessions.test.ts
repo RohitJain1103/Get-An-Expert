@@ -50,6 +50,24 @@ describe("SessionStore.create", () => {
     const b = register(store);
     expect(a.customerToken).not.toBe(b.customerToken);
   });
+
+  it("stores the context manifest when provided", () => {
+    const store = makeStore();
+    const s = store.create({
+      customerName: "Dana",
+      projectDir: "~/p",
+      contextManifest: { conversationMessages: 12, secretsRedacted: 2 },
+    }).session;
+    expect(s.contextManifest).toEqual({
+      conversationMessages: 12,
+      secretsRedacted: 2,
+    });
+  });
+
+  it("leaves the manifest undefined when none is provided", () => {
+    const store = makeStore();
+    expect(register(store).contextManifest).toBeUndefined();
+  });
 });
 
 describe("SessionStore.claim", () => {
@@ -98,6 +116,33 @@ describe("SessionStore expert identity", () => {
     const s = register(store);
     store.claim(s.id, "Priya Sharma");
     expect(store.get(s.id)?.expertId).toBeUndefined();
+  });
+});
+
+describe("SessionStore.setIssue", () => {
+  it("sets the issue and stamps issueEditedAt and issueEditedBy", () => {
+    const store = makeStore();
+    const s = register(store);
+    const updated = store.setIssue(s.id, "new issue text", "customer");
+    expect(updated.issue).toBe("new issue text");
+    expect(updated.issueEditedBy).toBe("customer");
+    expect(updated.issueEditedAt).toBeGreaterThan(0);
+  });
+
+  it("does not mutate the previous snapshot", () => {
+    const store = makeStore();
+    const s = register(store);
+    store.setIssue(s.id, "edited by the expert", "expert");
+    expect(s.issue).toBe(
+      "TypeScript error: HeroImage is not exported from @/assets",
+    );
+    expect(s.issueEditedBy).toBeUndefined();
+    expect(s.issueEditedAt).toBeUndefined();
+  });
+
+  it("throws for unknown sessions", () => {
+    const store = makeStore();
+    expect(() => store.setIssue("nope", "x", "customer")).toThrow(/unknown/i);
   });
 });
 

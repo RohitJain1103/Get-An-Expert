@@ -332,12 +332,138 @@ describe("claim carries the roster profile", () => {
     expect(hello.issue).toBe("Build failing");
   });
 
+  it("carries the register context manifest through to hello-ok", async () => {
+    const agent = await connect("/agent");
+    send(agent, {
+      type: "register",
+      customerName: "Jordan Lee",
+      projectDir: "~/projects/landing-page",
+      issue: "Build failing",
+      contextManifest: { conversationMessages: 47, secretsRedacted: 3 },
+    });
+    const reg = await nextMessage(agent);
+    expect(reg.type).toBe("registered");
+
+    const customer = await connect("/customer");
+    send(customer, {
+      type: "hello",
+      sessionId: reg.sessionId,
+      token: reg.customerToken,
+    });
+    const hello = await waitFor(customer, (m) => m.type === "hello-ok");
+    expect(hello.contextManifest).toEqual({
+      conversationMessages: 47,
+      secretsRedacted: 3,
+    });
+  });
+
   it("hello-ok bench never includes token material", async () => {
     const { sessionId, customerToken } = await registeredAgent();
     const customer = await connect("/customer");
     send(customer, { type: "hello", sessionId, token: customerToken });
     const hello = await waitFor(customer, (m) => m.type === "hello-ok");
     expect(JSON.stringify(hello)).not.toContain(TOKEN);
+  });
+});
+
+describe("two-way issue editing", () => {
+  async function rohitExpert() {
+    const expert = await connect("/expert");
+    send(expert, { type: "auth", token: TOKEN, name: "Whoever", expertId: "rohit" });
+    await waitFor(expert, (m) => m.type === "auth-ok");
+    await waitFor(expert, (m) => m.type === "queue");
+    return expert;
+  }
+
+  it("customer edit-issue updates, redacts, and broadcasts issue-updated", async () => {
+    const { agent, sessionId, customerToken } = await registeredAgent();
+    const expert = await rohitExpert();
+    send(expert, { type: "claim", sessionId });
+    await waitFor(expert, (m) => m.type === "claimed");
+    await waitFor(agent, (m) => m.type === "expert-joined");
+
+    const customer = await connect("/customer");
+    send(customer, { type: "hello", sessionId, token: customerToken });
+    await waitFor(customer, (m) => m.type === "hello-ok");
+
+    const secret = `sk-ant-${"a".repeat(24)}`;
+    send(customer, { type: "edit-issue", text: `please fix ${secret} now` });
+
+    const toAgent = await waitFor(agent, (m) => m.type === "issue-updated");
+    expect(toAgent.by).toBe("customer");
+    expect(toAgent.issue).not.toContain(secret);
+    expect(toAgent.issue).toContain("please fix");
+    const toExpert = await waitFor(expert, (m) => m.type === "issue-updated");
+    expect(toExpert.by).toBe("customer");
+    const toChat = await waitFor(customer, (m) => m.type === "issue-updated");
+    expect(toChat.by).toBe("customer");
+    expect(typeof toChat.at).toBe("number");
+
+    const session = relay.store.get(sessionId);
+    expect(session?.issueEditedBy).toBe("customer");
+    expect(session?.issue).not.toContain(secret);
+  });
+
+  it("expert edit with a stale baseAt against a customer edit is rejected", async () => {
+    const { agent, sessionId, customerToken } = await registeredAgent();
+    const expert = await rohitExpert();
+    send(expert, { type: "claim", sessionId });
+    await waitFor(expert, (m) => m.type === "claimed");
+
+    const customer = await connect("/customer");
+    send(customer, { type: "hello", sessionId, token: customerToken });
+    await waitFor(customer, (m) => m.type === "hello-ok");
+
+    // Customer edits at t1.
+    send(customer, { type: "edit-issue", text: "customer version wins" });
+    await waitFor(agent, (m) => m.type === "issue-updated");
+    const t1 = relay.store.get(sessionId)!.issueEditedAt!;
+
+    // Expert edits with a baseAt from before the customer's edit.
+    send(expert, {
+      type: "edit-issue",
+      sessionId,
+      text: "expert version loses",
+      baseAt: t1 - 5000,
+    });
+    const rej = await waitFor(expert, (m) => m.type === "edit-rejected");
+    expect(rej.issue).toBe("customer version wins");
+    expect(rej.by).toBe("customer");
+
+    const session = relay.store.get(sessionId);
+    expect(session?.issue).toBe("customer version wins");
+    expect(session?.issueEditedBy).toBe("customer");
+  });
+
+  it("expert edit with a current baseAt wins normally (last write wins)", async () => {
+    const { agent, sessionId } = await registeredAgent();
+    const expert = await rohitExpert();
+    send(expert, { type: "claim", sessionId });
+    await waitFor(expert, (m) => m.type === "claimed");
+    await waitFor(agent, (m) => m.type === "expert-joined");
+
+    // No prior customer edit, so the expert's edit is not stale.
+    send(expert, { type: "edit-issue", sessionId, text: "expert first edit" });
+    const toAgent = await waitFor(agent, (m) => m.type === "issue-updated");
+    expect(toAgent.by).toBe("expert");
+    expect(toAgent.issue).toBe("expert first edit");
+    expect(relay.store.get(sessionId)?.issueEditedBy).toBe("expert");
+  });
+
+  it("hello-ok reports issueEditedAt and issueEditedBy after an edit", async () => {
+    const { sessionId, customerToken } = await registeredAgent();
+    const c1 = await connect("/customer");
+    send(c1, { type: "hello", sessionId, token: customerToken });
+    await waitFor(c1, (m) => m.type === "hello-ok");
+    send(c1, { type: "edit-issue", text: "updated issue text" });
+    await waitFor(c1, (m) => m.type === "issue-updated");
+
+    const c2 = await connect("/customer");
+    send(c2, { type: "hello", sessionId, token: customerToken });
+    const hello = await waitFor(c2, (m) => m.type === "hello-ok");
+    expect(hello.issue).toBe("updated issue text");
+    expect(hello.issueEditedBy).toBe("customer");
+    expect(typeof hello.issueEditedAt).toBe("number");
   });
 });
 
@@ -438,6 +564,46 @@ describe("session end", () => {
     expert.close();
     await waitFor(agent, (m) => m.type === "expert-left");
     expect(relay.store.get(sessionId)?.status).toBe("waiting");
+  });
+});
+
+describe("customer-initiated end", () => {
+  it("ends the session and notifies agent, expert, and chat sockets", async () => {
+    const { agent, sessionId, customerToken } = await registeredAgent();
+    const { expert } = await authedExpert();
+    send(expert, { type: "claim", sessionId });
+    await waitFor(expert, (m) => m.type === "claimed");
+    await waitFor(agent, (m) => m.type === "expert-joined");
+
+    const customer = await connect("/customer");
+    send(customer, { type: "hello", sessionId, token: customerToken });
+    await waitFor(customer, (m) => m.type === "hello-ok");
+
+    send(customer, { type: "end" });
+
+    await waitFor(agent, (m) => m.type === "session-ended");
+    await waitFor(expert, (m) => m.type === "session-ended");
+    await waitFor(customer, (m) => m.type === "session-ended");
+    expect(relay.store.get(sessionId)?.status).toBe("ended");
+  });
+
+  it("refuses further customer messages once ended", async () => {
+    const { sessionId, customerToken } = await registeredAgent();
+    const customer = await connect("/customer");
+    send(customer, { type: "hello", sessionId, token: customerToken });
+    await waitFor(customer, (m) => m.type === "hello-ok");
+    send(customer, { type: "end" });
+    await waitFor(customer, (m) => m.type === "session-ended");
+
+    // The ended session lingers, so a fresh hello still works, but any further
+    // chat is refused with session-ended.
+    const c2 = await connect("/customer");
+    send(c2, { type: "hello", sessionId, token: customerToken });
+    const hello = await waitFor(c2, (m) => m.type === "hello-ok");
+    expect(hello.status).toBe("ended");
+    send(c2, { type: "chat", text: "anyone still there?" });
+    const refused = await waitFor(c2, (m) => m.type === "session-ended");
+    expect(refused).toBeTruthy();
   });
 });
 

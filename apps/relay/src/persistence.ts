@@ -1,5 +1,5 @@
 import { Redis } from "@upstash/redis";
-import { NO_PERMISSIONS, type Permissions } from "./protocol";
+import { NO_PERMISSIONS, type ContextManifest, type Permissions } from "./protocol";
 import type { Session } from "./sessions";
 
 /**
@@ -21,6 +21,9 @@ export interface PersistedSession {
   customerName: string;
   projectDir: string;
   issue?: string;
+  issueEditedAt?: number;
+  issueEditedBy?: "customer" | "expert";
+  contextManifest?: ContextManifest;
   status: Session["status"];
   expertName?: string;
   expertId?: string;
@@ -48,6 +51,9 @@ export function toPersisted(session: Session): PersistedSession {
     customerName: session.customerName,
     projectDir: session.projectDir,
     issue: session.issue,
+    issueEditedAt: session.issueEditedAt,
+    issueEditedBy: session.issueEditedBy,
+    contextManifest: session.contextManifest,
     status: session.status,
     expertName: session.expertName,
     expertId: session.expertId,
@@ -72,6 +78,13 @@ export function fromPersisted(p: PersistedSession): Session {
     customerName: p.customerName,
     projectDir: p.projectDir,
     issue: p.issue,
+    // The issue text and its edit metadata survive a restart: they describe the
+    // request itself, not the (torn-down) expert connection.
+    issueEditedAt: p.issueEditedAt,
+    issueEditedBy: p.issueEditedBy,
+    // The manifest describes CONTEXT.md, which the reconnecting agent still
+    // holds, so it survives the restart too (resume carries no manifest).
+    contextManifest: p.contextManifest,
     status: "waiting",
     online: false,
     expertName: undefined,

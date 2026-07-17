@@ -232,6 +232,12 @@ function handleRelay(msg) {
     case "session-ended":
       onSessionEnded(msg.sessionId, msg.reason, msg.durationMs);
       break;
+    case "issue-updated":
+      onIssueUpdated(msg);
+      break;
+    case "edit-rejected":
+      onEditRejected(msg);
+      break;
   }
 }
 
@@ -342,6 +348,7 @@ function onClaimed(sessionId) {
     customerName: session?.customerName ?? "Customer",
     projectDir: session?.projectDir ?? "",
     permissions: session?.permissions,
+    issue: session?.issue,
     status: "active",
     expertName: state.expertName,
   });
@@ -358,7 +365,75 @@ function openWorkspace(session) {
   el("ws-active").classList.remove("hidden");
   el("ws-body").classList.remove("hidden");
   el("ws-title").textContent = `${session.customerName} — ${session.projectDir}`;
+  // Seed the editable issue. baseAt starts undefined: the expert has not seen an
+  // issueEditedAt yet, so a first edit onto a session a customer already edited
+  // is refused (customer always wins) and the toast hands back their version.
+  state.issueText = session.issue || "";
+  state.issueBaseAt = undefined;
+  closeIssueEditor();
+  renderIssue();
   renderPerms(session);
+}
+
+/* ── Issue editing (expert side; customer always wins on conflict) ──── */
+
+function renderIssue() {
+  const node = el("ws-issue");
+  node.textContent = state.issueText || "";
+  node.title = state.issueText || "";
+  // Only offer Edit on a live session, never on the idle/ended workspace.
+  el("issue-edit-btn").classList.toggle("hidden", !state.activeId);
+}
+
+function openIssueEditor() {
+  if (!state.activeId) return;
+  const input = el("issue-editor-input");
+  input.value = state.issueText || "";
+  el("issue-editor").classList.remove("hidden");
+  input.focus();
+  const end = input.value.length;
+  try {
+    input.setSelectionRange(end, end);
+  } catch {
+    /* ignore */
+  }
+}
+
+function closeIssueEditor() {
+  el("issue-editor").classList.add("hidden");
+}
+
+function saveIssue() {
+  if (!state.activeId) return;
+  const text = el("issue-editor-input").value.trim();
+  closeIssueEditor();
+  if (!text) return; // empty edit: treat as cancel (relay requires 1..2000)
+  relaySend({
+    type: "edit-issue",
+    sessionId: state.activeId,
+    text: text.slice(0, 2000),
+    baseAt: state.issueBaseAt,
+  });
+  // No optimistic update: the issue-updated echo (or an edit-rejected) is the
+  // single render path.
+}
+
+function onIssueUpdated(msg) {
+  if (typeof msg.issue === "string") state.issueText = msg.issue;
+  if (typeof msg.at === "number") state.issueBaseAt = msg.at;
+  renderIssue();
+}
+
+function onEditRejected(msg) {
+  // The customer edited more recently; adopt their version and its timestamp so
+  // a retry carries a fresh baseAt, then show them what changed.
+  if (typeof msg.issue === "string") state.issueText = msg.issue;
+  if (typeof msg.at === "number") state.issueBaseAt = msg.at;
+  renderIssue();
+  showToast(
+    msg.reason ||
+      "The customer updated this while you were editing; here is their version.",
+  );
 }
 
 function renderPerms(session) {
@@ -612,6 +687,15 @@ function status(msg) {
   const t = state.terminals.find((x) => x.term);
   if (t) t.term.write(`\r\n\x1b[90m» ${msg}\x1b[0m\r\n`);
   else console.log("[get-an-expert]", msg);
+}
+
+let toastTimer = null;
+function showToast(msg) {
+  const node = el("toast");
+  node.textContent = msg;
+  node.classList.remove("hidden");
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => node.classList.add("hidden"), 6000);
 }
 
 /* ── Bottom panel tabs ────────────────────────────────────────────── */
@@ -1307,12 +1391,26 @@ el("end-btn").addEventListener("click", () => {
   onSessionEnded(sessionId, "you ended the session", null);
 });
 
+el("issue-edit-btn").addEventListener("click", openIssueEditor);
+el("issue-save-btn").addEventListener("click", saveIssue);
+el("issue-cancel-btn").addEventListener("click", closeIssueEditor);
+el("issue-editor-input").addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    closeIssueEditor();
+  }
+});
+
 function onSessionEnded(sessionId, reason, durationMs) {
   if (sessionId !== state.activeId) return;
   status(`Session ended (${reason ?? "done"}). Duration: ${formatDuration(durationMs)}. All access revoked.`);
   teardownPeer();
   resetWorkspace();
   state.activeId = null;
+  state.issueText = "";
+  state.issueBaseAt = undefined;
+  closeIssueEditor();
+  renderIssue();
   el("ws-active").classList.add("hidden");
   el("ws-body").classList.add("hidden");
   el("ws-idle").classList.remove("hidden");

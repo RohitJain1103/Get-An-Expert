@@ -264,6 +264,26 @@ export function createRelay(options: RelayOptions): Relay {
     if (expertWs) sendTo(expertWs, { type: "chat", sessionId, message });
   }
 
+  /**
+   * Fan an accepted issue edit out to everyone who cares: the customer's agent
+   * (so it rebuilds CONTEXT.md), the claiming expert, and every customer chat
+   * socket (including the editor, since the echo is the single render path). The
+   * issue is already redacted by the time it is stored.
+   */
+  function broadcastIssueUpdated(session: Session): void {
+    const payload = {
+      type: "issue-updated",
+      issue: session.issue ?? "",
+      by: session.issueEditedBy,
+      at: session.issueEditedAt,
+    };
+    const agentWs = agents.get(session.id);
+    if (agentWs) sendTo(agentWs, payload);
+    const expertWs = expertFor(session.id);
+    if (expertWs) sendTo(expertWs, payload);
+    notifyChatSockets(session.id, payload);
+  }
+
   function endSession(sessionId: string, reason: string | undefined, notify: {
     agent?: boolean;
     expert?: boolean;
@@ -352,6 +372,7 @@ export function createRelay(options: RelayOptions): Relay {
           customerName: msg.customerName,
           projectDir: msg.projectDir,
           issue: msg.issue,
+          contextManifest: msg.contextManifest,
         });
         sessionId = session.id;
         agents.set(sessionId, ws);
@@ -547,6 +568,36 @@ export function createRelay(options: RelayOptions): Relay {
           endSession(msg.sessionId, msg.reason, { agent: true });
           return;
         }
+        case "edit-issue": {
+          if (!conn.claimed.has(msg.sessionId)) return; // not yours to edit
+          const session = store.get(msg.sessionId);
+          if (!session || session.status !== "active") return;
+          if (!allowChat(ws)) return; // rate limited (shares the chat bucket)
+          // Customer always wins: reject an expert edit whose baseAt predates
+          // the customer's most recent edit. A missing baseAt against a live
+          // customer edit is treated as stale (the expert can't prove they saw
+          // it). Expert-over-expert and edits on a fresh issue are last-write-wins.
+          const stale =
+            session.issueEditedBy === "customer" &&
+            session.issueEditedAt !== undefined &&
+            (msg.baseAt === undefined || msg.baseAt < session.issueEditedAt);
+          if (stale) {
+            sendTo(ws, {
+              type: "edit-rejected",
+              reason:
+                "The customer updated this while you were editing; here is their version.",
+              issue: session.issue ?? "",
+              at: session.issueEditedAt,
+              by: session.issueEditedBy,
+            });
+            return;
+          }
+          const { text } = redactText(msg.text);
+          const updated = store.setIssue(msg.sessionId, text, "expert");
+          persist(updated);
+          broadcastIssueUpdated(updated);
+          return;
+        }
       }
     });
 
@@ -619,6 +670,9 @@ export function createRelay(options: RelayOptions): Relay {
           bench: ROSTER,
           permissions: session.permissions,
           issue: session.issue,
+          issueEditedAt: session.issueEditedAt,
+          issueEditedBy: session.issueEditedBy,
+          contextManifest: session.contextManifest,
         });
         log(`customer chat socket joined session ${sessionId}`);
         return;
@@ -637,6 +691,28 @@ export function createRelay(options: RelayOptions): Relay {
           }
           if (!allowChat(ws)) return; // rate limited
           acceptChat(sessionId, "customer", session.customerName, msg.text);
+          return;
+        }
+        case "edit-issue": {
+          const session = store.get(sessionId);
+          if (!session || session.status === "ended") return; // gone/ended: refuse silently
+          if (!allowChat(ws)) return; // rate limited (shares the chat bucket)
+          // Customer edits are never rejected; they set the new baseline that a
+          // concurrent expert edit is measured against.
+          const { text } = redactText(msg.text);
+          const updated = store.setIssue(sessionId, text, "customer");
+          persist(updated);
+          broadcastIssueUpdated(updated);
+          return;
+        }
+        case "end": {
+          // The customer ends their own session: same fan-out and teardown as an
+          // expert end-session (agent + claiming expert + all chat sockets get
+          // session-ended; store.end + persistence removal).
+          endSession(sessionId, "customer ended the session", {
+            agent: true,
+            expert: true,
+          });
           return;
         }
       }

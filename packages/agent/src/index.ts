@@ -32,6 +32,7 @@ import {
   transcriptToMarkdown,
   type ProjectOverview,
 } from "./context";
+import type { ContextManifest } from "./relay-client";
 import {
   END_SESSION_MESSAGE,
   EXPERT_WORK_GUIDANCE,
@@ -164,9 +165,15 @@ server.registerTool(
       log: (line) => console.error(`[get-an-expert] ${line}`),
     });
 
-    // Register with the relay first so the request is queued for experts.
+    // Register with the relay first so the request is queued for experts. The
+    // context manifest rides along so the customer chat page shows truthful
+    // chips. It is computed here (before consent) from the same sources the
+    // hand-off file uses, assuming the transcript will be shared (the
+    // elicitation default); a rare decline can leave the conversation count
+    // slightly high, never low.
+    const contextManifest = computeContextManifest({ issue, summary, projectDir: dir });
     try {
-      await session.requestExpert(issue);
+      await session.requestExpert(issue, contextManifest);
     } catch (err) {
       session = undefined;
       return text(
@@ -433,7 +440,7 @@ async function writeSessionContext(
     overview = null;
   }
   try {
-    const markdown = buildContextMarkdown({
+    await activeSession.writeContextFrom({
       customerName: customerName(),
       issue: input.issue,
       summary: input.summary,
@@ -441,13 +448,56 @@ async function writeSessionContext(
       transcriptMarkdown,
       requestedAt: Date.now(),
     });
-    await activeSession.writeContext(markdown);
   } catch {
     return "not written — the expert will start from the issue description";
   }
   return transcriptMarkdown
     ? "summary + conversation transcript written to .get-an-expert/CONTEXT.md"
     : "summary only written to .get-an-expert/CONTEXT.md";
+}
+
+/**
+ * Compute the truthful context manifest (conversation turn count + secrets
+ * redacted) from the same sources the hand-off file uses. Best-effort: any
+ * failure returns undefined so no chip is fabricated. `conversationMessages` is
+ * only included when a transcript actually rendered turns, so an absent
+ * transcript shows no "This conversation" chip rather than a misleading zero.
+ * `secretsRedacted` is always reported (0 is honest and reassuring).
+ */
+function computeContextManifest(input: {
+  issue: string | undefined;
+  summary: string;
+  projectDir: string;
+}): ContextManifest | undefined {
+  try {
+    let transcriptMarkdown: string | undefined;
+    const pointer = readTranscriptPointer();
+    if (pointer) {
+      transcriptMarkdown =
+        transcriptToMarkdown(readTranscriptTail(pointer.transcriptPath)) || undefined;
+    }
+    let overview: ProjectOverview | null = null;
+    try {
+      overview = readProjectOverview(input.projectDir);
+    } catch {
+      overview = null;
+    }
+    const built = buildContextMarkdown({
+      customerName: customerName(),
+      issue: input.issue,
+      summary: input.summary,
+      overview,
+      transcriptMarkdown,
+      requestedAt: Date.now(),
+    });
+    const manifest: ContextManifest = { secretsRedacted: built.secretsRedacted };
+    if (built.conversationMessages > 0) {
+      manifest.conversationMessages = built.conversationMessages;
+    }
+    return manifest;
+  } catch {
+    return undefined;
+  }
 }
 
 function errText(err: unknown): string {

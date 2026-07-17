@@ -5,7 +5,16 @@ import { describe, expect, it } from "vitest";
 import "../public/chat-core.js";
 
 const GaeChat = (globalThis as any).GaeChat;
-const { parseLink, initials, firstName, validProfile, reduce } = GaeChat;
+const {
+  parseLink,
+  initials,
+  firstName,
+  validProfile,
+  reduce,
+  editPayload,
+  contextChips,
+  nextEndStep,
+} = GaeChat;
 
 // PublicExpertProfile fixture, verbatim per the Wire Contracts section.
 const FIXTURE_ROHIT = {
@@ -135,6 +144,14 @@ describe("reduce", () => {
     expect(s.feed).toEqual([]);
   });
 
+  it("hello-ok stores the context manifest for the chips", () => {
+    const s = reduce(undefined, {
+      ...helloWaiting,
+      contextManifest: { conversationMessages: 12, secretsRedacted: 1 },
+    });
+    expect(s.manifest).toEqual({ conversationMessages: 12, secretsRedacted: 1 });
+  });
+
   it("expert-joined moves waiting to claimed and stores the profile", () => {
     const s0 = reduce(undefined, helloWaiting);
     const s1 = reduce(s0, {
@@ -260,5 +277,143 @@ describe("reduce", () => {
     const s0 = reduce(undefined, helloWaiting);
     expect(reduce(s0, {})).toBe(s0);
     expect(reduce(s0, { type: 42 })).toBe(s0);
+  });
+
+  it("issue-updated replaces the issue text (customer edit echo)", () => {
+    const s0 = reduce(undefined, helloWaiting);
+    const s1 = reduce(s0, {
+      type: "issue-updated",
+      issue: "Revised: login also drops on tab focus.",
+      by: "customer",
+      at: 123,
+    });
+    expect(s1.issue).toBe("Revised: login also drops on tab focus.");
+  });
+
+  it("issue-updated from the expert also updates the issue", () => {
+    const s0 = reduce(undefined, helloWaiting);
+    const s1 = reduce(s0, {
+      type: "issue-updated",
+      issue: "Reworded by the expert.",
+      by: "expert",
+      at: 200,
+    });
+    expect(s1.issue).toBe("Reworded by the expert.");
+  });
+
+  it("issue-updated is ignored once the session has ended", () => {
+    const s0 = reduce(undefined, { type: "session-ended" });
+    const s1 = reduce(s0, { type: "issue-updated", issue: "too late", by: "expert", at: 1 });
+    expect(s1.issue).toBeUndefined();
+  });
+
+  it("edit-rejected leaves the issue unchanged (customers always win)", () => {
+    const s0 = reduce(undefined, helloWaiting);
+    const s1 = reduce(s0, {
+      type: "edit-rejected",
+      issue: "someone else's version",
+      reason: "stale",
+      at: 1,
+      by: "customer",
+    });
+    expect(s1.issue).toBe(helloWaiting.issue);
+  });
+});
+
+/* ── editPayload ────────────────────────────────────────────────────── */
+
+describe("editPayload", () => {
+  it("trims and wraps valid text as an edit-issue message", () => {
+    expect(editPayload("  new problem statement  ")).toEqual({
+      type: "edit-issue",
+      text: "new problem statement",
+    });
+  });
+
+  it("returns undefined for empty or whitespace-only text", () => {
+    expect(editPayload("")).toBeUndefined();
+    expect(editPayload("   ")).toBeUndefined();
+  });
+
+  it("clamps to 2000 characters", () => {
+    const long = "a".repeat(2500);
+    const payload = editPayload(long);
+    expect(payload.text.length).toBe(2000);
+  });
+
+  it("returns undefined for non-string input", () => {
+    expect(editPayload(undefined)).toBeUndefined();
+    expect(editPayload(42)).toBeUndefined();
+  });
+});
+
+/* ── contextChips ───────────────────────────────────────────────────── */
+
+describe("contextChips", () => {
+  it("shows only the always-true chips when there is no manifest", () => {
+    expect(contextChips(undefined)).toEqual([
+      "Your agent's summary",
+      "A short overview of your project",
+    ]);
+  });
+
+  it("adds the count chips when both fields are numbers", () => {
+    expect(
+      contextChips({ conversationMessages: 47, secretsRedacted: 3 }),
+    ).toEqual([
+      "Your agent's summary",
+      "This conversation, 47 messages",
+      "A short overview of your project",
+      "3 secrets removed",
+    ]);
+  });
+
+  it("renders a zero count honestly rather than hiding it", () => {
+    expect(
+      contextChips({ conversationMessages: 0, secretsRedacted: 0 }),
+    ).toEqual([
+      "Your agent's summary",
+      "This conversation, 0 messages",
+      "A short overview of your project",
+      "0 secrets removed",
+    ]);
+  });
+
+  it("omits a chip whose field is absent or not a number", () => {
+    expect(contextChips({ secretsRedacted: 2 })).toEqual([
+      "Your agent's summary",
+      "A short overview of your project",
+      "2 secrets removed",
+    ]);
+    expect(
+      contextChips({ conversationMessages: 5, secretsRedacted: "x" }),
+    ).toEqual([
+      "Your agent's summary",
+      "This conversation, 5 messages",
+      "A short overview of your project",
+    ]);
+  });
+});
+
+/* ── nextEndStep (customer End session two-step confirm) ─────────────── */
+
+describe("nextEndStep", () => {
+  it("arms from idle (first tap)", () => {
+    expect(nextEndStep("idle", "arm")).toBe("armed");
+    expect(nextEndStep(undefined, "arm")).toBe("armed");
+  });
+
+  it("cancels back to idle from armed (Keep going / Esc)", () => {
+    expect(nextEndStep("armed", "cancel")).toBe("idle");
+  });
+
+  it("confirms to ending only from armed (Yes, end it)", () => {
+    expect(nextEndStep("armed", "confirm")).toBe("ending");
+    // A confirm can never fire without first arming.
+    expect(nextEndStep("idle", "confirm")).toBe("idle");
+  });
+
+  it("leaves the step unchanged on an unknown action", () => {
+    expect(nextEndStep("armed", "nope")).toBe("armed");
   });
 });

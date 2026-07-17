@@ -41,11 +41,24 @@ export type ChatMessage = z.infer<typeof chatMessageSchema>;
 
 /* ── Messages the agent (customer machine) may send ─────────────── */
 
+/**
+ * Truthful, count-bearing description of what the expert's CONTEXT.md contains,
+ * surfaced as chips on the customer chat page. Each count is optional: the
+ * customer renders a chip only for a field that is actually a number, so an
+ * absent count never fabricates a figure.
+ */
+export const contextManifestSchema = z.object({
+  conversationMessages: z.number().int().min(0).optional(),
+  secretsRedacted: z.number().int().min(0).optional(),
+});
+export type ContextManifest = z.infer<typeof contextManifestSchema>;
+
 const agentRegister = z.object({
   type: z.literal("register"),
   customerName: z.string().min(1).max(120),
   projectDir: z.string().min(1).max(500),
   issue: z.string().max(2000).optional(),
+  contextManifest: contextManifestSchema.optional(),
 });
 
 /**
@@ -126,6 +139,18 @@ const expertEnd = z.object({
   reason: z.string().max(200).optional(),
 });
 
+/**
+ * Edit the shared issue text from the expert side. `baseAt` is the
+ * `issueEditedAt` the expert last saw; the server rejects the edit when a
+ * customer has edited more recently (customer always wins, see server.ts).
+ */
+const expertEditIssue = z.object({
+  type: z.literal("edit-issue"),
+  sessionId: z.string().min(1).max(80),
+  text: z.string().min(1).max(2000),
+  baseAt: z.number().optional(),
+});
+
 export const expertMessageSchema = z.discriminatedUnion("type", [
   expertAuth,
   expertClaim,
@@ -133,6 +158,7 @@ export const expertMessageSchema = z.discriminatedUnion("type", [
   expertSignal,
   expertChat,
   expertEnd,
+  expertEditIssue,
 ]);
 export type ExpertMessage = z.infer<typeof expertMessageSchema>;
 
@@ -149,9 +175,29 @@ const customerChat = z.object({
   text: z.string().min(1).max(2000),
 });
 
+/**
+ * Edit the shared issue text from the customer side. The socket's hello
+ * already bound it to a session, so no sessionId is needed. Customer edits are
+ * never rejected (customer always wins, see server.ts).
+ */
+const customerEditIssue = z.object({
+  type: z.literal("edit-issue"),
+  text: z.string().min(1).max(2000),
+});
+
+/**
+ * End the session from the customer side. No fields: the socket's hello already
+ * bound it to a session. The relay ends it exactly like an expert end-session.
+ */
+const customerEnd = z.object({
+  type: z.literal("end"),
+});
+
 export const customerMessageSchema = z.discriminatedUnion("type", [
   customerHello,
   customerChat,
+  customerEditIssue,
+  customerEnd,
 ]);
 export type CustomerMessage = z.infer<typeof customerMessageSchema>;
 

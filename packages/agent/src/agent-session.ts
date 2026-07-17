@@ -10,9 +10,10 @@ import {
   type ResumeRecord,
 } from "@get-an-expert/core/relay";
 import { buildChatUrl } from "./chat-url";
+import { buildContextMarkdown, type ContextInput } from "./context";
 import { createExpertServer } from "./expert-server";
 import { PermissionGate, type Grant, type Scope } from "./permissions";
-import { RelayClient, type RelayConnection } from "./relay-client";
+import { RelayClient, type ContextManifest, type RelayConnection } from "./relay-client";
 import { SessionLog } from "./session";
 import { AgentTools } from "./tools";
 import { AutoBrowserController } from "./browser-auto";
@@ -83,6 +84,9 @@ export class AgentSession {
   #contextWritten = false;
   /** The issue text and request time, kept so the resume record can be rebuilt. */
   #issue?: string;
+  /** The inputs the CONTEXT.md was built from, kept so an issue edit can rebuild
+   * it in place (patching just the issue) without re-reading the transcript. */
+  #contextInput?: ContextInput;
   #requestedAt = 0;
   readonly #browser: BrowserController;
 
@@ -139,6 +143,7 @@ export class AgentSession {
       onExpertJoined: (name, profile) => this.#onExpertJoined(name, profile),
       onExpertLeft: () => this.#onExpertLeft(),
       onSignal: (payload) => this.#peer?.handleSignal(payload),
+      onIssueUpdated: (issue) => this.#onIssueUpdated(issue),
       onSessionEnded: (reason) => this.#finish(reason, false),
       onReconnecting: (attempt) => this.#onReconnecting(attempt),
       onResumed: (status) => this.#onResumed(status),
@@ -155,8 +160,13 @@ export class AgentSession {
     });
   }
 
-  /** Register the session with the relay and wait for an expert to claim it. */
-  async requestExpert(issue?: string): Promise<{ sessionId: string }> {
+  /** Register the session with the relay and wait for an expert to claim it. The
+   * context manifest (truthful CONTEXT.md counts) rides along on the register so
+   * the customer chat page can show it as chips. */
+  async requestExpert(
+    issue?: string,
+    contextManifest?: ContextManifest,
+  ): Promise<{ sessionId: string }> {
     if (this.#state !== "idle") {
       throw new Error(`Cannot request an expert from state "${this.#state}"`);
     }
@@ -167,6 +177,7 @@ export class AgentSession {
       customerName: this.#opts.customerName,
       projectDir: this.#opts.projectDir,
       issue,
+      contextManifest,
     });
     this.#state = "waiting";
     this.#startedAt = Date.now();
@@ -303,6 +314,7 @@ export class AgentSession {
     expertName?: string;
     expertProfile?: PublicExpertProfile;
     chatUrl?: string;
+    issue?: string;
     permissions: Grant;
     recentActivity: ActivityEntry[];
   } {
@@ -312,6 +324,7 @@ export class AgentSession {
       expertName: this.#expertName,
       expertProfile: this.#expertProfile,
       chatUrl: this.chatUrl,
+      issue: this.#issue,
       permissions: this.#gate.snapshot(),
       recentActivity: this.#log.entries().slice(-20),
     };
@@ -336,6 +349,38 @@ export class AgentSession {
       kind: "context",
       summary: "Session context written: .get-an-expert/CONTEXT.md",
     });
+  }
+
+  /**
+   * Assemble and write CONTEXT.md from its source inputs, keeping those inputs
+   * so a later issue edit can rebuild the file in place. The caller (index.ts)
+   * uses this instead of building the markdown itself, so the session owns the
+   * one path that produces CONTEXT.md.
+   */
+  async writeContextFrom(input: ContextInput): Promise<void> {
+    this.#contextInput = input;
+    this.#issue = input.issue;
+    await this.writeContext(buildContextMarkdown(input).markdown);
+  }
+
+  /**
+   * The issue was edited (customer or expert). Adopt the new text and, if
+   * CONTEXT.md was already assembled, rebuild it in place so the expert's
+   * hand-off file always matches the edited issue. Fires before the session is
+   * claimed too (a waiting-state customer edit), in which case there is no file
+   * yet and we only update the tracked issue.
+   */
+  #onIssueUpdated(issue: string): void {
+    this.#issue = issue;
+    if (!this.#contextInput) {
+      this.#persistStatus();
+      return;
+    }
+    this.#contextInput = { ...this.#contextInput, issue };
+    this.#logLine("issue edited; rebuilding CONTEXT.md");
+    void this.writeContext(buildContextMarkdown(this.#contextInput).markdown).catch((err) =>
+      this.#logLine(`context rebuild failed: ${err instanceof Error ? err.message : String(err)}`),
+    );
   }
 
   /**
