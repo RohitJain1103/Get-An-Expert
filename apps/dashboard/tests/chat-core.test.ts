@@ -14,6 +14,9 @@ const {
   editPayload,
   contextChips,
   nextEndStep,
+  canRate,
+  deliveryResponsePayload,
+  ratePayload,
 } = GaeChat;
 
 // PublicExpertProfile fixture, verbatim per the Wire Contracts section.
@@ -415,5 +418,160 @@ describe("nextEndStep", () => {
 
   it("leaves the step unchanged on an unknown action", () => {
     expect(nextEndStep("armed", "nope")).toBe("armed");
+  });
+});
+
+/* ── delivery lifecycle ─────────────────────────────────────────────── */
+
+function claimed() {
+  return reduce(undefined, {
+    type: "hello-ok",
+    status: "active",
+    expert: FIXTURE_ROHIT,
+    bench: [FIXTURE_ROHIT],
+    permissions: { files: true, terminal: false, browser: false },
+    issue: "session drops on refresh",
+    history: [],
+    activity: [],
+  });
+}
+
+describe("reduce: delivery", () => {
+  it("delivered stores the pending delivery and stays working (claimed)", () => {
+    const s = reduce(claimed(), { type: "delivered", summary: "renamed and rebuilt", at: 111 });
+    expect(s.phase).toBe("claimed");
+    expect(s.delivery).toEqual({ summary: "renamed and rebuilt", at: 111 });
+  });
+
+  it("delivered ignores a malformed record", () => {
+    const s0 = claimed();
+    const s = reduce(s0, { type: "delivered", at: 111 });
+    expect(s.delivery).toBeUndefined();
+  });
+
+  it("delivery-accepted moves to the done screen and records acceptance", () => {
+    const s0 = reduce(claimed(), { type: "delivered", summary: "the fix", at: 111 });
+    const s = reduce(s0, { type: "delivery-accepted", at: 222 });
+    expect(s.phase).toBe("done");
+    expect(s.delivery.accepted).toBe(true);
+    expect(s.delivery.respondedAt).toBe(222);
+    // Accepting never ends the session.
+    expect(s.phase).not.toBe("ended");
+  });
+
+  it("delivery-declined clears the pending card but stays working", () => {
+    const s0 = reduce(claimed(), { type: "delivered", summary: "the fix", at: 111 });
+    const s = reduce(s0, { type: "delivery-declined", at: 222 });
+    expect(s.phase).toBe("claimed");
+    expect(s.delivery.respondedAt).toBe(222);
+    expect(s.delivery.accepted).toBe(false);
+  });
+
+  it("a fresh delivered after a decline replaces the record and reopens the card", () => {
+    let s = reduce(claimed(), { type: "delivered", summary: "attempt 1", at: 1 });
+    s = reduce(s, { type: "delivery-declined", at: 2 });
+    s = reduce(s, { type: "delivered", summary: "attempt 2", at: 3 });
+    expect(s.phase).toBe("claimed");
+    expect(s.delivery).toEqual({ summary: "attempt 2", at: 3 });
+  });
+
+  it("rated is a no-op for the customer state", () => {
+    const s0 = reduce(claimed(), { type: "delivered", summary: "the fix", at: 111 });
+    const s1 = reduce(s0, { type: "delivery-accepted", at: 222 });
+    const s2 = reduce(s1, { type: "rated", rating: 5 });
+    expect(s2).toEqual(s1);
+  });
+
+  it("hello-ok restores a pending delivery as the working card", () => {
+    const s = reduce(undefined, {
+      type: "hello-ok",
+      status: "active",
+      expert: FIXTURE_ROHIT,
+      bench: [FIXTURE_ROHIT],
+      history: [],
+      activity: [],
+      delivery: { summary: "the fix", at: 111 },
+    });
+    expect(s.phase).toBe("claimed");
+    expect(s.delivery.summary).toBe("the fix");
+    expect(s.delivery.accepted).toBeUndefined();
+  });
+
+  it("hello-ok restores an accepted delivery as the done screen", () => {
+    const s = reduce(undefined, {
+      type: "hello-ok",
+      status: "active",
+      expert: FIXTURE_ROHIT,
+      bench: [FIXTURE_ROHIT],
+      history: [],
+      activity: [],
+      delivery: { summary: "the fix", at: 111, respondedAt: 222, accepted: true },
+    });
+    expect(s.phase).toBe("done");
+  });
+
+  it("hello-ok on an ended session stays ended even with an accepted delivery", () => {
+    const s = reduce(undefined, {
+      type: "hello-ok",
+      status: "ended",
+      bench: [],
+      history: [],
+      activity: [],
+      delivery: { summary: "the fix", at: 1, respondedAt: 2, accepted: true },
+    });
+    expect(s.phase).toBe("ended");
+  });
+});
+
+describe("canRate", () => {
+  it("is true only after an accepted delivery with no rating yet", () => {
+    const s0 = reduce(claimed(), { type: "delivered", summary: "the fix", at: 1 });
+    expect(canRate(s0)).toBe(false); // pending, not accepted
+    const s1 = reduce(s0, { type: "delivery-accepted", at: 2 });
+    expect(canRate(s1)).toBe(true);
+  });
+
+  it("is false once a rating exists", () => {
+    const s = reduce(undefined, {
+      type: "hello-ok",
+      status: "active",
+      bench: [],
+      history: [],
+      activity: [],
+      delivery: { summary: "the fix", at: 1, respondedAt: 2, accepted: true, rating: 5 },
+    });
+    expect(canRate(s)).toBe(false);
+  });
+
+  it("is false while working or declined", () => {
+    expect(canRate(claimed())).toBe(false);
+    const declined = reduce(
+      reduce(claimed(), { type: "delivered", summary: "x", at: 1 }),
+      { type: "delivery-declined", at: 2 },
+    );
+    expect(canRate(declined)).toBe(false);
+  });
+});
+
+describe("deliveryResponsePayload", () => {
+  it("wraps accept and decline", () => {
+    expect(deliveryResponsePayload(true)).toEqual({ type: "delivery-response", accepted: true });
+    expect(deliveryResponsePayload(false)).toEqual({ type: "delivery-response", accepted: false });
+  });
+});
+
+describe("ratePayload", () => {
+  it("accepts integers 1..5", () => {
+    expect(ratePayload(1)).toEqual({ type: "rate", rating: 1 });
+    expect(ratePayload(5)).toEqual({ type: "rate", rating: 5 });
+  });
+  it("rounds a fractional star to the nearest integer", () => {
+    expect(ratePayload(4.4)).toEqual({ type: "rate", rating: 4 });
+  });
+  it("rejects out-of-range and non-numbers", () => {
+    expect(ratePayload(0)).toBeUndefined();
+    expect(ratePayload(6)).toBeUndefined();
+    expect(ratePayload("5" as unknown as number)).toBeUndefined();
+    expect(ratePayload(NaN)).toBeUndefined();
   });
 });
