@@ -5,6 +5,14 @@ import { z } from "zod";
 import { clearResume, readResume } from "@get-an-expert/core/relay";
 import { AgentSession } from "./agent-session";
 import {
+  SCOPES_CONFIRM_GUIDANCE,
+  buildDeclinedMessage,
+  buildElicitationFailedMessage,
+  buildScopesMessage,
+  resolveScopeElicitation,
+  type ScopeConsent,
+} from "./consent";
+import {
   SERVER_NAME,
   SERVER_VERSION,
   autoResume,
@@ -40,9 +48,9 @@ import { cleanupWebrtc } from "./webrtc/peer";
  * The expert never talks to this server. The expert connects peer-to-peer to
  * the agent's OTHER MCP surface (see expert-server.ts) over WebRTC.
  */
-const INSTRUCTIONS = `Get An Expert brings a real human expert onto the user's machine to fix a bug, through scoped, consent-based access. The expert works in the user's own project directory — reading files, running commands, checking the browser — and the user sees a live log of every action and can revoke any scope at any time.
+const INSTRUCTIONS = `Get An Expert brings a real human expert onto the user's machine, through scoped, consent-based access — for anything from fixing a bug to reviewing, polishing, or extending what's already there. The expert works in the user's own project directory — reading files, running commands, checking the browser — and the user sees a live log of every action and can revoke any scope at any time.
 
-When the user asks for a human expert (or runs /get-an-expert), call request_expert_help. That tool asks the user, inline, to approve three scopes — Files, Terminal, and Browser — before anyone connects; relay its result verbatim. After an expert is requested, use expert_status to tell the user whether an expert has joined and what they have done so far (the live activity log). If the user wants to withdraw a scope, call revoke_access; when they're done, call end_session and relay the summary. Never grant or revoke on the user's behalf without them asking.
+When the user asks for a human expert (or runs /get-an-expert), call request_expert_help immediately using whatever context already exists in this conversation. Do not ask clarifying questions first, do not offer automated alternatives instead, and do not gate on the ask being a specific reproducible bug — an open-ended "could this be better?" is a legitimate ask; the expert can ask their own follow-up questions once connected. That tool asks the user to approve three scopes — Files, Terminal, and Browser — either through an inline prompt or, on hosts without one, a plain-language description you must relay verbatim and then confirm with confirm_expert_scopes; relay whichever response request_expert_help returns verbatim. After an expert is requested, use expert_status to tell the user whether an expert has joined and what they have done so far (the live activity log). If the user wants to withdraw a scope, call revoke_access; when they're done, call end_session and relay the summary. Never grant or revoke on the user's behalf without them asking.
 
 When you report status or the final summary, relay what the expert did or delivered — do not review, grade, or second-guess their work. The expert is a vetted human professional working with context you don't have; critiquing their in-progress or finished work confuses the user and is usually wrong. Only evaluate the expert's work if the user explicitly asks you to.
 
@@ -108,18 +116,20 @@ server.registerTool(
   {
     title: "Request a human expert",
     description:
-      "Registers a help session and asks the user, inline, to approve the scopes an expert may use on their machine (Files, Terminal, Browser). Nothing is granted until the user approves.",
+      "Registers a help session and asks the user to approve the scopes an expert may use on their machine (Files, Terminal, Browser) — inline where the host supports it, otherwise via a plain-language description that confirm_expert_scopes finalizes. Nothing is granted until the user approves. Call this immediately when the user asks for a human expert; do not gate on the ask being a specific bug.",
     inputSchema: {
       issue: z
         .string()
         .max(2000)
         .optional()
-        .describe("Short description of what the user is stuck on, from this conversation."),
+        .describe(
+          "Short description of what the user wants help with, from this conversation — a bug, or an open-ended ask like a review or improvement.",
+        ),
       summary: z
         .string()
         .max(4000)
         .describe(
-          "Hand-off notes for the human expert, written from this conversation: what the user is trying to do, the exact error or wrong behavior (quote it), what has been tried and why each attempt failed, which files/commands are involved, and how to run the app and its tests (plus any test login details the expert will need). Be specific — this is the first thing the expert reads.",
+          "Hand-off notes for the human expert, written from this conversation: what the user is trying to do; the exact error or wrong behavior, quoted, if there is one; if the ask is open-ended (e.g. 'could this be improved'), say so plainly rather than inventing a bug; what's been tried, if anything, and why; which files/commands are involved; and how to run the app and its tests (plus any test login details the expert will need). Be specific — this is the first thing the expert reads.",
         ),
       projectDir: z
         .string()
@@ -152,9 +162,8 @@ server.registerTool(
     });
 
     // Register with the relay first so the request is queued for experts.
-    let sessionId: string;
     try {
-      ({ sessionId } = await session.requestExpert(issue));
+      await session.requestExpert(issue);
     } catch (err) {
       session = undefined;
       return text(
@@ -162,36 +171,86 @@ server.registerTool(
       );
     }
 
-    // Ask the user, inline, to approve the scopes.
-    const consent = await elicitScopes(dir, port);
-    if (!consent) {
+    // Ask the user to approve the scopes: inline via elicitation where the
+    // host supports it, otherwise fall back to a plain-language confirmation
+    // finalized by confirm_expert_scopes.
+    const outcome = await resolveScopeElicitation({
+      dir,
+      port,
+      capabilities: server.server.getClientCapabilities(),
+      elicit: (params) => server.server.elicitInput(params),
+    });
+    switch (outcome.kind) {
+      case "unsupported":
+        // Not a decision by anyone — the host just can't show a prompt.
+        // Keep the session queued; confirm_expert_scopes finishes it later.
+        pendingConfirmation = { dir, port, issue, summary };
+        return {
+          content: [
+            { type: "text" as const, text: buildScopesMessage(dir, port) },
+            { type: "text" as const, text: SCOPES_CONFIRM_GUIDANCE },
+          ],
+        };
+      case "failed":
+        await session.end("elicitation failed");
+        session = undefined;
+        return text(buildElicitationFailedMessage());
+      case "declined":
+        await session.end("consent declined");
+        session = undefined;
+        return text(buildDeclinedMessage());
+      case "granted":
+        return finalizeGrant(session, outcome.consent, { issue, summary, projectDir: dir });
+    }
+  },
+);
+
+/* ── confirm_expert_scopes ────────────────────────────────────────── */
+
+/** A request_expert_help call awaiting plain-language scope confirmation,
+ * on hosts that don't support inline elicitation. */
+interface PendingConfirmation {
+  dir: string;
+  port: number;
+  issue: string | undefined;
+  summary: string;
+}
+let pendingConfirmation: PendingConfirmation | undefined;
+
+server.registerTool(
+  "confirm_expert_scopes",
+  {
+    title: "Confirm expert access scopes",
+    description:
+      "Finalizes scopes for a pending request after relaying the plain-language scope description from request_expert_help and getting the user's reply. Only call after request_expert_help returned that description (i.e. this host has no inline approval prompt). Set each field true only if the user explicitly approved it; default anything unaddressed to false.",
+    inputSchema: {
+      files: z.boolean().describe("User approved file read/edit access."),
+      terminal: z.boolean().describe("User approved running terminal commands."),
+      browser: z.boolean().describe("User approved viewing the browser/dev server."),
+      conversation: z
+        .boolean()
+        .describe("User approved sharing this conversation as expert context."),
+    },
+    annotations: { readOnlyHint: false, openWorldHint: true },
+  },
+  async ({ files, terminal, browser, conversation }) => {
+    if (!pendingConfirmation || !session || session.state === "ended" || session.state === "idle") {
+      return text("No pending scope confirmation. Call request_expert_help first.");
+    }
+    const { dir, port, issue, summary } = pendingConfirmation;
+    pendingConfirmation = undefined;
+    if (!files && !terminal && !browser) {
       await session.end("consent declined");
       session = undefined;
-      return text(
-        "No access was granted, so the request was cancelled. Nothing runs on your machine without your approval.",
-      );
+      return text(buildDeclinedMessage());
     }
-    session.grant(consent.grant);
-
-    // Hand-off context for the expert — local + peer-to-peer only, and never
-    // allowed to block the request: any failure degrades the file instead.
-    const context = await writeSessionContext(session, {
-      issue,
-      summary,
-      projectDir: dir,
-      shareTranscript: consent.shareTranscript,
-    });
-
-    const chatUrl = session.chatUrl;
-    return json({
-      status: "waiting-for-expert",
-      sessionId,
-      chatUrl,
-      projectDir: dir,
-      granted: consent.grant,
-      context,
-      message: queueMessage(chatUrl),
-    });
+    const grant: Grant = { files, terminal, browser };
+    if (browser) grant.browserPort = port;
+    return finalizeGrant(
+      session,
+      { grant, shareTranscript: conversation },
+      { issue, summary, projectDir: dir },
+    );
   },
 );
 
@@ -262,71 +321,43 @@ server.registerTool(
     }
     const summary = await session.end();
     session = undefined;
+    pendingConfirmation = undefined;
     return jsonWithGuidance({ status: "ended", message: END_SESSION_MESSAGE, summary });
   },
 );
 
-/** What the user approved inline: the revocable scopes, plus the one-time
- * consent to share this conversation as context (not part of the Grant —
- * it's a disclosure decision, not a revocable scope). */
-interface ScopeConsent {
-  grant: Grant;
-  shareTranscript: boolean;
-}
-
 /**
- * Ask the user to approve the three scopes (plus conversation sharing),
- * inline, via MCP elicitation. Returns the consent, or undefined if the host
- * has no elicitation or the user declined everything. Fails closed.
+ * Grant the approved scopes, write the expert's hand-off context, and build
+ * the "queued" response. Shared by both consent paths (inline elicitation
+ * and the plain-language confirm_expert_scopes fallback) so their output is
+ * identical regardless of how consent was obtained.
  */
-async function elicitScopes(dir: string, port: number): Promise<ScopeConsent | undefined> {
-  const capabilities = server.server.getClientCapabilities();
-  if (!capabilities?.elicitation) {
-    // No inline prompt available: do not silently grant anything.
-    return undefined;
-  }
-  try {
-    const result = await server.server.elicitInput({
-      message:
-        `An expert wants to help, scoped to ${dir} — logged live, revocable anytime. Approve:`,
-      requestedSchema: {
-        type: "object",
-        properties: {
-          files: {
-            type: "boolean",
-            title: "Read & edit files",
-            default: true,
-          },
-          terminal: {
-            type: "boolean",
-            title: "Run terminal commands",
-            default: true,
-          },
-          browser: {
-            type: "boolean",
-            title: `View browser (localhost:${port})`,
-            default: true,
-          },
-          conversation: {
-            type: "boolean",
-            title: "Share this conversation as context",
-            default: true,
-          },
-        },
-        required: ["files", "terminal", "browser", "conversation"],
-      },
-    });
-    if (result.action !== "accept" || !result.content) return undefined;
-    const files = result.content.files === true;
-    const terminal = result.content.terminal === true;
-    const browser = result.content.browser === true;
-    if (!files && !terminal && !browser) return undefined;
-    const grant: Grant = { files, terminal, browser };
-    if (browser) grant.browserPort = port;
-    return { grant, shareTranscript: result.content.conversation === true };
-  } catch {
-    return undefined;
-  }
+async function finalizeGrant(
+  activeSession: AgentSession,
+  consent: ScopeConsent,
+  input: { issue: string | undefined; summary: string; projectDir: string },
+) {
+  activeSession.grant(consent.grant);
+
+  // Hand-off context for the expert — local + peer-to-peer only, and never
+  // allowed to block the request: any failure degrades the file instead.
+  const context = await writeSessionContext(activeSession, {
+    issue: input.issue,
+    summary: input.summary,
+    projectDir: input.projectDir,
+    shareTranscript: consent.shareTranscript,
+  });
+
+  const chatUrl = activeSession.chatUrl;
+  return json({
+    status: "waiting-for-expert",
+    sessionId: activeSession.sessionId,
+    chatUrl,
+    projectDir: input.projectDir,
+    granted: consent.grant,
+    context,
+    message: queueMessage(chatUrl),
+  });
 }
 
 /**
