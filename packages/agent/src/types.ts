@@ -72,6 +72,26 @@ export interface BrowserController {
   close?(): Promise<void>;
 }
 
+/**
+ * The public expert profile, exactly as the relay puts it on the wire
+ * (expert-joined / hello-ok). Defined structurally here rather than imported
+ * from apps/relay, which is not a workspace dependency of this package; only
+ * this subset ever crosses the peer boundary. Every field is treated as
+ * untrusted and optional at render time, so a partial profile never leaks
+ * "undefined" into customer-facing copy.
+ */
+export interface PublicExpertProfile {
+  id: string;
+  name: string;
+  photo: string;
+  role: string;
+  companies: { logo?: string; label: string }[];
+  tag: string;
+  rating: number;
+  fixesDelivered: number;
+  linkedin?: string;
+}
+
 /** Session-summary shape handed to the customer when the session ends. */
 export interface SessionSummary {
   expertName?: string;

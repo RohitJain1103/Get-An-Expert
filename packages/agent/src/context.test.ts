@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   buildContextMarkdown,
+  countConversationMessages,
   readProjectOverview,
   readTranscriptPointer,
   readTranscriptTail,
@@ -165,7 +166,7 @@ describe("buildContextMarkdown", () => {
   };
 
   it("lays out header, summary, overview, and transcript in order", () => {
-    const md = buildContextMarkdown(base);
+    const md = buildContextMarkdown(base).markdown;
     expect(md).toContain("# Get An Expert — session context");
     expect(md).toContain("- **Customer:** Jordan Lee");
     expect(md).toContain("- **Issue:** Build failing on HeroImage import");
@@ -182,32 +183,71 @@ describe("buildContextMarkdown", () => {
   });
 
   it("omits the overview section when there is no overview", () => {
-    const md = buildContextMarkdown({ ...base, overview: null });
+    const md = buildContextMarkdown({ ...base, overview: null }).markdown;
     expect(md).not.toContain("## Project overview");
   });
 
   it("falls back to a clear line when the transcript is unavailable", () => {
-    const md = buildContextMarkdown({ ...base, transcriptMarkdown: undefined });
+    const md = buildContextMarkdown({ ...base, transcriptMarkdown: undefined })
+      .markdown;
     expect(md).toContain("Not available — work from the summary above.");
   });
 
   it("marks a missing issue as not provided", () => {
-    const md = buildContextMarkdown({ ...base, issue: undefined });
+    const md = buildContextMarkdown({ ...base, issue: undefined }).markdown;
     expect(md).toContain("- **Issue:** (not provided)");
   });
 
   it("redacts planted secrets and reports the count", () => {
     const fakeKey = `sk-ant-${"a".repeat(24)}`;
-    const md = buildContextMarkdown({
+    const built = buildContextMarkdown({
       ...base,
       summary: `The API call fails with key ${fakeKey}.`,
     });
-    expect(md).not.toContain(fakeKey);
-    expect(md).toContain("[REDACTED:anthropic-api-key]");
-    expect(md).toContain("_1 secret was redacted._");
+    expect(built.markdown).not.toContain(fakeKey);
+    expect(built.markdown).toContain("[REDACTED:anthropic-api-key]");
+    expect(built.markdown).toContain("_1 secret was redacted._");
+    expect(built.secretsRedacted).toBe(1);
   });
 
   it("appends no redaction note when nothing was redacted", () => {
-    expect(buildContextMarkdown(base)).not.toContain("redacted._");
+    const built = buildContextMarkdown(base);
+    expect(built.markdown).not.toContain("redacted._");
+    expect(built.secretsRedacted).toBe(0);
+  });
+
+  it("counts the conversation turns rendered in the transcript", () => {
+    const built = buildContextMarkdown({
+      ...base,
+      transcriptMarkdown:
+        "**User:**\nHelp me fix the build.\n\n**Assistant:**\nCheck the import.\n\n**User:**\nStill broken.",
+    });
+    expect(built.conversationMessages).toBe(3);
+  });
+
+  it("reports zero conversation turns when no transcript is present", () => {
+    expect(
+      buildContextMarkdown({ ...base, transcriptMarkdown: undefined })
+        .conversationMessages,
+    ).toBe(0);
+  });
+});
+
+describe("countConversationMessages", () => {
+  it("counts User and Assistant section headers", () => {
+    const md =
+      "**User:**\nhi\n\n**Assistant:**\nhello\n\n**User:**\nbye";
+    expect(countConversationMessages(md)).toBe(3);
+  });
+
+  it("ignores a truncation note and body prose that mention the words", () => {
+    const md =
+      "_Transcript truncated._\n\n**User:**\nThe Assistant said User earlier.\n\n**Assistant:**\nok";
+    expect(countConversationMessages(md)).toBe(2);
+  });
+
+  it("returns zero for empty or undefined input", () => {
+    expect(countConversationMessages("")).toBe(0);
+    expect(countConversationMessages(undefined)).toBe(0);
   });
 });

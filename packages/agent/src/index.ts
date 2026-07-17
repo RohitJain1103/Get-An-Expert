@@ -32,12 +32,14 @@ import {
   transcriptToMarkdown,
   type ProjectOverview,
 } from "./context";
+import type { ContextManifest } from "./relay-client";
 import {
   END_SESSION_MESSAGE,
   EXPERT_WORK_GUIDANCE,
   queueMessage,
   statusMessage,
 } from "./messages";
+import { openUrl } from "./open-url";
 import type { Grant } from "./permissions";
 import { cleanupWebrtc } from "./webrtc/peer";
 
@@ -163,9 +165,15 @@ server.registerTool(
       log: (line) => console.error(`[get-an-expert] ${line}`),
     });
 
-    // Register with the relay first so the request is queued for experts.
+    // Register with the relay first so the request is queued for experts. The
+    // context manifest rides along so the customer chat page shows truthful
+    // chips. It is computed here (before consent) from the same sources the
+    // hand-off file uses, assuming the transcript will be shared (the
+    // elicitation default); a rare decline can leave the conversation count
+    // slightly high, never low.
+    const contextManifest = computeContextManifest({ issue, summary, projectDir: dir });
     try {
-      await session.requestExpert(issue);
+      await session.requestExpert(issue, contextManifest);
     } catch (err) {
       session = undefined;
       return text(
@@ -284,7 +292,12 @@ server.registerTool(
       return text("No Get An Expert session is active. Call request_expert_help to start one.");
     }
     const payload = {
-      message: statusMessage(session.state, session.expertName),
+      message: statusMessage(
+        session.state,
+        session.expertName,
+        session.expertProfile,
+        session.lastDelivery,
+      ),
       chatUrl: session.chatUrl,
       ...session.status(),
     };
@@ -373,6 +386,18 @@ async function finalizeGrant(
   });
 
   const chatUrl = activeSession.chatUrl;
+  // Best-effort auto-open of the chat page. A throw here must never fail the
+  // request: openUrl already never throws, but the guard keeps that promise
+  // even if that ever changes. The chat URL is always in the message below,
+  // whether or not a tab opened, so failure costs one click, never access.
+  let opened = false;
+  if (chatUrl) {
+    try {
+      opened = openUrl(chatUrl, { relayOrigin: relayHttpOrigin() });
+    } catch {
+      opened = false;
+    }
+  }
   return json({
     status: "waiting-for-expert",
     sessionId: activeSession.sessionId,
@@ -381,7 +406,7 @@ async function finalizeGrant(
     granted: consent.grant,
     consentVia: input.mechanism,
     context,
-    message: queueMessage(chatUrl),
+    message: queueMessage(chatUrl, opened),
   });
 }
 
@@ -420,7 +445,7 @@ async function writeSessionContext(
     overview = null;
   }
   try {
-    const markdown = buildContextMarkdown({
+    await activeSession.writeContextFrom({
       customerName: customerName(),
       issue: input.issue,
       summary: input.summary,
@@ -428,7 +453,6 @@ async function writeSessionContext(
       transcriptMarkdown,
       requestedAt: Date.now(),
     });
-    await activeSession.writeContext(markdown);
   } catch {
     return "not written — the expert will start from the issue description";
   }
@@ -437,8 +461,62 @@ async function writeSessionContext(
     : "summary only written to .get-an-expert/CONTEXT.md";
 }
 
+/**
+ * Compute the truthful context manifest (conversation turn count + secrets
+ * redacted) from the same sources the hand-off file uses. Best-effort: any
+ * failure returns undefined so no chip is fabricated. `conversationMessages` is
+ * only included when a transcript actually rendered turns, so an absent
+ * transcript shows no "This conversation" chip rather than a misleading zero.
+ * `secretsRedacted` is always reported (0 is honest and reassuring).
+ */
+function computeContextManifest(input: {
+  issue: string | undefined;
+  summary: string;
+  projectDir: string;
+}): ContextManifest | undefined {
+  try {
+    let transcriptMarkdown: string | undefined;
+    const pointer = readTranscriptPointer();
+    if (pointer) {
+      transcriptMarkdown =
+        transcriptToMarkdown(readTranscriptTail(pointer.transcriptPath)) || undefined;
+    }
+    let overview: ProjectOverview | null = null;
+    try {
+      overview = readProjectOverview(input.projectDir);
+    } catch {
+      overview = null;
+    }
+    const built = buildContextMarkdown({
+      customerName: customerName(),
+      issue: input.issue,
+      summary: input.summary,
+      overview,
+      transcriptMarkdown,
+      requestedAt: Date.now(),
+    });
+    const manifest: ContextManifest = { secretsRedacted: built.secretsRedacted };
+    if (built.conversationMessages > 0) {
+      manifest.conversationMessages = built.conversationMessages;
+    }
+    return manifest;
+  } catch {
+    return undefined;
+  }
+}
+
 function errText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * The relay's http(s) origin, derived from the configured relay URL the same
+ * way chat-url.ts builds the chat page URL: normalize ws(s) to http(s), then
+ * take the origin. openUrl only opens URLs whose origin equals this, so the
+ * auto-open can never be steered to some other host.
+ */
+function relayHttpOrigin(): string {
+  return new URL(relayUrl().trim().replace(/^ws/, "http")).origin;
 }
 
 /**

@@ -54,6 +54,12 @@ class FakeRelay implements RelayConnection {
     this.closed = true;
   }
   // Test controls for the relay-driven events.
+  fireExpertJoined(name: string, profile?: unknown): void {
+    this.events.onExpertJoined?.(name, profile as never);
+  }
+  fireExpertLeft(): void {
+    this.events.onExpertLeft?.();
+  }
   fireReconnecting(): void {
     this.events.onReconnecting?.(1);
   }
@@ -65,6 +71,18 @@ class FakeRelay implements RelayConnection {
   }
   fireSessionEnded(reason?: string): void {
     this.events.onSessionEnded?.(reason);
+  }
+  fireIssueUpdated(issue: string): void {
+    this.events.onIssueUpdated?.(issue);
+  }
+  fireDelivered(summary: string): void {
+    this.events.onDelivered?.(summary);
+  }
+  fireDeliveryAccepted(): void {
+    this.events.onDeliveryAccepted?.();
+  }
+  fireDeliveryDeclined(): void {
+    this.events.onDeliveryDeclined?.();
   }
 }
 
@@ -240,6 +258,139 @@ describe("AgentSession reconnect", () => {
   });
 });
 
+describe("AgentSession expert profile", () => {
+  const rohit = {
+    id: "rohit",
+    name: "Rohit Jain",
+    photo: "/experts/rohit.jpg",
+    role: "Senior software engineer",
+    companies: [{ logo: "/experts/amazon.jpg", label: "Amazon" }],
+    tag: "Code, payments & APIs",
+    rating: 4.8,
+    fixesDelivered: 12,
+  };
+
+  // A no-op peer so a claim doesn't spin up a real WebRTC connection.
+  function makeSessionWithFakePeer(relay: FakeRelay): AgentSession {
+    return new AgentSession({
+      relayUrl: "ws://relay.test",
+      projectDir,
+      customerName: "Jordan Lee",
+      browser: fakeBrowser,
+      relayClientFactory: () => relay,
+      peerFactory: () => ({
+        onChannel() {},
+        onError() {},
+        handleSignal() {},
+        close() {},
+      }),
+    });
+  }
+
+  it("stores the profile from expert-joined and exposes it in status()", async () => {
+    const relay = new FakeRelay();
+    const session = makeSessionWithFakePeer(relay);
+    await session.requestExpert("x");
+    relay.fireExpertJoined("Rohit Jain", rohit);
+
+    expect(session.state).toBe("connected");
+    expect(session.expertName).toBe("Rohit Jain");
+    expect(session.expertProfile?.id).toBe("rohit");
+    expect(session.status().expertProfile?.rating).toBe(4.8);
+
+    await session.end();
+  });
+
+  it("clears the profile when the expert leaves", async () => {
+    const relay = new FakeRelay();
+    const session = makeSessionWithFakePeer(relay);
+    await session.requestExpert("x");
+    relay.fireExpertJoined("Rohit Jain", rohit);
+    relay.fireExpertLeft();
+
+    expect(session.expertProfile).toBeUndefined();
+    expect(session.status().expertProfile).toBeUndefined();
+
+    await session.end();
+  });
+
+  it("connects without a profile when the relay sends only a name", async () => {
+    const relay = new FakeRelay();
+    const session = makeSessionWithFakePeer(relay);
+    await session.requestExpert("x");
+    relay.fireExpertJoined("Someone");
+
+    expect(session.state).toBe("connected");
+    expect(session.expertName).toBe("Someone");
+    expect(session.expertProfile).toBeUndefined();
+
+    await session.end();
+  });
+});
+
+describe("AgentSession issue updates", () => {
+  const contextInput = () => ({
+    customerName: "Jordan Lee",
+    issue: "original issue text",
+    summary: "where they are stuck",
+    overview: null,
+    transcriptMarkdown: undefined,
+    requestedAt: Date.now(),
+  });
+
+  it("rebuilds CONTEXT.md and updates status().issue on issue-updated", async () => {
+    const relay = new FakeRelay();
+    const session = makeSessionWithRelay(relay);
+    await session.requestExpert("original issue text");
+    await session.writeContextFrom(contextInput());
+    const path = join(projectDir, ".get-an-expert", "CONTEXT.md");
+    expect(readFileSync(path, "utf8")).toContain("original issue text");
+
+    relay.fireIssueUpdated("the revised issue statement");
+    await new Promise((r) => setTimeout(r, 30));
+
+    expect(session.status().issue).toBe("the revised issue statement");
+    const md = readFileSync(path, "utf8");
+    expect(md).toContain("the revised issue statement");
+    expect(md).not.toContain("original issue text");
+
+    await session.end();
+  });
+
+  it("triggers exactly one context rebuild per issue update", async () => {
+    const entries: ActivityEntry[] = [];
+    const relay = new FakeRelay();
+    const session = new AgentSession({
+      relayUrl: "ws://relay.test",
+      projectDir,
+      customerName: "Jordan Lee",
+      browser: fakeBrowser,
+      relayClientFactory: () => relay,
+      onActivity: (e) => entries.push(e),
+    });
+    await session.requestExpert("original issue text");
+    await session.writeContextFrom(contextInput()); // first context write
+    relay.fireIssueUpdated("second version");
+    await new Promise((r) => setTimeout(r, 30));
+    const contextEntries = entries.filter((e) => e.kind === "context");
+    expect(contextEntries.length).toBe(2); // initial + one rebuild
+
+    await session.end();
+  });
+
+  it("updates the issue but writes no file when no context was assembled yet", async () => {
+    const relay = new FakeRelay();
+    const session = makeSessionWithRelay(relay);
+    await session.requestExpert("original issue text");
+    relay.fireIssueUpdated("edited before context existed");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(session.status().issue).toBe("edited before context existed");
+    expect(existsSync(join(projectDir, ".get-an-expert"))).toBe(false);
+
+    await session.end();
+  });
+});
+
 describe("AgentSession.resumeExpert", () => {
   const record: ResumeRecord = {
     sessionId: "sess-restored",
@@ -273,3 +424,51 @@ describe("AgentSession.resumeExpert", () => {
     await session.end();
   });
 })
+
+describe("AgentSession delivery status", () => {
+  // A no-op peer so a claim doesn't spin up a real WebRTC connection.
+  function makeSessionFakePeer(relay: FakeRelay): AgentSession {
+    return new AgentSession({
+      relayUrl: "ws://relay.test",
+      projectDir,
+      customerName: "Jordan Lee",
+      browser: fakeBrowser,
+      relayClientFactory: () => relay,
+      peerFactory: () => ({
+        onChannel() {},
+        onError() {},
+        handleSignal() {},
+        close() {},
+      }),
+    });
+  }
+
+  it("records a delivered fix and the customer confirmation in status()", async () => {
+    const relay = new FakeRelay();
+    const session = makeSessionFakePeer(relay);
+    await session.requestExpert("fix the thing");
+    relay.fireExpertJoined("Rohit Jain");
+    expect(session.state).toBe("connected");
+
+    relay.fireDelivered("renamed and rebuilt");
+    expect(session.lastDelivery).toEqual({ summary: "renamed and rebuilt" });
+    expect(session.status().lastDelivery).toEqual({ summary: "renamed and rebuilt" });
+
+    relay.fireDeliveryAccepted();
+    expect(session.lastDelivery).toEqual({ summary: "renamed and rebuilt", accepted: true });
+
+    await session.end();
+  });
+
+  it("marks a declined delivery without a confirmation", async () => {
+    const relay = new FakeRelay();
+    const session = makeSessionFakePeer(relay);
+    await session.requestExpert("x");
+    relay.fireExpertJoined("Rohit Jain");
+    relay.fireDelivered("attempt one");
+    relay.fireDeliveryDeclined();
+    expect(session.lastDelivery).toEqual({ summary: "attempt one", accepted: false });
+
+    await session.end();
+  });
+});

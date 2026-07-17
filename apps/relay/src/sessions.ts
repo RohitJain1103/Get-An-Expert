@@ -2,10 +2,25 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   NO_PERMISSIONS,
   type ChatMessage,
+  type ContextManifest,
   type Permissions,
 } from "./protocol";
 
 export type SessionStatus = "waiting" | "active" | "ended";
+
+/**
+ * The delivery record for a session: the expert's "what I changed" summary, the
+ * customer's accept/decline, and an optional one-time rating. A fresh deliver
+ * replaces this whole record (a declined delivery never auto-repeats; the
+ * expert sends a new one). The summary is redacted before it is stored.
+ */
+export interface Delivery {
+  summary: string;
+  at: number;
+  respondedAt?: number;
+  accepted?: boolean;
+  rating?: number;
+}
 
 /** SHA-256 of a resume token — the only form ever stored or persisted. */
 export function hashResumeToken(raw: string): string {
@@ -23,6 +38,14 @@ export interface Session {
   customerName: string;
   projectDir: string;
   issue?: string;
+  /** Epoch ms of the last issue edit, and who made it. Absent until the issue
+   * is first edited (the original issue from register is not an "edit"). Used
+   * by the customer-always-wins conflict rule. */
+  issueEditedAt?: number;
+  issueEditedBy?: "customer" | "expert";
+  /** Count-bearing description of the expert's CONTEXT.md, sent at register and
+   * echoed to the customer chat page as truthful chips. */
+  contextManifest?: ContextManifest;
   status: SessionStatus;
   /**
    * Whether the customer's agent socket is currently attached. A request stays
@@ -32,6 +55,11 @@ export interface Session {
    */
   online: boolean;
   expertName?: string;
+  /** Roster id of the claiming expert, when they self-selected an identity. */
+  expertId?: string;
+  /** The delivered fix and the customer's response to it, once the expert marks
+   * the work done. Absent until the first deliver. */
+  delivery?: Delivery;
   createdAt: number;
   /** Epoch ms of the last mutation, so callers can show freshness. */
   updatedAt: number;
@@ -59,6 +87,7 @@ export interface CreateSessionInput {
   customerName: string;
   projectDir: string;
   issue?: string;
+  contextManifest?: ContextManifest;
 }
 
 /** Keep at most this many activity summaries per session. */
@@ -88,6 +117,7 @@ export class SessionStore {
       customerName: input.customerName,
       projectDir: input.projectDir,
       issue: input.issue,
+      contextManifest: input.contextManifest,
       status: "waiting",
       online: true,
       createdAt: now,
@@ -137,7 +167,7 @@ export class SessionStore {
     return ids;
   }
 
-  claim(id: string, expertName: string): Session {
+  claim(id: string, expertName: string, expertId?: string): Session {
     const session = this.#require(id);
     if (session.status === "active") {
       throw new Error(
@@ -151,6 +181,7 @@ export class SessionStore {
       ...session,
       status: "active",
       expertName,
+      expertId,
       claimedAt: Date.now(),
     });
   }
@@ -162,6 +193,7 @@ export class SessionStore {
       ...session,
       status: "waiting",
       expertName: undefined,
+      expertId: undefined,
       claimedAt: undefined,
     });
   }
@@ -187,6 +219,73 @@ export class SessionStore {
   setPermissions(id: string, permissions: Permissions): Session {
     const session = this.#require(id);
     return this.#update({ ...session, permissions: { ...permissions } });
+  }
+
+  /**
+   * Replace the issue text and stamp who edited it and when. The relay redacts
+   * the text before calling this (same treatment as chat), so the stored issue
+   * is already safe to fan out.
+   */
+  setIssue(id: string, text: string, by: "customer" | "expert"): Session {
+    const session = this.#require(id);
+    return this.#update({
+      ...session,
+      issue: text,
+      issueEditedAt: Date.now(),
+      issueEditedBy: by,
+    });
+  }
+
+  /**
+   * Record a delivered fix. Replaces any previous delivery outright: a fresh
+   * deliver clears an earlier decline (or accept) so the customer sees a clean
+   * new card. The relay redacts the summary before calling this.
+   */
+  setDelivery(id: string, summary: string): Session {
+    const session = this.#require(id);
+    return this.#update({
+      ...session,
+      delivery: { summary, at: Date.now() },
+    });
+  }
+
+  /**
+   * Record the customer's accept/decline of the current delivery. Throws when
+   * there is no delivery to respond to, or when it has already been responded
+   * to (one response per delivery; a fresh deliver resets this).
+   */
+  respondDelivery(id: string, accepted: boolean): Session {
+    const session = this.#require(id);
+    const delivery = session.delivery;
+    if (!delivery) throw new Error(`Session ${id} has no delivery to respond to`);
+    if (delivery.respondedAt !== undefined) {
+      throw new Error(`Session ${id} delivery already responded to`);
+    }
+    return this.#update({
+      ...session,
+      delivery: { ...delivery, respondedAt: Date.now(), accepted },
+    });
+  }
+
+  /**
+   * Record the optional one-time session rating. Valid only after an accepted
+   * delivery, and only once; invalid transitions throw. The rating is never
+   * persisted or aggregated (decision 2026-07-17): it rides straight to the
+   * expert as an event.
+   */
+  setRating(id: string, rating: number): Session {
+    const session = this.#require(id);
+    const delivery = session.delivery;
+    if (!delivery || delivery.accepted !== true) {
+      throw new Error(`Session ${id} cannot be rated before an accepted delivery`);
+    }
+    if (delivery.rating !== undefined) {
+      throw new Error(`Session ${id} has already been rated`);
+    }
+    return this.#update({
+      ...session,
+      delivery: { ...delivery, rating },
+    });
   }
 
   addChat(id: string, message: ChatMessage): Session {

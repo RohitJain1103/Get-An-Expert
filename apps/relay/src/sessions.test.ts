@@ -50,6 +50,24 @@ describe("SessionStore.create", () => {
     const b = register(store);
     expect(a.customerToken).not.toBe(b.customerToken);
   });
+
+  it("stores the context manifest when provided", () => {
+    const store = makeStore();
+    const s = store.create({
+      customerName: "Dana",
+      projectDir: "~/p",
+      contextManifest: { conversationMessages: 12, secretsRedacted: 2 },
+    }).session;
+    expect(s.contextManifest).toEqual({
+      conversationMessages: 12,
+      secretsRedacted: 2,
+    });
+  });
+
+  it("leaves the manifest undefined when none is provided", () => {
+    const store = makeStore();
+    expect(register(store).contextManifest).toBeUndefined();
+  });
 });
 
 describe("SessionStore.claim", () => {
@@ -80,6 +98,109 @@ describe("SessionStore.claim", () => {
   it("rejects claiming an unknown session", () => {
     const store = makeStore();
     expect(() => store.claim("nope", "Priya Sharma")).toThrow(/unknown/i);
+  });
+});
+
+describe("SessionStore expert identity", () => {
+  it("claim stores expertId and release clears it", () => {
+    const store = makeStore();
+    const s = register(store);
+    store.claim(s.id, "Rohit Jain", "rohit");
+    expect(store.get(s.id)?.expertId).toBe("rohit");
+    store.release(s.id);
+    expect(store.get(s.id)?.expertId).toBeUndefined();
+  });
+
+  it("claim without an expertId leaves it undefined", () => {
+    const store = makeStore();
+    const s = register(store);
+    store.claim(s.id, "Priya Sharma");
+    expect(store.get(s.id)?.expertId).toBeUndefined();
+  });
+});
+
+describe("SessionStore.setIssue", () => {
+  it("sets the issue and stamps issueEditedAt and issueEditedBy", () => {
+    const store = makeStore();
+    const s = register(store);
+    const updated = store.setIssue(s.id, "new issue text", "customer");
+    expect(updated.issue).toBe("new issue text");
+    expect(updated.issueEditedBy).toBe("customer");
+    expect(updated.issueEditedAt).toBeGreaterThan(0);
+  });
+
+  it("does not mutate the previous snapshot", () => {
+    const store = makeStore();
+    const s = register(store);
+    store.setIssue(s.id, "edited by the expert", "expert");
+    expect(s.issue).toBe(
+      "TypeScript error: HeroImage is not exported from @/assets",
+    );
+    expect(s.issueEditedBy).toBeUndefined();
+    expect(s.issueEditedAt).toBeUndefined();
+  });
+
+  it("throws for unknown sessions", () => {
+    const store = makeStore();
+    expect(() => store.setIssue("nope", "x", "customer")).toThrow(/unknown/i);
+  });
+});
+
+describe("SessionStore delivery lifecycle", () => {
+  it("setDelivery records the summary with a timestamp and no response yet", () => {
+    const store = makeStore();
+    const s = register(store);
+    const updated = store.setDelivery(s.id, "Renamed HeroImg and re-ran the build");
+    expect(updated.delivery?.summary).toBe("Renamed HeroImg and re-ran the build");
+    expect(updated.delivery?.at).toBeGreaterThan(0);
+    expect(updated.delivery?.respondedAt).toBeUndefined();
+    expect(updated.delivery?.accepted).toBeUndefined();
+  });
+
+  it("a fresh setDelivery replaces a declined delivery outright", () => {
+    const store = makeStore();
+    const s = register(store);
+    store.setDelivery(s.id, "first attempt");
+    store.respondDelivery(s.id, false);
+    const again = store.setDelivery(s.id, "second attempt");
+    expect(again.delivery?.summary).toBe("second attempt");
+    expect(again.delivery?.respondedAt).toBeUndefined();
+    expect(again.delivery?.accepted).toBeUndefined();
+  });
+
+  it("respondDelivery records accept / decline", () => {
+    const store = makeStore();
+    const s = register(store);
+    store.setDelivery(s.id, "the fix");
+    const accepted = store.respondDelivery(s.id, true);
+    expect(accepted.delivery?.accepted).toBe(true);
+    expect(accepted.delivery?.respondedAt).toBeGreaterThan(0);
+  });
+
+  it("respondDelivery throws with no delivery and on a double response", () => {
+    const store = makeStore();
+    const s = register(store);
+    expect(() => store.respondDelivery(s.id, true)).toThrow(/no delivery/i);
+    store.setDelivery(s.id, "the fix");
+    store.respondDelivery(s.id, true);
+    expect(() => store.respondDelivery(s.id, false)).toThrow(/already responded/i);
+  });
+
+  it("setRating is valid only once, and only after an accepted delivery", () => {
+    const store = makeStore();
+    const s = register(store);
+    store.setDelivery(s.id, "the fix");
+    // Before any response: rejected.
+    expect(() => store.setRating(s.id, 5)).toThrow(/accepted delivery/i);
+    store.respondDelivery(s.id, false);
+    // Declined: still rejected.
+    expect(() => store.setRating(s.id, 5)).toThrow(/accepted delivery/i);
+    store.setDelivery(s.id, "the fix again");
+    store.respondDelivery(s.id, true);
+    const rated = store.setRating(s.id, 5);
+    expect(rated.delivery?.rating).toBe(5);
+    // Double rate: rejected.
+    expect(() => store.setRating(s.id, 4)).toThrow(/already been rated/i);
   });
 });
 
