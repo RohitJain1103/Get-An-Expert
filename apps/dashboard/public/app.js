@@ -112,6 +112,10 @@ async function loadRoster() {
 
 function selectExpert(expert) {
   state.selectedExpertId = expert.id;
+  // Kept so auth can send a non-empty name: the protocol requires one, and
+  // picking a face clears the free-text field below. The relay's roster
+  // lookup still wins; this is only wire-validity.
+  state.selectedExpertName = expert.name;
   for (const card of document.querySelectorAll(".who-card")) {
     card.classList.toggle("selected", card.dataset.id === expert.id);
   }
@@ -124,6 +128,7 @@ function selectExpert(expert) {
 el("expert-name").addEventListener("input", () => {
   if (el("expert-name").value.trim()) {
     state.selectedExpertId = null;
+    state.selectedExpertName = null;
     for (const card of document.querySelectorAll(".who-card")) {
       card.classList.remove("selected");
     }
@@ -160,7 +165,10 @@ function connect() {
   state.ws = ws;
 
   ws.addEventListener("open", () => {
-    const auth = { type: "auth", token, name };
+    // expertAuth requires a non-empty name even when expertId is set; when a
+    // face was picked the free-text field is empty by design, so fall back to
+    // the roster name. The relay adopts the roster identity either way.
+    const auth = { type: "auth", token, name: name || state.selectedExpertName || "Expert" };
     if (expertId) auth.expertId = expertId;
     ws.send(JSON.stringify(auth));
   });
