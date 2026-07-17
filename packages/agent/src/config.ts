@@ -2,7 +2,7 @@ import { userInfo } from "node:os";
 import { resolve } from "node:path";
 
 export const SERVER_NAME = "get-an-expert-agent";
-export const SERVER_VERSION = "0.3.3";
+export const SERVER_VERSION = "0.3.4";
 
 /** Default hosted relay — used when GET_AN_EXPERT_RELAY_URL is not set, so
  * users need no configuration. Override with the env var for local dev

@@ -17,7 +17,9 @@ beforeEach(async () => {
   const dashboardDir = mkdtempSync(join(tmpdir(), "get-an-expert-dash-"));
   writeFileSync(join(dashboardDir, "index.html"), "<h1>get-an-expert dashboard</h1>");
   writeFileSync(join(dashboardDir, "chat.html"), "<h1>get-an-expert customer chat</h1>");
-  relay = createRelay({ expertTokens: [TOKEN], dashboardDir });
+  // Tiny active-session grace so disconnect tests observe the (post-grace)
+  // release without waiting out the production default.
+  relay = createRelay({ expertTokens: [TOKEN], dashboardDir, activeGraceMs: 50 });
   await new Promise<void>((r) => relay.server.listen(0, "127.0.0.1", r));
   const addr = relay.server.address() as { port: number };
   baseUrl = `http://127.0.0.1:${addr.port}`;
@@ -314,7 +316,7 @@ describe("session lifecycle notifications", () => {
     await waitFor(customer, (m) => m.type === "expert-left");
   });
 
-  it("tells customer sockets when the expert disconnects", async () => {
+  it("tells customer sockets when the expert stays gone past grace", async () => {
     const { sessionId, customerToken } = await registeredAgent();
     const { customer } = await connectedCustomer(sessionId, customerToken);
     const { expert } = await claimedExpert(sessionId);
