@@ -32,6 +32,30 @@ On startup it prints the port, the dashboard directory it's serving, and — if 
 | `GET_AN_EXPERT_SESSION_MAX_AGE_MS` | `259200000` (72h) | How long a queued request lives before the max-age sweep expires it. Bounds the durable inbox and the window in which a restarted agent can auto-resume approved scopes. |
 | `UPSTASH_REDIS_REST_URL` / `KV_REST_API_URL` | *unset* | Upstash/KV REST URL. When set (with the token below), queued requests are persisted so they **survive a relay restart/redeploy**. Unset ⇒ in-memory (requests still survive customer disconnects and auto-resume; only relay-restart survival needs this). |
 | `UPSTASH_REDIS_REST_TOKEN` / `KV_REST_API_TOKEN` | *unset* | Upstash/KV REST token that pairs with the URL above. |
+| `GET_AN_EXPERT_TURN_URLS` | *unset* | Comma-separated TURN URL(s), e.g. `turn:turn.example.com:3478,turns:turn.example.com:5349`. With the username/credential below, served from `/api/ice` so peer connections can relay through TURN when a direct connection fails. See [TURN](#turn-webrtc-relay-fallback). |
+| `GET_AN_EXPERT_TURN_USERNAME` | *unset* | TURN username (paired with the URLs + credential). |
+| `GET_AN_EXPERT_TURN_CREDENTIAL` | *unset* | TURN credential/password. |
+| `GET_AN_EXPERT_ICE_SERVERS` | *unset* | Escape hatch: a full JSON array of RTCIceServer objects, used verbatim instead of the STUN+TURN vars above. |
+
+## TURN (WebRTC relay fallback)
+
+Files and the terminal ride a peer-to-peer WebRTC connection between the expert's
+browser and the customer's machine. With **STUN only** (the default), that
+connection needs a direct path — which a symmetric NAT or strict corporate
+firewall blocks. When it's blocked, no data channels open: the file explorer
+stays "Not loaded yet" and the terminal is dead, even though the session shows as
+connected (the relay control channel is unaffected).
+
+A **TURN** server fixes this by relaying the media when a direct path fails. Set
+`GET_AN_EXPERT_TURN_URLS` + `GET_AN_EXPERT_TURN_USERNAME` +
+`GET_AN_EXPERT_TURN_CREDENTIAL` on the relay. Both clients pull the list from
+`GET /api/ice` at connect time, so credentials live only here — never in the
+static dashboard or the published agent, and they rotate by restarting the relay.
+Any TURN provider works (Cloudflare Realtime TURN, Metered, Twilio, self-hosted
+coturn). Unset ⇒ STUN-only, identical to the previous behavior.
+
+> The published agent picks up `/api/ice` starting at **0.4.1**. Older agents stay
+> STUN-only regardless of relay config, so customers must be on ≥ 0.4.1 to benefit.
 
 ## Durable inbox (offline requests)
 

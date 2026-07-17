@@ -781,6 +781,17 @@ describe("http", () => {
     expect(JSON.stringify(body)).not.toContain(TOKEN);
   });
 
+  it("GET /api/ice returns an iceServers list (STUN baseline)", async () => {
+    const res = await fetch(`${baseUrl}/api/ice`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toMatch(/application\/json/);
+    expect(res.headers.get("cache-control")).toMatch(/no-store/);
+    const body = await res.json();
+    expect(Array.isArray(body.iceServers)).toBe(true);
+    expect(body.iceServers.length).toBeGreaterThan(0);
+    expect(body.iceServers[0].urls).toMatch(/^stun:/);
+  });
+
   it("refuses path traversal outside the dashboard dir", async () => {
     const res = await fetch(`${baseUrl}/..%2f..%2f..%2fetc%2fpasswd`);
     expect(res.status).toBe(404);

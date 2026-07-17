@@ -20,7 +20,9 @@ import { AutoBrowserController } from "./browser-auto";
 import { PtyBridge } from "./pty";
 import { DataChannelTransport } from "./webrtc/transport";
 import { NodePeer } from "./webrtc/peer";
+import { fetchIceServers } from "./webrtc/ice";
 import type { RawChannel } from "./webrtc/channel";
+import type { RtcConfig } from "node-datachannel";
 import type {
   ActivityEntry,
   BrowserController,
@@ -81,6 +83,11 @@ export class AgentSession {
    * expert_status. Undefined until the expert first delivers. */
   #lastDelivery?: { summary: string; accepted?: boolean };
   #peer?: Peer;
+  /** ICE servers (STUN + optional TURN) resolved from the relay's /api/ice,
+   * prefetched when the session goes live so it's ready before an expert joins.
+   * Undefined until resolved, or when a test injects its own peerFactory — the
+   * NodePeer falls back to its own STUN default in both cases. */
+  #iceServers?: RtcConfig["iceServers"];
   #expertServer?: McpServer;
   #ptys = new Set<PtyBridge>();
   #startedAt = 0;
@@ -148,6 +155,11 @@ export class AgentSession {
 
   /** Wire the relay events once (shared by requestExpert and resumeExpert). */
   #wireRelayEvents(): void {
+    // Start resolving ICE servers now — a claim (and the peer it triggers) is
+    // seconds-to-minutes away, so the TURN list is ready well before the peer
+    // is built. Skipped when a test injects its own relay, so unit tests never
+    // make a real network call. Best-effort: failure leaves the STUN default.
+    if (!this.#opts.relayClientFactory) void this.#prefetchIceServers();
     this.#relay.on({
       onExpertJoined: (name, profile) => this.#onExpertJoined(name, profile),
       onExpertLeft: () => this.#onExpertLeft(),
@@ -170,6 +182,17 @@ export class AgentSession {
         if (this.#state !== "ended") this.#finish("relay disconnected", false);
       },
     });
+  }
+
+  /** Resolve ICE servers (STUN + optional TURN) from the relay and cache them
+   * for the peer that a claim will build. Best-effort — fetchIceServers already
+   * falls back to STUN on any failure, so this never throws into the session. */
+  async #prefetchIceServers(): Promise<void> {
+    try {
+      this.#iceServers = await fetchIceServers(this.#opts.relayUrl);
+    } catch {
+      // Leave #iceServers undefined; NodePeer falls back to its STUN default.
+    }
   }
 
   /** Register the session with the relay and wait for an expert to claim it. The
@@ -513,6 +536,7 @@ export class AgentSession {
         new NodePeer({
           role,
           sendSignal: (payload) => sendSignal(payload),
+          iceServers: this.#iceServers,
         }));
     const peer = makePeer({
       role: "answerer",

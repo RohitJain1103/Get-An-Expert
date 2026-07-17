@@ -19,6 +19,7 @@ import {
 } from "./persistence";
 import { serveStatic } from "./static";
 import { ROSTER, findExpert, type PublicExpertProfile } from "./roster";
+import { iceServers } from "./ice";
 
 /** Default max age of a queued request before the sweep expires it (72h). */
 export const DEFAULT_MAX_AGE_MS = 72 * 60 * 60 * 1000;
@@ -122,6 +123,18 @@ export function createRelay(options: RelayOptions): Relay {
     if (new URL(req.url ?? "/", "http://relay.local").pathname === "/api/roster") {
       res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
       res.end(JSON.stringify(ROSTER));
+      return;
+    }
+    // ICE servers (STUN + optional TURN) for the peer-to-peer WebRTC leg. The
+    // dashboard fetches this before creating its RTCPeerConnection and the agent
+    // before creating its peer, so TURN credentials stay server-side. no-store:
+    // TURN credentials may be short-lived, so clients must not cache them.
+    if (new URL(req.url ?? "/", "http://relay.local").pathname === "/api/ice") {
+      res.writeHead(200, {
+        "content-type": "application/json; charset=utf-8",
+        "cache-control": "no-store",
+      });
+      res.end(JSON.stringify({ iceServers: iceServers() }));
       return;
     }
     if (options.dashboardDir) {

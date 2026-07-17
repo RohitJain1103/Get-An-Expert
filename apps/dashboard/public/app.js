@@ -539,10 +539,35 @@ function renderPerms(session) {
 
 /* ── WebRTC (browser is the offerer) ──────────────────────────────── */
 
+/**
+ * Ask the relay for the ICE server list (STUN + optional TURN). TURN lets the
+ * file and terminal data channels connect from networks where a direct,
+ * STUN-only hole-punch can't get through a strict NAT or firewall. Falls back
+ * to the built-in STUN server if the relay is old or unreachable, so a failed
+ * fetch never blocks a session — it just can't help on those hard networks.
+ */
+async function fetchIceServers() {
+  try {
+    const wsUrl = state.connParams?.url || el("relay-url").value;
+    const base = wsUrl.trim().replace(/^ws/, "http").replace(/\/+$/, "");
+    const res = await fetch(`${base}/api/ice`, { cache: "no-store" });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data?.iceServers) && data.iceServers.length > 0) {
+        return data.iceServers;
+      }
+    }
+  } catch {
+    /* relay unreachable or pre-TURN — fall back to STUN */
+  }
+  return ICE_SERVERS;
+}
+
 async function startWebRTC(sessionId) {
   teardownPeer(); // drop any previous session's peer connection first
   resetWorkspace();
-  const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+  const iceServers = await fetchIceServers();
+  const pc = new RTCPeerConnection({ iceServers });
   state.pc = pc;
 
   // The MCP channel (files/browser tools) plus the first terminal channel.
