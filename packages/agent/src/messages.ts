@@ -12,7 +12,7 @@ import type { SessionState } from "./agent-session";
  * relays don't mint customer tokens). */
 export function queueMessage(chatUrl?: string): string {
   const base =
-    "You're in the expert queue — you can walk away now. Leave this chat open and your machine on and awake (don't close the laptop); an expert will pick this up and work within the scopes you approved, with every action logged.";
+    "You're in the expert queue — you can walk away now. Your request stays in the queue even if your connection drops or you restart your editor; it reconnects automatically and, within a bounded window, re-arms the scopes you approved so the expert can pick up where things left off. Keep your machine on and awake for the expert to actually work; every action is logged and you can revoke access or end anytime.";
   return chatUrl
     ? `${base} Check back anytime with expert_status, or message the expert from any device using the chat link above.`
     : `${base} Check back anytime with expert_status.`;
@@ -22,7 +22,7 @@ export function queueMessage(chatUrl?: string): string {
 export function statusMessage(state: SessionState, expertName?: string): string {
   switch (state) {
     case "waiting":
-      return "Still in the queue — no expert has joined yet. You don't have to wait here: leave this chat open and your machine awake, step away, and check back later.";
+      return "Still in the queue — no expert has joined yet. You don't have to wait here: step away and check back later. Your request stays queued through disconnects and restarts (it reconnects on its own), so it won't be lost; keep your machine on and awake so an expert can work once they pick it up.";
     case "connected":
       return `${expertName ?? "An expert"} is working on your machine right now, within the scopes you approved — every action is in the log below. Feel free to step away (keep the machine awake); check back whenever you like.`;
     case "ended":

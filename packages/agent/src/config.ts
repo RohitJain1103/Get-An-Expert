@@ -37,3 +37,25 @@ export function defaultBrowserPort(): number {
   const port = raw ? Number(raw) : 3000;
   return Number.isInteger(port) && port > 0 && port < 65536 ? port : 3000;
 }
+
+/**
+ * Whether the agent auto-resumes a persisted request on startup (re-arming the
+ * scopes the user approved). On by default so a queued request survives an
+ * editor/process restart without the user re-approving; set
+ * GET_AN_EXPERT_AUTO_RESUME=0 (or false/off/no) to require a fresh request instead.
+ */
+export function autoResume(): boolean {
+  const raw = process.env.GET_AN_EXPERT_AUTO_RESUME?.trim().toLowerCase();
+  return !(raw === "0" || raw === "false" || raw === "off" || raw === "no");
+}
+
+/**
+ * How long a persisted request stays auto-resumable before it's considered
+ * stale (default 72h). Bounds how long approved scopes can be re-armed without
+ * the user present; mirror this with the relay's max-age sweep.
+ */
+export function sessionMaxAgeMs(): number {
+  const raw = process.env.GET_AN_EXPERT_SESSION_MAX_AGE_MS;
+  const ms = raw ? Number(raw) : NaN;
+  return Number.isFinite(ms) && ms > 0 ? ms : 72 * 60 * 60 * 1000;
+}

@@ -21,6 +21,7 @@ const TOKEN = "integration-token";
 let relay: Relay;
 let relayUrl: string;
 let projectDir: string;
+let homeDir: string;
 let session: AgentSession;
 let expertWs: WebSocket;
 let expertPeer: NodePeer | undefined;
@@ -28,6 +29,11 @@ let expertClient: Client | undefined;
 let expertPtys: RawChannel[] = [];
 
 beforeEach(async () => {
+  // Keep the agent's ~/.get-an-expert files (resume/session-status) out of the
+  // real home dir during the test.
+  homeDir = realpathSync(mkdtempSync(join(tmpdir(), "get-an-expert-int-home-")));
+  process.env.GET_AN_EXPERT_HOME = homeDir;
+
   relay = createRelay({ expertTokens: [TOKEN] });
   await new Promise<void>((r) => relay.server.listen(0, "127.0.0.1", r));
   const port = (relay.server.address() as { port: number }).port;
@@ -56,6 +62,7 @@ afterEach(async () => {
   await bounded(session?.end().catch(() => {}), 6000);
   relay.server.closeAllConnections?.();
   await bounded(new Promise<void>((r) => relay.server.close(() => r())), 4000);
+  delete process.env.GET_AN_EXPERT_HOME;
 }, 20_000);
 
 /** Wait until the pty data channel with the given label has been established. */

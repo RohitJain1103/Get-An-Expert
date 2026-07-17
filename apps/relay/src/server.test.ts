@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import WebSocket from "ws";
-import { createRelay, type Relay } from "./server";
+import { createRelay, type Relay, type RelayOptions } from "./server";
 
 const TOKEN = "test-expert-token";
 
@@ -12,27 +12,42 @@ let baseUrl: string;
 let wsUrl: string;
 let sockets: WebSocket[];
 let buffers: Map<WebSocket, any[]>;
+let relays: Relay[];
 
-beforeEach(async () => {
+/** Boot a relay on an ephemeral port; tracked for teardown. */
+async function launch(
+  options: Partial<RelayOptions> = {},
+): Promise<{ relay: Relay; wsUrl: string; baseUrl: string }> {
   const dashboardDir = mkdtempSync(join(tmpdir(), "get-an-expert-dash-"));
   writeFileSync(join(dashboardDir, "index.html"), "<h1>get-an-expert dashboard</h1>");
-  relay = createRelay({ expertTokens: [TOKEN], dashboardDir });
-  await new Promise<void>((r) => relay.server.listen(0, "127.0.0.1", r));
-  const addr = relay.server.address() as { port: number };
-  baseUrl = `http://127.0.0.1:${addr.port}`;
-  wsUrl = `ws://127.0.0.1:${addr.port}`;
+  const r = createRelay({ expertTokens: [TOKEN], dashboardDir, ...options });
+  relays.push(r);
+  await new Promise<void>((res) => r.server.listen(0, "127.0.0.1", res));
+  const addr = r.server.address() as { port: number };
+  return {
+    relay: r,
+    wsUrl: `ws://127.0.0.1:${addr.port}`,
+    baseUrl: `http://127.0.0.1:${addr.port}`,
+  };
+}
+
+beforeEach(async () => {
+  relays = [];
   sockets = [];
   buffers = new Map();
+  ({ relay, wsUrl, baseUrl } = await launch());
 });
 
 afterEach(async () => {
   for (const ws of sockets) ws.close();
-  await new Promise<void>((r) => relay.server.close(() => r()));
+  await Promise.all(
+    relays.map((r) => new Promise<void>((res) => r.server.close(() => res()))),
+  );
 });
 
 /** Connect and buffer every incoming message so none are lost between reads. */
-function connect(path: string): Promise<WebSocket> {
-  const ws = new WebSocket(`${wsUrl}${path}`);
+function connect(path: string, url: string = wsUrl): Promise<WebSocket> {
+  const ws = new WebSocket(`${url}${path}`);
   sockets.push(ws);
   buffers.set(ws, []);
   ws.on("message", (data) => {
@@ -42,6 +57,19 @@ function connect(path: string): Promise<WebSocket> {
     ws.once("open", () => resolve(ws));
     ws.once("error", reject);
   });
+}
+
+/** Poll until a predicate holds (used to observe async store transitions). */
+async function pollUntil(
+  predicate: () => boolean,
+  timeoutMs = 3000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  throw new Error("timeout waiting for condition");
 }
 
 async function nextMessage(ws: WebSocket, timeoutMs = 3000): Promise<any> {
@@ -92,7 +120,12 @@ async function registeredAgent(customerName = "Jordan Lee") {
   });
   const reg = await nextMessage(agent);
   expect(reg.type).toBe("registered");
-  return { agent, sessionId: reg.sessionId as string };
+  return {
+    agent,
+    sessionId: reg.sessionId as string,
+    customerToken: reg.customerToken as string,
+    resumeToken: reg.resumeToken as string,
+  };
 }
 
 async function authedExpert(name = "Priya Sharma") {
@@ -285,15 +318,22 @@ describe("session metadata", () => {
 });
 
 describe("session end", () => {
-  it("ends the session and tells the expert when the agent disconnects", async () => {
+  it("keeps the request in the queue (offline) and returns the expert to idle when the agent disconnects", async () => {
     const { agent, sessionId } = await registeredAgent();
     const { expert } = await authedExpert();
     send(expert, { type: "claim", sessionId });
     await waitFor(expert, (m) => m.type === "claimed");
     agent.close();
+    // The expert's live session drops back to idle...
     const ended = await waitFor(expert, (m) => m.type === "session-ended");
     expect(ended.sessionId).toBe(sessionId);
-    expect(relay.store.get(sessionId)?.status).toBe("ended");
+    // ...but the request itself is NOT gone: it stays in the queue as offline,
+    // released back to waiting so it can be re-claimed when the customer returns.
+    const session = relay.store.get(sessionId);
+    expect(session?.status).toBe("waiting");
+    expect(session?.online).toBe(false);
+    expect(session?.expertName).toBeUndefined();
+    expect(relay.store.queue().map((s) => s.id)).toContain(sessionId);
   });
 
   it("ends the session and tells the agent when the expert ends it", async () => {
@@ -335,5 +375,121 @@ describe("http", () => {
   it("refuses path traversal outside the dashboard dir", async () => {
     const res = await fetch(`${baseUrl}/..%2f..%2f..%2fetc%2fpasswd`);
     expect(res.status).toBe(404);
+  });
+});
+
+describe("durable inbox", () => {
+  it("returns a resume token at registration", async () => {
+    const { resumeToken } = await registeredAgent();
+    expect(resumeToken).toMatch(/^[0-9a-f]{48}$/);
+  });
+
+  it("keeps a waiting request in the queue (offline) when the agent disconnects", async () => {
+    const { agent, sessionId } = await registeredAgent();
+    agent.close();
+    await pollUntil(() => relay.store.get(sessionId)?.online === false);
+    const session = relay.store.get(sessionId);
+    expect(session?.status).toBe("waiting");
+    expect(relay.store.queue().map((s) => s.id)).toContain(sessionId);
+  });
+
+  it("marks the queue entry offline so experts can see it", async () => {
+    const { agent, sessionId } = await registeredAgent();
+    const { expert } = await authedExpert();
+    agent.close();
+    const update = await waitFor(
+      expert,
+      (m) => m.type === "queue" && m.sessions[0]?.online === false,
+    );
+    expect(update.sessions[0].sessionId).toBe(sessionId);
+  });
+
+  it("resumes an offline request with the right token and flips it back online", async () => {
+    const { agent, sessionId, resumeToken } = await registeredAgent();
+    agent.close();
+    await pollUntil(() => relay.store.get(sessionId)?.online === false);
+
+    const agent2 = await connect("/agent");
+    send(agent2, { type: "resume", sessionId, resumeToken });
+    const resumed = await nextMessage(agent2);
+    expect(resumed.type).toBe("resumed");
+    expect(resumed.sessionId).toBe(sessionId);
+    expect(relay.store.get(sessionId)?.online).toBe(true);
+  });
+
+  it("rejects a resume with the wrong token and leaves the socket open to register", async () => {
+    const { agent, sessionId } = await registeredAgent();
+    agent.close();
+    await pollUntil(() => relay.store.get(sessionId)?.online === false);
+
+    const agent2 = await connect("/agent");
+    send(agent2, { type: "resume", sessionId, resumeToken: "deadbeef" });
+    const failed = await nextMessage(agent2);
+    expect(failed.type).toBe("resume-failed");
+    expect(relay.store.get(sessionId)?.online).toBe(false);
+    // The socket is still usable — a fresh register works on it.
+    send(agent2, {
+      type: "register",
+      customerName: "Fallback",
+      projectDir: "~/x",
+    });
+    const reg = await nextMessage(agent2);
+    expect(reg.type).toBe("registered");
+  });
+
+  it("refuses to claim an offline request until the customer reconnects", async () => {
+    const { agent, sessionId } = await registeredAgent();
+    agent.close();
+    await pollUntil(() => relay.store.get(sessionId)?.online === false);
+
+    const { expert } = await authedExpert();
+    send(expert, { type: "claim", sessionId });
+    const failed = await waitFor(expert, (m) => m.type === "claim-failed");
+    expect(failed.reason).toMatch(/offline/i);
+    expect(relay.store.get(sessionId)?.status).toBe("waiting");
+  });
+
+  it("expires a stale queued request via the max-age sweep", async () => {
+    const short = await launch({ maxAgeMs: 50 });
+    const agent = await connect("/agent", short.wsUrl);
+    send(agent, { type: "register", customerName: "Stale", projectDir: "~/s" });
+    const reg = await nextMessage(agent);
+    await pollUntil(
+      () => short.relay.store.get(reg.sessionId)?.status === "ended",
+      4000,
+    );
+    expect(short.relay.store.queue().map((s) => s.id)).not.toContain(
+      reg.sessionId,
+    );
+  });
+
+  it("hydrates persisted requests into the queue as offline on boot", async () => {
+    const persisted = {
+      id: "sess_restored",
+      customerName: "Restored Dana",
+      projectDir: "~/restored",
+      issue: "was mid-request when the relay restarted",
+      status: "waiting" as const,
+      online: false,
+      createdAt: Date.now() - 1000,
+      updatedAt: Date.now() - 1000,
+      permissions: { files: true, terminal: false, browser: false },
+      activity: [],
+      customerToken: "cust_tok",
+      resumeTokenHash: "hash",
+      chat: [],
+    };
+    const { relay: booted } = await launch({
+      persistence: {
+        save: async () => {},
+        remove: async () => {},
+        loadAll: async () => [persisted],
+      },
+    });
+    await booted.hydrate();
+    const restored = booted.store.get("sess_restored");
+    expect(restored?.customerName).toBe("Restored Dana");
+    expect(restored?.online).toBe(false);
+    expect(booted.store.queue().map((s) => s.id)).toContain("sess_restored");
   });
 });

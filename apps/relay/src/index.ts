@@ -3,12 +3,21 @@ import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createRelay } from "./server";
+import { createPersistence } from "./persistence";
+import { DEFAULT_MAX_AGE_MS, createRelay } from "./server";
 
 const port = Number(process.env.PORT ?? 8787);
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
   console.error(`Invalid PORT: ${process.env.PORT}`);
   process.exit(1);
+}
+
+/** How long a queued request lives before the max-age sweep expires it. */
+function resolveMaxAgeMs(): number {
+  const raw = process.env.GET_AN_EXPERT_SESSION_MAX_AGE_MS;
+  if (!raw) return DEFAULT_MAX_AGE_MS;
+  const ms = Number(raw);
+  return Number.isFinite(ms) && ms > 0 ? ms : DEFAULT_MAX_AGE_MS;
 }
 
 // Bind to loopback by default. The relay can grant terminal/file access to a
@@ -50,8 +59,16 @@ const dashboardDir = resolveDashboardDir();
 const relay = createRelay({
   expertTokens: tokens,
   dashboardDir,
+  persistence: createPersistence(resolveMaxAgeMs(), (line) =>
+    console.log(`[relay] ${line}`),
+  ),
+  maxAgeMs: resolveMaxAgeMs(),
   log: (line) => console.log(`[relay] ${line}`),
 });
+
+// Restore any queued requests that survived a restart before accepting traffic,
+// so experts see the backlog the moment they connect.
+await relay.hydrate();
 
 relay.server.listen(port, host, () => {
   console.log(`[relay] Get An Expert relay listening on http://${host}:${port}`);

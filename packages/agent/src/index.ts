@@ -2,14 +2,17 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { clearResume, readResume } from "@get-an-expert/core/relay";
 import { AgentSession } from "./agent-session";
 import {
   SERVER_NAME,
   SERVER_VERSION,
+  autoResume,
   customerName,
   defaultBrowserPort,
   projectDir,
   relayUrl,
+  sessionMaxAgeMs,
 } from "./config";
 import {
   buildContextMarkdown,
@@ -43,7 +46,7 @@ When the user asks for a human expert (or runs /get-an-expert), call request_exp
 
 When you report status or the final summary, relay what the expert did or delivered — do not review, grade, or second-guess their work. The expert is a vetted human professional working with context you don't have; critiquing their in-progress or finished work confuses the user and is usually wrong. Only evaluate the expert's work if the user explicitly asks you to.
 
-Once the request is queued, tell the user plainly: they can walk away — leave this chat open and the machine on and awake, and the expert works without them; every action is logged, and expert_status shows where things stand whenever they check back. If a chat link is returned, pass it on so they can message the expert from their phone or any browser.`;
+Once the request is queued, tell the user plainly: they can walk away — the request stays in the queue even if their connection drops or they restart their editor, and reconnects automatically (re-arming the scopes they approved, within a bounded window), so it is never lost while no expert is online. Keeping the machine on and awake lets the expert actually work; every action is logged, and expert_status shows where things stand whenever they check back. If a chat link is returned, pass it on so they can message the expert from their phone or any browser.`;
 
 const server = new McpServer(
   { name: SERVER_NAME, version: SERVER_VERSION },
@@ -382,10 +385,46 @@ function errText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/**
+ * On startup, rejoin a request that was queued before the process restarted:
+ * reconnect to the relay and re-arm the scopes the user already approved, so a
+ * request survives an editor/agent restart without vanishing or needing
+ * re-approval. Bounded by the resume record's age and GET_AN_EXPERT_AUTO_RESUME;
+ * any failure clears the stale record and starts clean.
+ */
+async function attemptAutoResume(): Promise<void> {
+  if (!autoResume()) return;
+  const record = readResume();
+  if (!record) return;
+  if (Date.now() - record.createdAt >= sessionMaxAgeMs()) {
+    clearResume();
+    return;
+  }
+  const resumed = new AgentSession({
+    relayUrl: record.relayUrl || relayUrl(),
+    projectDir: record.projectDir,
+    customerName: record.customerName,
+    log: (line) => console.error(`[get-an-expert] ${line}`),
+  });
+  try {
+    await resumed.resumeExpert(record);
+    session = resumed;
+    console.error(
+      `[get-an-expert] resumed queued request ${record.sessionId} after restart`,
+    );
+  } catch (err) {
+    // Session gone/expired, or the relay is unreachable: drop the stale record.
+    clearResume();
+    console.error(`[get-an-expert] could not auto-resume: ${errText(err)}`);
+  }
+}
+
 async function main(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error(`[get-an-expert] agent ready (relay: ${relayUrl()})`);
+  // Best-effort; never blocks the server from coming up.
+  void attemptAutoResume();
 }
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {

@@ -167,25 +167,78 @@ function handleRelay(msg) {
 
 /* ── Queue ────────────────────────────────────────────────────────── */
 
+/** Compact "how long ago" for queue rows ("3m", "2h", "1d"). */
+function relTime(iso) {
+  const ms = Date.now() - (typeof iso === "number" ? iso : new Date(iso).getTime());
+  if (!Number.isFinite(ms) || ms < 0) return "";
+  const min = Math.floor(ms / 60000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min}m`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h`;
+  return `${Math.floor(hr / 24)}d`;
+}
+
 function updateQueue(sessions) {
   state.sessions = new Map(sessions.map((s) => [s.sessionId, s]));
   const list = el("queue-list");
   list.innerHTML = "";
   el("queue-empty").classList.toggle("hidden", sessions.length > 0);
 
+  // Header count: claimable (online, waiting) vs offline (customer disconnected
+  // but the request is still queued and will reconnect).
+  const onlineWaiting = sessions.filter((s) => s.status !== "active" && s.online !== false).length;
+  const offlineCount = sessions.filter((s) => s.status !== "active" && s.online === false).length;
+  const countEl = document.getElementById("queue-count");
+  if (countEl) {
+    const parts = [];
+    if (onlineWaiting) parts.push(`${onlineWaiting} waiting`);
+    if (offlineCount) parts.push(`${offlineCount} offline`);
+    countEl.textContent = parts.length ? ` · ${parts.join(" · ")}` : "";
+  }
+
   for (const s of sessions) {
+    const offline = s.online === false;
     const mine = s.status === "active" && s.expertName === state.expertName;
     const takenByOther = s.status === "active" && !mine;
     const div = document.createElement("div");
-    div.className = "queue-item" + (s.sessionId === state.activeId ? " active" : "");
-    const statusClass = mine ? "active" : takenByOther ? "taken" : "waiting";
-    const statusText = mine ? "Active (you)" : takenByOther ? `With ${escapeHtml(s.expertName)}` : "Waiting";
+    div.className =
+      "queue-item" +
+      (s.sessionId === state.activeId ? " active" : "") +
+      (offline ? " offline" : "");
+
+    let statusClass, statusText;
+    if (offline) {
+      statusClass = "offline";
+      const since = relTime(s.createdAt);
+      statusText = since ? `Offline · waiting ${since}` : "Offline";
+    } else if (mine) {
+      statusClass = "active";
+      statusText = "Active (you)";
+    } else if (takenByOther) {
+      statusClass = "taken";
+      statusText = `With ${escapeHtml(s.expertName)}`;
+    } else {
+      statusClass = "waiting";
+      const since = relTime(s.createdAt);
+      statusText = since ? `Waiting · ${since}` : "Waiting";
+    }
+
     div.innerHTML = `
       <div class="qname">${escapeHtml(s.customerName)}</div>
       <div class="qproject">${escapeHtml(s.projectDir)}</div>
       ${s.issue ? `<div class="qissue">${escapeHtml(s.issue)}</div>` : ""}
       <div class="qstatus ${statusClass}">${statusText}</div>`;
-    if (!takenByOther) {
+
+    if (offline) {
+      // Can't claim an offline request — the WebRTC peer needs a live machine.
+      // It stays in the queue and becomes claimable when the customer returns.
+      div.title =
+        "The customer's machine is offline. This request stays in the queue and becomes claimable when they reconnect.";
+      div.addEventListener("click", () =>
+        status("This request is offline — it becomes claimable when the customer reconnects."),
+      );
+    } else if (!takenByOther) {
       div.addEventListener("click", () => {
         if (mine || s.sessionId === state.activeId) {
           openWorkspace(s);

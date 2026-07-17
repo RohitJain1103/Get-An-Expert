@@ -176,3 +176,68 @@ export function writeSessionStatus(record: SessionStatusRecord): void {
 export function clearSessionStatus(): void {
   rmSync(sessionStatusFilePath(), { force: true });
 }
+
+/**
+ * Everything the agent needs to rejoin its queued request after the socket
+ * drops or the process restarts: the relay session id, the one-time resume
+ * token the relay minted (so the reconnect is authenticated, not spoofable),
+ * and the approved scopes — persisted so a full process restart can re-arm
+ * live access without a fresh approval (bounded by createdAt + the agent's
+ * max-age check). Written when the request is registered, updated when scopes
+ * are granted, and cleared when the session truly ends.
+ */
+export interface ResumeGrant {
+  files: boolean;
+  terminal: boolean;
+  browser: boolean;
+  browserPort?: number;
+}
+
+export interface ResumeRecord {
+  sessionId: string;
+  /** Raw token the relay returned once; presented on reconnect to resume. */
+  resumeToken: string;
+  relayUrl: string;
+  projectDir: string;
+  customerName: string;
+  issue?: string;
+  /** Approved scopes, present once the user has granted them. */
+  grant?: ResumeGrant;
+  /** Epoch ms of the original request, for the freshness/max-age check. */
+  createdAt: number;
+}
+
+export function resumeFilePath(): string {
+  return join(expertHomeDir(), "resume.json");
+}
+
+export function readResume(): ResumeRecord | null {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(resumeFilePath(), "utf8"));
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      typeof (parsed as ResumeRecord).sessionId === "string" &&
+      typeof (parsed as ResumeRecord).resumeToken === "string" &&
+      typeof (parsed as ResumeRecord).relayUrl === "string" &&
+      typeof (parsed as ResumeRecord).createdAt === "number"
+    ) {
+      return parsed as ResumeRecord;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeResume(record: ResumeRecord): void {
+  mkdirSync(expertHomeDir(), { recursive: true, mode: 0o700 });
+  writeFileSync(resumeFilePath(), `${JSON.stringify(record, null, 2)}\n`, {
+    encoding: "utf8",
+    mode: 0o600,
+  });
+}
+
+export function clearResume(): void {
+  rmSync(resumeFilePath(), { force: true });
+}

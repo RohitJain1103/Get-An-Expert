@@ -48,6 +48,17 @@ const agentRegister = z.object({
   issue: z.string().max(2000).optional(),
 });
 
+/**
+ * Rejoin an existing queued request after a reconnect or process restart. The
+ * relay re-attaches this socket to the session if the token hash matches; the
+ * request never left the queue (it was just marked offline).
+ */
+const agentResume = z.object({
+  type: z.literal("resume"),
+  sessionId: z.string().min(1).max(80),
+  resumeToken: z.string().min(1).max(200),
+});
+
 const agentMetadata = z.object({
   type: z.literal("metadata"),
   permissions: permissionsSchema.optional(),
@@ -68,6 +79,7 @@ const agentEnd = z.object({
 
 export const agentMessageSchema = z.discriminatedUnion("type", [
   agentRegister,
+  agentResume,
   agentMetadata,
   agentSignal,
   agentEnd,

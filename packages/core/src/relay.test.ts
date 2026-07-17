@@ -4,14 +4,18 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   clearRelayFlag,
+  clearResume,
   clearSessionStatus,
   readLastChat,
   readRelayFlag,
+  readResume,
   readSessionStatus,
   writeLastChat,
   writeRelayFlag,
+  writeResume,
   writeSessionStatus,
   type RelayFlag,
+  type ResumeRecord,
   type SessionStatusRecord,
 } from "./relay";
 
@@ -150,5 +154,51 @@ describe("session-status record", () => {
     const read = readSessionStatus();
     expect(read?.state).toBe("waiting");
     expect(read?.recentActivity).toEqual([]);
+  });
+});
+
+describe("resume record", () => {
+  const resume: ResumeRecord = {
+    sessionId: "sess_a",
+    resumeToken: "rt_abc",
+    relayUrl: "wss://relay.test",
+    projectDir: "/home/dev/project",
+    customerName: "Dana",
+    issue: "build is broken",
+    grant: { files: true, terminal: true, browser: true, browserPort: 3000 },
+    createdAt: 1_700_000_000_000,
+  };
+
+  it("round-trips and is owner-only (0600)", () => {
+    writeResume(resume);
+    expect(readResume()).toEqual(resume);
+    const mode = statSync(join(dir, "resume.json")).mode & 0o777;
+    expect(mode).toBe(0o600);
+  });
+
+  it("returns null when absent, corrupt, or missing required fields", () => {
+    expect(readResume()).toBeNull();
+    writeFileSync(join(dir, "resume.json"), "not json");
+    expect(readResume()).toBeNull();
+    writeFileSync(
+      join(dir, "resume.json"),
+      JSON.stringify({ sessionId: "sess_a" }),
+    );
+    expect(readResume()).toBeNull();
+  });
+
+  it("round-trips without an optional grant (request queued but not yet approved)", () => {
+    const { grant: _grant, issue: _issue, ...minimal } = resume;
+    writeResume(minimal);
+    const read = readResume();
+    expect(read?.sessionId).toBe("sess_a");
+    expect(read?.grant).toBeUndefined();
+  });
+
+  it("clearResume removes it; clearing twice is fine", () => {
+    writeResume(resume);
+    clearResume();
+    expect(readResume()).toBeNull();
+    clearResume();
   });
 });

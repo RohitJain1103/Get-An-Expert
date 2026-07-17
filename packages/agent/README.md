@@ -83,6 +83,19 @@ Plus MCP tools: `list_files`, `read_file`, `write_file`, `run_command`, `browser
 | `GET_AN_EXPERT_CUSTOMER_NAME` | OS username | Name shown to the expert in the queue. |
 | `GET_AN_EXPERT_BROWSER_PORT` | `3000` | Default dev-server port offered for Browser access. |
 | `GET_AN_EXPERT_BROWSER_EXECUTABLE` | *auto* | Path to the Chrome/Chromium/Edge binary used for the Browser scope. Auto-detected when unset. |
+| `GET_AN_EXPERT_AUTO_RESUME` | `on` | On startup, rejoin a request that was queued before the process restarted and re-arm the scopes you approved (no re-approval), so a request survives an editor/agent restart. Set to `0`/`false`/`off` to require a fresh request instead. |
+| `GET_AN_EXPERT_SESSION_MAX_AGE_MS` | `259200000` (72h) | How long a persisted request stays auto-resumable before it's considered stale. Bounds how long approved scopes can be re-armed without you present; match the relay's value. |
+
+### Staying alive across disconnects & restarts
+
+Once a request is queued it no longer disappears if your connection drops. The agent
+**reconnects automatically** (sleep, Wi-Fi blip, relay redeploy) and resumes the same
+request — mid-session grants stay in memory, so it's seamless. Across a full
+editor/agent **process restart**, it reads a small local record
+(`~/.get-an-expert/resume.json`, owner-only) and auto-resumes, re-arming the scopes you
+approved so the expert can continue — bounded by `GET_AN_EXPERT_SESSION_MAX_AGE_MS` and
+logged in the activity feed as "access re-armed". Revoke or end anytime, or disable
+auto-resume with `GET_AN_EXPERT_AUTO_RESUME=0`.
 
 ## Related
 
