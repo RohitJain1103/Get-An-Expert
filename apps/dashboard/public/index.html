@@ -59,9 +59,19 @@
       <div class="ws-active hidden" id="ws-active">
         <span class="dot amber"></span>
         <span id="ws-title">—</span>
+        <span class="ws-issue" id="ws-issue"></span>
+        <button id="issue-edit-btn" class="small ghost hidden">Edit issue</button>
         <span class="perms" id="ws-perms"></span>
         <span class="spacer"></span>
         <button id="end-btn" class="danger small">End session</button>
+      </div>
+    </div>
+
+    <div class="issue-editor hidden" id="issue-editor">
+      <textarea id="issue-editor-input" rows="3" maxlength="2000" aria-label="Edit the customer's issue"></textarea>
+      <div class="issue-editor-acts">
+        <button id="issue-save-btn" class="small">Save</button>
+        <button id="issue-cancel-btn" class="small ghost">Cancel</button>
       </div>
     </div>
 
@@ -118,6 +128,8 @@
     </div>
   </section>
 </div>
+
+<div class="toast hidden" id="toast" role="status" aria-live="polite"></div>
 
 <script src="vendor/xterm.js"></script>
 <script src="vendor/addon-fit.js"></script>

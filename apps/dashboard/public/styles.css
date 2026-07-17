@@ -217,6 +217,50 @@ button.icon-btn:hover { color: var(--text); background: var(--raised); }
 .ws-active .dot { width: 8px; height: 8px; border-radius: 50%; }
 .ws-active .dot.amber { background: var(--amber); }
 #ws-title { font-weight: 600; font-family: var(--mono); font-size: 12px; }
+.ws-issue { color: var(--text2); font-size: 12px; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-issue:not(:empty)::before { content: "· "; color: var(--text3); }
+
+/* Inline issue editor, second row under the workspace header. Dark theme. */
+.issue-editor {
+  padding: 10px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.issue-editor textarea {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 8px 10px;
+  resize: vertical;
+}
+.issue-editor textarea:focus { outline: none; border-color: var(--amber); }
+.issue-editor-acts { display: flex; gap: 8px; }
+
+/* Toast: stale-edit refusal and other transient notices. */
+.toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 440px;
+  padding: 11px 16px;
+  background: var(--raised);
+  border: 1px solid var(--amber);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  z-index: 200;
+}
 .perms { display: flex; gap: 5px; }
 .perm-chip {
   font-size: 10px;
