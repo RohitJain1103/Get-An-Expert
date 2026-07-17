@@ -1,6 +1,17 @@
 import { spawn } from "node:child_process";
 
-type SpawnFn = typeof spawn;
+/**
+ * The slice of child_process.spawn this module uses: a fixed command + argv and
+ * a locked options object, returning something detachable via unref. Structural
+ * (rather than `typeof spawn`) so a test can inject a minimal fake spawner while
+ * the real `spawn` still satisfies it. The argv is always fixed per platform and
+ * shell is always false, so no user input ever reaches a shell.
+ */
+type SpawnFn = (
+  command: string,
+  args: readonly string[],
+  options: { detached: boolean; stdio: "ignore"; shell: false },
+) => { unref?: () => void };
 
 /**
  * Best-effort: open the customer chat page in the default browser. Security
