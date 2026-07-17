@@ -29,6 +29,19 @@ On startup it prints the port, the dashboard directory it's serving, and — if 
 | `GET_AN_EXPERT_HOST` | `127.0.0.1` | Bind address. Loopback by default. Set to `0.0.0.0` to accept network connections — only behind your own firewall/auth, since the relay coordinates terminal/file access. |
 | `GET_AN_EXPERT_EXPERT_TOKENS` | *generated* | Comma-separated expert auth tokens. If unset, one is generated and printed. |
 | `GET_AN_EXPERT_DASHBOARD_DIR` | sibling `apps/dashboard/public` | Static files for the expert dashboard. Omit to disable static serving. |
+| `GET_AN_EXPERT_SESSION_MAX_AGE_MS` | `259200000` (72h) | How long a queued request lives before the max-age sweep expires it. Bounds the durable inbox and the window in which a restarted agent can auto-resume approved scopes. |
+| `UPSTASH_REDIS_REST_URL` / `KV_REST_API_URL` | *unset* | Upstash/KV REST URL. When set (with the token below), queued requests are persisted so they **survive a relay restart/redeploy**. Unset ⇒ in-memory (requests still survive customer disconnects and auto-resume; only relay-restart survival needs this). |
+| `UPSTASH_REDIS_REST_TOKEN` / `KV_REST_API_TOKEN` | *unset* | Upstash/KV REST token that pairs with the URL above. |
+
+## Durable inbox (offline requests)
+
+A customer's request no longer disappears when their machine disconnects. When the
+agent socket drops (sleep, Wi-Fi blip, editor closed, relay redeploy), the request
+stays in the queue marked **offline** — experts see it, and it becomes claimable
+again the moment the customer's agent reconnects (which it does automatically). With
+Redis configured, offline/waiting requests are also restored into the queue after a
+relay restart. The max-age sweep expires anything left unclaimed/offline past
+`GET_AN_EXPERT_SESSION_MAX_AGE_MS`.
 
 ## Endpoints
 
@@ -41,8 +54,8 @@ On startup it prints the port, the dashboard directory it's serving, and — if 
 
 The relay is a normal long-lived Node process (WebSockets), so it runs on any
 container host. A `Dockerfile` (`apps/relay/Dockerfile`) and `railway.json` are
-included; the image is lightweight because the relay depends only on `ws` and
-`zod` (no native modules).
+included; the image stays lightweight because the relay's only dependencies are
+`ws`, `zod`, and the pure-HTTP `@upstash/redis` client (no native modules).
 
 1. **New Railway project → Deploy from GitHub repo**, pick this repo. Railway
    reads `railway.json` and builds `apps/relay/Dockerfile`.
@@ -51,6 +64,10 @@ included; the image is lightweight because the relay depends only on `ws` and
      expert, e.g. `alice-3f9a,bob-7c2d`). Required in production.
    - `GET_AN_EXPERT_HOST=0.0.0.0` is already set in the Dockerfile; `PORT` is
      injected by Railway. No other config needed.
+   - *(Optional)* `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` — add an
+     Upstash Redis (or Railway KV) to keep queued requests across relay
+     restarts/redeploys. Without them the relay runs in-memory; everything except
+     relay-restart survival still works.
 3. **Generate a public domain** (Settings → Networking). You get
    `https://<name>.up.railway.app`.
 4. Experts open `https://<name>.up.railway.app/`, using

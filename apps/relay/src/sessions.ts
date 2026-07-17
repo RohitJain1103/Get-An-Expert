@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   NO_PERMISSIONS,
   type ChatMessage,
@@ -6,6 +6,11 @@ import {
 } from "./protocol";
 
 export type SessionStatus = "waiting" | "active" | "ended";
+
+/** SHA-256 of a resume token — the only form ever stored or persisted. */
+export function hashResumeToken(raw: string): string {
+  return createHash("sha256").update(raw).digest("hex");
+}
 
 export interface ActivityEntry {
   at: number;
@@ -19,8 +24,17 @@ export interface Session {
   projectDir: string;
   issue?: string;
   status: SessionStatus;
+  /**
+   * Whether the customer's agent socket is currently attached. A request stays
+   * in the queue while offline (the customer walked away / lost the network /
+   * the relay restarted) so an expert can still see it and pick it up once the
+   * machine reconnects. Only an explicit end (or max-age expiry) removes it.
+   */
+  online: boolean;
   expertName?: string;
   createdAt: number;
+  /** Epoch ms of the last mutation, so callers can show freshness. */
+  updatedAt: number;
   claimedAt?: number;
   endedAt?: number;
   permissions: Permissions;
@@ -31,6 +45,12 @@ export interface Session {
    * entries or anything else sent to experts.
    */
   customerToken: string;
+  /**
+   * SHA-256 of the resume token. The raw token is returned to the agent once
+   * at create and never stored; a reconnecting agent presents it and the relay
+   * compares hashes. Never included in queue entries.
+   */
+  resumeTokenHash: string;
   /** Chat history, already redacted. Never included in queue entries. */
   chat: readonly ChatMessage[];
 }
@@ -56,25 +76,65 @@ const CHAT_CAP = 200;
 export class SessionStore {
   #sessions = new Map<string, Session>();
 
-  create(input: CreateSessionInput): Session {
+  /**
+   * Register a new waiting session. Returns the session plus the raw resume
+   * token (returned to the agent exactly once; only its hash is stored).
+   */
+  create(input: CreateSessionInput): { session: Session; resumeToken: string } {
+    const now = Date.now();
+    const resumeToken = randomBytes(24).toString("hex");
     const session: Session = {
       id: randomUUID(),
       customerName: input.customerName,
       projectDir: input.projectDir,
       issue: input.issue,
       status: "waiting",
-      createdAt: Date.now(),
+      online: true,
+      createdAt: now,
+      updatedAt: now,
       permissions: { ...NO_PERMISSIONS },
       activity: [],
       customerToken: randomBytes(16).toString("hex"),
+      resumeTokenHash: hashResumeToken(resumeToken),
       chat: [],
     };
     this.#sessions.set(session.id, session);
-    return session;
+    return { session, resumeToken };
   }
 
   get(id: string): Session | undefined {
     return this.#sessions.get(id);
+  }
+
+  /** Mark whether the customer's agent socket is attached. */
+  setOnline(id: string, online: boolean): Session {
+    const session = this.#require(id);
+    return this.#update({ ...session, online });
+  }
+
+  /**
+   * Insert a session restored from durable storage as offline. Never clobbers a
+   * session that is already live in memory (a reconnect wins over a stale copy).
+   */
+  hydrate(session: Session): void {
+    if (this.#sessions.has(session.id)) return;
+    this.#sessions.set(session.id, { ...session, online: false });
+  }
+
+  /**
+   * Ids of non-ended sessions created before the cutoff that are unclaimed or
+   * offline — the max-age sweep ends these so the durable inbox (and the
+   * grants an auto-resume could re-arm) never lingers indefinitely. A session
+   * actively being worked on (active + online) is left alone regardless of age.
+   */
+  expireBefore(cutoffMs: number): string[] {
+    const ids: string[] = [];
+    for (const s of this.#sessions.values()) {
+      if (s.status === "ended") continue;
+      if (s.createdAt >= cutoffMs) continue;
+      if (s.status === "waiting" || !s.online) ids.push(s.id);
+    }
+    return ids;
   }
 
   claim(id: string, expertName: string): Session {
@@ -158,8 +218,9 @@ export class SessionStore {
   }
 
   #update(session: Session): Session {
-    this.#sessions.set(session.id, session);
-    return session;
+    const stamped = { ...session, updatedAt: Date.now() };
+    this.#sessions.set(session.id, stamped);
+    return stamped;
   }
 
   #pruneEnded(): void {

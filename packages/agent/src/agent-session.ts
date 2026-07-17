@@ -2,11 +2,17 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
-import { clearSessionStatus, writeSessionStatus } from "@get-an-expert/core/relay";
+import {
+  clearResume,
+  clearSessionStatus,
+  writeResume,
+  writeSessionStatus,
+  type ResumeRecord,
+} from "@get-an-expert/core/relay";
 import { buildChatUrl } from "./chat-url";
 import { createExpertServer } from "./expert-server";
 import { PermissionGate, type Grant, type Scope } from "./permissions";
-import { RelayClient } from "./relay-client";
+import { RelayClient, type RelayConnection } from "./relay-client";
 import { SessionLog } from "./session";
 import { AgentTools } from "./tools";
 import { AutoBrowserController } from "./browser-auto";
@@ -26,6 +32,8 @@ export interface AgentSessionOptions {
     role: "answerer";
     sendSignal: (payload: unknown) => void;
   }) => Peer;
+  /** Relay connection factory (defaults to a real RelayClient; injectable for tests). */
+  relayClientFactory?: (relayUrl: string) => RelayConnection;
   /** Notified whenever the live activity log gains an entry. */
   onActivity?: (entry: ActivityEntry) => void;
   /** Notified when the expert connects / disconnects / the session ends. */
@@ -55,7 +63,7 @@ export class AgentSession {
   readonly #gate: PermissionGate;
   readonly #log = new SessionLog();
   readonly #tools: AgentTools;
-  readonly #relay: RelayClient;
+  readonly #relay: RelayConnection;
   readonly #opts: AgentSessionOptions;
   readonly #logLine: (line: string) => void;
 
@@ -66,13 +74,18 @@ export class AgentSession {
   #ptys = new Set<PtyBridge>();
   #startedAt = 0;
   #contextWritten = false;
+  /** The issue text and request time, kept so the resume record can be rebuilt. */
+  #issue?: string;
+  #requestedAt = 0;
   readonly #browser: BrowserController;
 
   constructor(opts: AgentSessionOptions) {
     this.#opts = opts;
     this.#logLine = opts.log ?? (() => {});
     this.#gate = new PermissionGate(opts.projectDir);
-    this.#relay = new RelayClient(opts.relayUrl);
+    this.#relay = opts.relayClientFactory
+      ? opts.relayClientFactory(opts.relayUrl)
+      : new RelayClient(opts.relayUrl);
     this.#browser =
       opts.browser ??
       new AutoBrowserController({
@@ -107,20 +120,36 @@ export class AgentSession {
     return buildChatUrl(this.#opts.relayUrl, sessionId, customerToken);
   }
 
-  /** Register the session with the relay and wait for an expert to claim it. */
-  async requestExpert(issue?: string): Promise<{ sessionId: string }> {
-    if (this.#state !== "idle") {
-      throw new Error(`Cannot request an expert from state "${this.#state}"`);
-    }
+  /** Wire the relay events once (shared by requestExpert and resumeExpert). */
+  #wireRelayEvents(): void {
     this.#relay.on({
       onExpertJoined: (name) => this.#onExpertJoined(name),
       onExpertLeft: () => this.#onExpertLeft(),
       onSignal: (payload) => this.#peer?.handleSignal(payload),
       onSessionEnded: (reason) => this.#finish(reason, false),
+      onReconnecting: (attempt) => this.#onReconnecting(attempt),
+      onResumed: (status) => this.#onResumed(status),
+      // The relay says the session is gone (expired/ended). Treat it as a
+      // terminal end and clear the local resume record.
+      onResumeFailed: () => {
+        if (this.#state !== "ended") this.#finish("session no longer available", true);
+      },
+      // Fires only on an intentional close (or a connect that never registered).
+      // Transient drops are handled by the relay client's own reconnect loop.
       onClose: () => {
         if (this.#state !== "ended") this.#finish("relay disconnected", false);
       },
     });
+  }
+
+  /** Register the session with the relay and wait for an expert to claim it. */
+  async requestExpert(issue?: string): Promise<{ sessionId: string }> {
+    if (this.#state !== "idle") {
+      throw new Error(`Cannot request an expert from state "${this.#state}"`);
+    }
+    this.#issue = issue;
+    this.#requestedAt = Date.now();
+    this.#wireRelayEvents();
     const sessionId = await this.#relay.register({
       customerName: this.#opts.customerName,
       projectDir: this.#opts.projectDir,
@@ -128,15 +157,91 @@ export class AgentSession {
     });
     this.#state = "waiting";
     this.#startedAt = Date.now();
+    // Persist enough to rejoin this request after a reconnect or restart.
+    this.#persistResume();
     this.#persistStatus();
     this.#logLine(`session ${sessionId} registered, waiting for an expert`);
     return { sessionId };
+  }
+
+  /**
+   * Rejoin a request persisted before a process restart: reconnect to the
+   * relay, re-arm the scopes the user already approved, and log that access is
+   * live again so the customer (and expert) see it. Throws if the relay rejects
+   * the resume (the session expired or ended).
+   */
+  async resumeExpert(record: ResumeRecord): Promise<{ sessionId: string }> {
+    if (this.#state !== "idle") {
+      throw new Error(`Cannot resume from state "${this.#state}"`);
+    }
+    this.#issue = record.issue;
+    this.#requestedAt = record.createdAt;
+    this.#wireRelayEvents();
+    await this.#relay.resume(record.sessionId, record.resumeToken);
+    this.#state = "waiting";
+    this.#startedAt = Date.now();
+    // Re-arm the previously approved scopes (persist-grants auto-resume).
+    if (record.grant) this.grant(record.grant);
+    this.#persistResume();
+    this.#persistStatus();
+    this.#handleActivity({
+      at: Date.now(),
+      kind: "resume",
+      summary:
+        "Session auto-resumed after restart — expert access re-armed (Files/Terminal/Browser as approved)",
+    });
+    this.#logLine(`session ${record.sessionId} resumed after restart`);
+    return { sessionId: record.sessionId };
+  }
+
+  /** Write the local resume record (best-effort; old relays can't resume). */
+  #persistResume(): void {
+    const sessionId = this.#relay.sessionId;
+    const resumeToken = this.#relay.resumeToken;
+    if (!sessionId || !resumeToken) return;
+    const grant = this.#gate.snapshot();
+    const hasGrant = grant.files || grant.terminal || grant.browser;
+    try {
+      writeResume({
+        sessionId,
+        resumeToken,
+        relayUrl: this.#opts.relayUrl,
+        projectDir: this.#opts.projectDir,
+        customerName: this.#opts.customerName,
+        issue: this.#issue,
+        grant: hasGrant ? grant : undefined,
+        createdAt: this.#requestedAt || Date.now(),
+      });
+    } catch {
+      // Best-effort: without it a process restart just can't auto-resume.
+    }
+  }
+
+  #onReconnecting(attempt: number): void {
+    this.#logLine(`relay connection lost; reconnecting (attempt ${attempt})`);
+    // The peer died with the dropped socket. Return to waiting until we resume
+    // (and, if an expert was live, they re-claim once the customer is back).
+    this.#teardownPeer();
+    if (this.#state === "connected") {
+      this.#expertName = undefined;
+      this.#state = "waiting";
+      this.#persistStatus();
+    }
+  }
+
+  #onResumed(_status: { status?: string; expertName?: string }): void {
+    this.#logLine("relay connection resumed — request is back online");
+    // Re-sync the relay's view of the approved scopes after the reconnect.
+    this.#relay.reportPermissions(this.#gate.snapshot());
+    this.#persistStatus();
   }
 
   /** Grant (or replace) the approved scopes and report them to the customer's view. */
   grant(grant: Grant): Grant {
     this.#gate.grant(grant);
     this.#relay.reportPermissions(this.#gate.snapshot());
+    // Keep the resume record's grant in sync so a restart re-arms these scopes.
+    this.#persistResume();
     this.#persistStatus();
     this.#logLine(`permissions granted: ${JSON.stringify(this.#gate.snapshot())}`);
     return this.#gate.snapshot();
@@ -331,6 +436,8 @@ export class AgentSession {
     if (this.#state === "ended") return;
     this.#state = "ended";
     clearSessionStatus();
+    // The request is truly over — drop the resume record so nothing auto-resumes.
+    clearResume();
     if (revoke) this.#gate.revokeAll();
     this.#teardownPeer();
     this.#relay.close();

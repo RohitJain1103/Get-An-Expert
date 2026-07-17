@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SessionStore } from "./sessions";
+import { SessionStore, hashResumeToken } from "./sessions";
 
 function makeStore() {
   return new SessionStore();
@@ -10,7 +10,7 @@ function register(store: SessionStore) {
     customerName: "Jordan Lee",
     projectDir: "~/projects/landing-page",
     issue: "TypeScript error: HeroImage is not exported from @/assets",
-  });
+  }).session;
 }
 
 describe("SessionStore.create", () => {
@@ -221,11 +221,102 @@ describe("SessionStore.addChat", () => {
 describe("SessionStore.queue", () => {
   it("lists waiting and active sessions oldest first", () => {
     const store = makeStore();
-    const a = store.create({ customerName: "Taylor Kim", projectDir: "~/projects/dashboard" });
-    const b = store.create({ customerName: "Alex Chen", projectDir: "~/projects/api-server" });
+    const a = store.create({ customerName: "Taylor Kim", projectDir: "~/projects/dashboard" }).session;
+    const b = store.create({ customerName: "Alex Chen", projectDir: "~/projects/api-server" }).session;
     store.claim(b.id, "Someone Else");
     const queue = store.queue();
     expect(queue.map((s) => s.customerName)).toEqual(["Taylor Kim", "Alex Chen"]);
     expect(queue[1].status).toBe("active");
+  });
+});
+
+describe("SessionStore resume token", () => {
+  it("returns a raw resume token but stores only its hash", () => {
+    const store = makeStore();
+    const { session, resumeToken } = store.create({
+      customerName: "Jordan Lee",
+      projectDir: "~/projects/landing-page",
+    });
+    expect(resumeToken).toMatch(/^[0-9a-f]{48}$/);
+    expect(session.resumeTokenHash).toBe(hashResumeToken(resumeToken));
+    expect(session.resumeTokenHash).not.toBe(resumeToken);
+  });
+
+  it("mints a distinct resume token per session", () => {
+    const store = makeStore();
+    const a = store.create({ customerName: "A", projectDir: "~/a" });
+    const b = store.create({ customerName: "B", projectDir: "~/b" });
+    expect(a.resumeToken).not.toBe(b.resumeToken);
+  });
+});
+
+describe("SessionStore online/offline", () => {
+  it("starts a new session online", () => {
+    const store = makeStore();
+    expect(register(store).online).toBe(true);
+  });
+
+  it("setOnline flips the flag and keeps the session in the queue", () => {
+    const store = makeStore();
+    const s = register(store);
+    const offline = store.setOnline(s.id, false);
+    expect(offline.online).toBe(false);
+    expect(offline.status).toBe("waiting");
+    expect(store.queue().map((q) => q.id)).toContain(s.id);
+  });
+
+  it("does not mutate the previous snapshot when flipping online", () => {
+    const store = makeStore();
+    const s = register(store);
+    store.setOnline(s.id, false);
+    expect(s.online).toBe(true);
+  });
+});
+
+describe("SessionStore.hydrate", () => {
+  it("inserts a restored session as offline and lists it in the queue", () => {
+    const store = makeStore();
+    const restored = store.create({ customerName: "Restored", projectDir: "~/r" }).session;
+    const fresh = makeStore();
+    fresh.hydrate(restored);
+    const got = fresh.get(restored.id);
+    expect(got?.online).toBe(false);
+    expect(fresh.queue().map((q) => q.id)).toContain(restored.id);
+  });
+
+  it("never clobbers a session already live in memory", () => {
+    const store = makeStore();
+    const live = register(store);
+    store.hydrate({ ...live, customerName: "Stale Copy", online: false });
+    expect(store.get(live.id)?.customerName).toBe("Jordan Lee");
+    expect(store.get(live.id)?.online).toBe(true);
+  });
+});
+
+describe("SessionStore.expireBefore", () => {
+  it("returns waiting and offline sessions older than the cutoff", () => {
+    const store = makeStore();
+    const waiting = register(store);
+    const offline = register(store);
+    store.setOnline(offline.id, false);
+    const cutoff = Date.now() + 1_000; // everything is "old" relative to this
+    expect(store.expireBefore(cutoff).sort()).toEqual(
+      [waiting.id, offline.id].sort(),
+    );
+  });
+
+  it("leaves an actively-worked (active + online) session alone regardless of age", () => {
+    const store = makeStore();
+    const s = register(store);
+    store.claim(s.id, "Priya Sharma"); // active + still online
+    expect(store.expireBefore(Date.now() + 1_000)).not.toContain(s.id);
+  });
+
+  it("excludes recent sessions and ended ones", () => {
+    const store = makeStore();
+    const recent = register(store);
+    const ended = register(store);
+    store.end(ended.id);
+    expect(store.expireBefore(recent.createdAt)).toEqual([]);
   });
 });

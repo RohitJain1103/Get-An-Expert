@@ -12,14 +12,29 @@ import {
   type CustomerMessage,
   type ExpertMessage,
 } from "./protocol";
-import { SessionStore, type Session } from "./sessions";
+import { SessionStore, hashResumeToken, type Session } from "./sessions";
+import {
+  MemoryPersistence,
+  type SessionPersistence,
+} from "./persistence";
 import { serveStatic } from "./static";
+
+/** Default max age of a queued request before the sweep expires it (72h). */
+export const DEFAULT_MAX_AGE_MS = 72 * 60 * 60 * 1000;
 
 export interface RelayOptions {
   /** Tokens that authenticate experts. */
   expertTokens: string[];
   /** Directory of dashboard static files; omit to disable static serving. */
   dashboardDir?: string;
+  /**
+   * Durable session store so the queue survives a relay restart. Defaults to a
+   * no-op in-memory backend (requests still survive disconnects and auto-resume;
+   * only relay-restart survival needs a real backend).
+   */
+  persistence?: SessionPersistence;
+  /** Max age of a queued request before it is expired. Defaults to 72h. */
+  maxAgeMs?: number;
   /** Called for operational logging. Never receives signal payloads. */
   log?: (line: string) => void;
 }
@@ -27,6 +42,8 @@ export interface RelayOptions {
 export interface Relay {
   server: Server;
   store: SessionStore;
+  /** Load persisted requests back into the queue (call once, before listen). */
+  hydrate: () => Promise<void>;
 }
 
 interface ExpertConn {
@@ -46,9 +63,19 @@ const AUTH_TIMEOUT_MS = 10_000;
 export function createRelay(options: RelayOptions): Relay {
   const store = new SessionStore();
   const log = options.log ?? (() => {});
+  const persistence = options.persistence ?? new MemoryPersistence();
+  const maxAgeMs = options.maxAgeMs ?? DEFAULT_MAX_AGE_MS;
   const agents = new Map<string, WebSocket>(); // sessionId -> agent socket
   const experts = new Map<WebSocket, ExpertConn>(); // authed experts
   const chatSockets = new Map<string, Set<WebSocket>>(); // sessionId -> customer chat sockets
+
+  /** Mirror a session's durable metadata to storage; never throws into callers. */
+  function persist(session: Session | undefined): void {
+    if (!session) return;
+    void persistence.save(session).catch((err) =>
+      log(`persist failed for ${session.id}: ${err instanceof Error ? err.message : String(err)}`),
+    );
+  }
 
   const server = createServer((req, res) => {
     if (req.url === "/healthz") {
@@ -117,6 +144,22 @@ export function createRelay(options: RelayOptions): Relay {
   heartbeat.unref?.();
   server.on("close", () => clearInterval(heartbeat));
 
+  // Max-age sweep: expire queued requests older than maxAgeMs that are unclaimed
+  // or offline, so the durable inbox — and any grants an auto-resume could
+  // re-arm — never lingers indefinitely. Runs at most every 5 minutes.
+  const SWEEP_MS = Math.max(1_000, Math.min(maxAgeMs, 5 * 60_000));
+  const sweep = setInterval(() => {
+    const cutoff = Date.now() - maxAgeMs;
+    for (const id of store.expireBefore(cutoff)) {
+      endSession(id, "request expired (max age reached)", {
+        agent: true,
+        expert: true,
+      });
+    }
+  }, SWEEP_MS);
+  sweep.unref?.();
+  server.on("close", () => clearInterval(sweep));
+
   function sendTo(ws: WebSocket, msg: unknown): void {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
   }
@@ -157,8 +200,12 @@ export function createRelay(options: RelayOptions): Relay {
       projectDir: session.projectDir,
       issue: session.issue,
       status: session.status,
+      // Whether the customer's machine is currently connected. Offline requests
+      // stay in the queue (durable inbox) and reconnect when the machine returns.
+      online: session.online,
       expertName: session.expertName,
       createdAt: session.createdAt,
+      updatedAt: session.updatedAt,
       claimedAt: session.claimedAt,
       permissions: session.permissions,
       activityCount: session.activity.length,
@@ -232,6 +279,10 @@ export function createRelay(options: RelayOptions): Relay {
     for (const cs of chatSockets.get(sessionId) ?? []) cs.close(4410, "session ended");
     chatSockets.delete(sessionId);
     agents.delete(sessionId);
+    // An explicit end is the one path that truly deletes the durable record.
+    void persistence.remove(sessionId).catch((err) =>
+      log(`persist remove failed for ${sessionId}: ${err instanceof Error ? err.message : String(err)}`),
+    );
     log(`session ${sessionId} ended (${Math.round(durationMs / 1000)}s)`);
     broadcastQueue();
   }
@@ -248,11 +299,45 @@ export function createRelay(options: RelayOptions): Relay {
         return;
       }
       if (!sessionId) {
+        // Rejoin an existing queued request (reconnect / process restart).
+        if (msg.type === "resume") {
+          const existing = store.get(msg.sessionId);
+          const valid =
+            existing !== undefined &&
+            existing.status !== "ended" &&
+            tokenEquals(
+              existing.resumeTokenHash,
+              hashResumeToken(msg.resumeToken),
+            );
+          if (!valid) {
+            // Stay unregistered so the client can fall back to a fresh register
+            // on this same socket without a reconnect round-trip.
+            sendTo(ws, {
+              type: "resume-failed",
+              reason: "unknown or expired session",
+            });
+            return;
+          }
+          sessionId = existing.id;
+          agents.set(sessionId, ws);
+          const back = store.setOnline(sessionId, true);
+          sendTo(ws, {
+            type: "resumed",
+            sessionId,
+            status: back.status,
+            expertName: back.expertName,
+            permissions: back.permissions,
+          });
+          persist(back);
+          log(`session ${sessionId} resumed (customer back online)`);
+          broadcastQueue();
+          return;
+        }
         if (msg.type !== "register") {
           ws.close(1002, "must register first");
           return;
         }
-        const session = store.create({
+        const { session, resumeToken } = store.create({
           customerName: msg.customerName,
           projectDir: msg.projectDir,
           issue: msg.issue,
@@ -263,7 +348,10 @@ export function createRelay(options: RelayOptions): Relay {
           type: "registered",
           sessionId,
           customerToken: session.customerToken,
+          // Returned once; the agent persists it to resume after a restart.
+          resumeToken,
         });
+        persist(session);
         log(`session ${sessionId} registered for ${msg.customerName}`);
         broadcastQueue();
         return;
@@ -271,10 +359,16 @@ export function createRelay(options: RelayOptions): Relay {
 
       switch (msg.type) {
         case "register":
+        case "resume":
           ws.close(1002, "already registered");
           return;
         case "metadata": {
-          if (msg.permissions) store.setPermissions(sessionId, msg.permissions);
+          if (msg.permissions) {
+            const updated = store.setPermissions(sessionId, msg.permissions);
+            // Persist scope changes (not every activity line) so a relay restart
+            // keeps the latest grants for auto-resume.
+            persist(updated);
+          }
           if (msg.activity) {
             const updated = store.addActivity(sessionId, msg.activity);
             // Fan the action out to the customer's chat page too, so they can
@@ -299,9 +393,34 @@ export function createRelay(options: RelayOptions): Relay {
     });
 
     ws.on("close", () => {
-      if (sessionId && store.get(sessionId)?.status !== "ended") {
-        endSession(sessionId, "customer disconnected", { expert: true });
+      if (!sessionId) return;
+      const session = store.get(sessionId);
+      if (!session || session.status === "ended") return;
+      // The core of the durable inbox: a dropped customer socket no longer ends
+      // the request. Keep it in the queue, just mark the machine offline; it
+      // reconnects (resume) when the machine is back.
+      store.setOnline(sessionId, false);
+      agents.delete(sessionId);
+      if (session.status === "active") {
+        // Customer dropped mid-session: the WebRTC peer is gone, so release the
+        // claim back to the queue and return the expert to idle. Re-claimable
+        // once the customer reconnects.
+        store.release(sessionId);
+        const expertWs = expertFor(sessionId);
+        if (expertWs) {
+          sendTo(expertWs, {
+            type: "session-ended",
+            sessionId,
+            reason:
+              "Customer went offline — the request is back in the queue and will reconnect when they return.",
+          });
+          experts.get(expertWs)?.claimed.delete(sessionId);
+        }
+        notifyChatSockets(sessionId, { type: "expert-left" });
       }
+      persist(store.get(sessionId));
+      log(`session ${sessionId} offline (customer disconnected)`);
+      broadcastQueue();
     });
   }
 
@@ -336,6 +455,17 @@ export function createRelay(options: RelayOptions): Relay {
         case "auth":
           return; // already authed
         case "claim": {
+          // A request whose machine is offline can't establish the WebRTC peer,
+          // so it isn't claimable until the customer reconnects.
+          if (store.get(msg.sessionId)?.online === false) {
+            sendTo(ws, {
+              type: "claim-failed",
+              sessionId: msg.sessionId,
+              reason:
+                "Customer is offline — the request stays in the queue and becomes claimable when they reconnect.",
+            });
+            return;
+          }
           try {
             store.claim(msg.sessionId, conn.name);
           } catch (err) {
@@ -347,6 +477,7 @@ export function createRelay(options: RelayOptions): Relay {
             return;
           }
           conn.claimed.add(msg.sessionId);
+          persist(store.get(msg.sessionId));
           sendTo(ws, { type: "claimed", sessionId: msg.sessionId });
           sendTo(ws, {
             type: "chat-history",
@@ -368,6 +499,7 @@ export function createRelay(options: RelayOptions): Relay {
           if (!conn.claimed.delete(msg.sessionId)) return;
           if (store.get(msg.sessionId)?.status === "active") {
             store.release(msg.sessionId);
+            persist(store.get(msg.sessionId));
             const agentWs = agents.get(msg.sessionId);
             if (agentWs) sendTo(agentWs, { type: "expert-left" });
             notifyChatSockets(msg.sessionId, { type: "expert-left" });
@@ -405,6 +537,7 @@ export function createRelay(options: RelayOptions): Relay {
       for (const sessionId of conn.claimed) {
         if (store.get(sessionId)?.status === "active") {
           store.release(sessionId);
+          persist(store.get(sessionId));
           const agentWs = agents.get(sessionId);
           if (agentWs) sendTo(agentWs, { type: "expert-left" });
           notifyChatSockets(sessionId, { type: "expert-left" });
@@ -492,5 +625,19 @@ export function createRelay(options: RelayOptions): Relay {
     });
   }
 
-  return { server, store };
+  /** Load persisted requests back into the queue. Call once before listen(). */
+  async function hydrate(): Promise<void> {
+    try {
+      const restored = await persistence.loadAll();
+      for (const s of restored) store.hydrate(s);
+      if (restored.length > 0) {
+        log(`restored ${restored.length} queued request(s) from durable storage`);
+        broadcastQueue();
+      }
+    } catch (err) {
+      log(`hydrate failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  return { server, store, hydrate };
 }

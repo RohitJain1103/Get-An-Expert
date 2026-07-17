@@ -24,10 +24,11 @@ describe("queueMessage", () => {
 });
 
 describe("statusMessage", () => {
-  it("tells a waiting customer they can step away", () => {
+  it("tells a waiting customer they can step away and the request won't be lost", () => {
     const msg = statusMessage("waiting");
     expect(msg).toContain("no expert has joined yet");
-    expect(msg).toContain("machine awake");
+    expect(msg).toContain("won't be lost");
+    expect(msg).toContain("awake");
   });
 
   it("names the connected expert", () => {

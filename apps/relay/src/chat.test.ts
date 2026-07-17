@@ -194,7 +194,8 @@ describe("customer hello", () => {
 
   it("reports ended status when the session already ended", async () => {
     const { agent, sessionId, customerToken } = await registeredAgent();
-    agent.close();
+    // An explicit end (not a mere disconnect) is what ends a session now.
+    send(agent, { type: "end", reason: "customer ended" });
     const deadline = Date.now() + 3000;
     while (relay.store.get(sessionId)?.status !== "ended") {
       if (Date.now() > deadline) throw new Error("session did not end");
