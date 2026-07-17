@@ -54,11 +54,20 @@
 
     * { box-sizing: border-box; }
     html, body { height: 100%; }
+    /* Round 2 viewport frame: the page content is capped at 760px and centered,
+       so a maximized browser shows the cream ground with hairline side borders
+       and reads as a composed column, not a stretched app. On a phone the frame
+       fills the width and the gutters vanish. */
     body {
-      margin: 0; background: var(--c-bg); color: var(--c-ink);
+      margin: 0; background: var(--c-raised); color: var(--c-ink);
       font-family: var(--cd-ui); font-size: 16px; line-height: 1.65;
-      display: flex; flex-direction: column; overflow: hidden;
+      display: flex; justify-content: center; overflow: hidden;
       -webkit-font-smoothing: antialiased;
+    }
+    .frame {
+      width: 100%; max-width: 760px; height: 100%; background: var(--c-bg);
+      display: flex; flex-direction: column; overflow: hidden;
+      border-left: 1px solid var(--c-sand); border-right: 1px solid var(--c-sand);
     }
     .hidden { display: none !important; }
 
@@ -161,15 +170,26 @@
     .c-bench-top { display: flex; align-items: baseline; gap: 8px; }
     .c-bench-h { font-family: var(--mono); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--c-ink3); }
     .c-bench-more { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--c-ink2); white-space: nowrap; }
-    /* 3 x 2, not 6 across: two rows buys each expert room to be legible. */
-    .c-faces { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 8px; }
-    .c-face { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+    /* Round 2: ONE horizontal strip. The row runs edge to edge and fades out at
+       the right into a +100 tail, so six visible faces read as the front of a
+       long bench, not the whole bench. Short specialty labels fit a strip cell. */
+    .c-faces {
+      display: flex; gap: 18px; overflow: hidden; padding: 2px 0;
+      -webkit-mask-image: linear-gradient(to right, black 82%, transparent 99%);
+      mask-image: linear-gradient(to right, black 82%, transparent 99%);
+    }
+    .c-more {
+      flex: 0 0 auto; align-self: center; display: flex; align-items: center; gap: 6px;
+      font-family: var(--mono); font-size: 10px; color: var(--c-forest);
+      border: 1px solid var(--c-sage); background: var(--c-sage-soft);
+      padding: 5px 10px; border-radius: var(--r-pill); white-space: nowrap;
+    }
+    .c-face { flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
     .c-face img { width: 46px; height: 46px; border-radius: 50%; object-fit: cover; border: 1px solid var(--c-sand); transition: transform 0.2s var(--ease-out), border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out); }
     .c-face:hover img { transform: translateY(-2px); border-color: var(--c-sage); box-shadow: var(--shadow-soft); }
     .c-face .nm { font-size: 11px; color: var(--c-ink); text-align: center; line-height: 1.2; font-weight: 600; }
-    /* Full tag at 8px, truncated with ellipsis: one field fewer to drift than a
-       separate short label. */
-    .c-face .sb { font-family: var(--mono); font-size: 8px; color: var(--c-ink3); text-align: center; line-height: 1.25; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* Short specialty label per expert (mapped by id in chat.js). */
+    .c-face .sb { font-family: var(--mono); font-size: 8px; color: var(--c-ink3); text-align: center; line-height: 1.25; }
     /* Credential widgets under each face: the rating and a real profile link. */
     .c-face .w { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
     .c-face .w .r { font-family: var(--mono); font-size: 9.5px; color: var(--c-forest); font-variant-numeric: tabular-nums; }
@@ -227,10 +247,51 @@
     @keyframes settle { from { opacity: 0; transform: translateY(-6px) scale(0.985); } to { opacity: 1; transform: none; } }
     @keyframes breathe { 50% { opacity: 0.45; } }
 
-    .messages > * { animation: rise 0.32s var(--ease-out) both; }
-    .messages > *:nth-child(2) { animation-delay: 0.06s; }
-    .messages > *:nth-child(3) { animation-delay: 0.12s; }
-    .messages > *:nth-child(n+4) { animation-delay: 0.16s; }
+    /* The gentle staggered entrance plays only on a PHASE CHANGE (the container
+       carries .phase-enter for that one render). Incoming chat/activity while
+       the phase is unchanged is appended, not replayed, so the whole feed no
+       longer re-animates on every message (the v1 bug). */
+    .messages.phase-enter > * { animation: rise 0.32s var(--ease-out) both; }
+    .messages.phase-enter > *:nth-child(2) { animation-delay: 0.06s; }
+    .messages.phase-enter > *:nth-child(3) { animation-delay: 0.12s; }
+    .messages.phase-enter > *:nth-child(n+4) { animation-delay: 0.16s; }
+
+    /* Round 2 message physics: an appended bubble springs in from below with a
+       slight overshoot (iMessage feel). Only the new node carries .anim-in; the
+       feed itself glides via scrollTo({ behavior: "smooth" }). */
+    @keyframes msg-in {
+      0% { opacity: 0; transform: translateY(14px) scale(0.94); }
+      70% { opacity: 1; transform: translateY(-2px) scale(1.01); }
+      100% { opacity: 1; transform: none; }
+    }
+    .messages > .anim-in { animation: msg-in 0.34s cubic-bezier(0.34, 1.2, 0.64, 1) both; }
+
+    /* Delivery card + the one celebration in the product. */
+    @keyframes check-draw { from { stroke-dashoffset: 48; } to { stroke-dashoffset: 0; } }
+    @keyframes bloom { 0% { transform: scale(0.6); opacity: 0; } 60% { transform: scale(1.06); opacity: 1; } 100% { transform: scale(1); } }
+    .c-deliver { background: var(--c-paper); border: 1px solid var(--c-sage); border-radius: var(--r-card); box-shadow: var(--shadow-raised); padding: 18px; display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+    .c-deliver .dh { display: flex; align-items: center; gap: 10px; }
+    .c-deliver .ring { width: 34px; height: 34px; border-radius: 50%; background: var(--c-sage-soft); border: 1px solid var(--c-sage); display: flex; align-items: center; justify-content: center; animation: bloom 0.4s var(--ease-out) both; }
+    .c-deliver .ring svg { width: 18px; height: 18px; stroke: var(--c-forest); stroke-width: 2.5; fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 48; animation: check-draw 0.5s 0.15s var(--ease-out) both; }
+    .c-deliver .dt { font-family: var(--cd-serif); font-size: 20px; font-weight: 600; }
+    .c-deliver .ds { font-size: 14px; color: var(--c-ink2); line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+    .c-deliver .dacts { display: flex; gap: 8px; }
+    .celebrate { position: relative; overflow: hidden; }
+    .c-done { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 28px 16px; }
+    .c-done .bigring { width: 64px; height: 64px; border-radius: 50%; background: var(--c-sage-soft); border: 1px solid var(--c-sage); display: flex; align-items: center; justify-content: center; animation: bloom 0.45s var(--ease-out) both; }
+    .c-done .bigring svg { width: 32px; height: 32px; stroke: var(--c-forest); stroke-width: 2.5; fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 48; animation: check-draw 0.6s 0.2s var(--ease-out) both; }
+    .c-done .dt { font-family: var(--cd-serif); font-size: 24px; font-weight: 600; }
+    .c-done .ds { font-size: 14px; color: var(--c-ink2); max-width: 40ch; line-height: 1.6; }
+    #confetti { position: absolute; inset: 0; pointer-events: none; }
+
+    /* Optional one-time rating on the accepted screen. Quiet, skippable. */
+    .c-rate-row { display: flex; flex-direction: column; align-items: center; gap: 7px; margin-top: 6px; }
+    .c-rate-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--c-ink3); }
+    .c-stars { display: flex; gap: 4px; }
+    .c-star { font-size: 22px; line-height: 1; color: var(--c-sand2); background: none; border: none; cursor: pointer; padding: 2px; transition: color 0.15s var(--ease-out), transform 0.15s var(--ease-out); }
+    .c-star:hover, .c-star.lit { color: var(--c-bronze); }
+    .c-star:hover { transform: translateY(-1px); }
+    .c-rate-thanks { font-size: 12.5px; color: var(--c-forest); }
 
     /* The trust moment gets the longest, softest entrance on the page. */
     .pinned { animation: settle 0.45s var(--ease-out) both; }
@@ -244,6 +305,7 @@
   </style>
 </head>
 <body>
+ <div class="frame">
   <header class="topbar">
     <div class="logo">get an <em>expert</em></div>
     <div class="conn">
@@ -289,6 +351,7 @@
       <p id="fatal-text"></p>
     </div>
   </div>
+ </div>
 
   <script src="chat-core.js"></script>
   <script src="chat.js"></script>

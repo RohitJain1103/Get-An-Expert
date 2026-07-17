@@ -77,6 +77,9 @@ export class AgentSession {
   #state: SessionState = "idle";
   #expertName?: string;
   #expertProfile?: PublicExpertProfile;
+  /** The last delivered fix and whether the customer confirmed it, surfaced in
+   * expert_status. Undefined until the expert first delivers. */
+  #lastDelivery?: { summary: string; accepted?: boolean };
   #peer?: Peer;
   #expertServer?: McpServer;
   #ptys = new Set<PtyBridge>();
@@ -128,6 +131,12 @@ export class AgentSession {
     return this.#expertProfile;
   }
 
+  /** The last delivered fix (summary + whether the customer confirmed it), for
+   * expert_status. Undefined until the expert delivers. */
+  get lastDelivery(): { summary: string; accepted?: boolean } | undefined {
+    return this.#lastDelivery;
+  }
+
   /** Hosted chat-page URL for this session, or undefined when the relay
    * didn't mint a customer token (old relays) or registration hasn't run. */
   get chatUrl(): string | undefined {
@@ -144,6 +153,9 @@ export class AgentSession {
       onExpertLeft: () => this.#onExpertLeft(),
       onSignal: (payload) => this.#peer?.handleSignal(payload),
       onIssueUpdated: (issue) => this.#onIssueUpdated(issue),
+      onDelivered: (summary) => this.#onDelivered(summary),
+      onDeliveryAccepted: () => this.#onDeliveryResponse(true),
+      onDeliveryDeclined: () => this.#onDeliveryResponse(false),
       onSessionEnded: (reason) => this.#finish(reason, false),
       onReconnecting: (attempt) => this.#onReconnecting(attempt),
       onResumed: (status) => this.#onResumed(status),
@@ -315,6 +327,7 @@ export class AgentSession {
     expertProfile?: PublicExpertProfile;
     chatUrl?: string;
     issue?: string;
+    lastDelivery?: { summary: string; accepted?: boolean };
     permissions: Grant;
     recentActivity: ActivityEntry[];
   } {
@@ -325,6 +338,7 @@ export class AgentSession {
       expertProfile: this.#expertProfile,
       chatUrl: this.chatUrl,
       issue: this.#issue,
+      lastDelivery: this.#lastDelivery,
       permissions: this.#gate.snapshot(),
       recentActivity: this.#log.entries().slice(-20),
     };
@@ -381,6 +395,24 @@ export class AgentSession {
     void this.writeContext(buildContextMarkdown(this.#contextInput).markdown).catch((err) =>
       this.#logLine(`context rebuild failed: ${err instanceof Error ? err.message : String(err)}`),
     );
+  }
+
+  /** The expert delivered a fix. Record the summary so expert_status can report
+   * it; a fresh deliver replaces the previous one and clears any prior response. */
+  #onDelivered(summary: string): void {
+    this.#lastDelivery = { summary };
+    this.#logLine("expert delivered a fix");
+    this.#persistStatus();
+  }
+
+  /** The customer accepted or declined the delivered fix. Accepting does not end
+   * the session (decision 2026-07-17); it only marks the delivery confirmed. */
+  #onDeliveryResponse(accepted: boolean): void {
+    if (this.#lastDelivery) {
+      this.#lastDelivery = { ...this.#lastDelivery, accepted };
+    }
+    this.#logLine(accepted ? "customer confirmed the fix" : "customer declined the delivery");
+    this.#persistStatus();
   }
 
   /**

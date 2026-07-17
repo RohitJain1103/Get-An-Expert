@@ -87,6 +87,39 @@ describe("statusMessage with an expert profile", () => {
   });
 });
 
+describe("statusMessage delivery tail", () => {
+  it("appends the delivered summary while connected", () => {
+    const line = statusMessage("connected", "Rohit Jain", undefined, {
+      summary: "renamed and rebuilt",
+    });
+    expect(line).toContain('Delivered: "renamed and rebuilt".');
+    expect(line).not.toContain("confirmed the fix");
+  });
+
+  it("adds the confirmation once the customer accepts", () => {
+    const line = statusMessage("connected", "Rohit Jain", undefined, {
+      summary: "renamed and rebuilt",
+      accepted: true,
+    });
+    expect(line).toContain('Delivered: "renamed and rebuilt". The customer confirmed the fix.');
+  });
+
+  it("declined delivery shows the summary but no confirmation", () => {
+    const line = statusMessage("connected", "Rohit Jain", undefined, {
+      summary: "attempt one",
+      accepted: false,
+    });
+    expect(line).toContain('Delivered: "attempt one".');
+    expect(line).not.toContain("confirmed the fix");
+  });
+
+  it("adds nothing when no delivery has happened", () => {
+    expect(statusMessage("connected", "Rohit Jain", undefined, undefined)).toBe(
+      statusMessage("connected", "Rohit Jain"),
+    );
+  });
+});
+
 describe("END_SESSION_MESSAGE", () => {
   it("confirms all access is revoked", () => {
     expect(END_SESSION_MESSAGE).toBe("Session ended. All expert access is revoked.");

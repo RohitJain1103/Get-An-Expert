@@ -865,3 +865,27 @@ Dark-mode toggle; live "on call" presence; specialties list per expert (Iñigo's
 - Spec coverage: invocation copy + auto-open (A1–A2), status card (A3), roster/identity/claim/hello (R1–R4), assets+MIME (R5), theme (C2), card/bench/steps/access states (C3), context edit both directions + conflict rule + CONTEXT.md (E1–E4), demo gates (I2). Bench "100+ other experts" label and all copy live in the visual spec, referenced by C2/C3.
 - Type consistency: `PublicExpertProfile` defined once in roster.ts; agent uses a minimal structural copy in `types.ts` (documented in A3) because apps/relay is not a workspace dependency of packages/agent.
 - No placeholders: every task carries real code or an exact porting map to the committed visual spec.
+
+---
+
+## Track F (Round 2): the delivery ending
+
+The committed visual spec is now rev 9 (`docs/superpowers/specs/2026-07-17-consumer-chat-visual-spec.html`), which adds message physics, the horizontal bench strip, and a full delivery-to-acceptance ending on top of the shipped v1 chat. Track F builds that ending across the relay, the customer chat, the expert dashboard, and the agent.
+
+### Decided semantics (Pulkit-approved, non-negotiable)
+
+- **Accept does not end or revoke.** "Yes, that solved it" confirms the fix and shows the payoff screen. It does not end the session and does not revoke any scope. Ending access stays a separate, deliberate action.
+- **"Not yet" is blame-free.** A declined delivery reopens the working state with the composer focused and prompting for what is missing. No red, no failure language. The expert sees a plain declined event.
+- **A declined delivery never auto-repeats.** The expert must send a fresh deliver after more work. The card never nags.
+- **Rating is optional, one time, after accept only.** A five-star row appears on the accepted screen. One tap sends the rating to the expert as an event and the row collapses to a thanks line. The rating is NOT persisted or aggregated anywhere. Card "fixes delivered" numbers stay hardcoded; delivery outcomes are never recorded per expert.
+- **Confetti is one burst at accept**, brand colours, about 1.4s, skipped under `prefers-reduced-motion`.
+
+### Tasks
+
+- **F0 (docs):** commit rev 9 as the spec of record and this section.
+- **F1 (relay):** `deliver` (expert), `delivery-response` and `rate` (customer) in the protocol; a `delivery` record on the session (`setDelivery`, `respondDelivery`, `setRating`, with invalid transitions throwing); server fan-out of `delivered` / `delivery-accepted` / `delivery-declined` / `rated`; `hello-ok` restores `delivery`; the summary is redacted like chat; the delivery record is persisted.
+- **F2 (chat core):** `reduce` handles `delivered`, `delivery-accepted`, `delivery-declined`, `rated`, and the hello-ok delivery restore; pure helpers `canRate`, `deliveryResponsePayload`, `ratePayload`.
+- **F3 (customer chat):** viewport frame, single-row bench strip with a right-edge fade and short specialty labels plus a `+100 more experts` pill, append-only message physics (the v1 full-feed replay is retired), the delivery card, the accepted screen with confetti and an optional star row, and the mini-card avatar fix so the ended card keeps the photo.
+- **F4 (expert dashboard):** a Deliver control next to Edit issue that sends `deliver`; quiet success, neutral declined, and rated lines.
+- **F5 (agent):** relay-client forwards the delivery events; agent-session stores `lastDelivery`; `expert_status` reflects the delivered summary and, once accepted, the confirmation.
+- **F6:** full verification across all three packages plus `pnpm -r test`, added-line em-dash grep at zero, clean tree.

@@ -292,7 +292,12 @@ server.registerTool(
       return text("No Get An Expert session is active. Call request_expert_help to start one.");
     }
     const payload = {
-      message: statusMessage(session.state, session.expertName, session.expertProfile),
+      message: statusMessage(
+        session.state,
+        session.expertName,
+        session.expertProfile,
+        session.lastDelivery,
+      ),
       chatUrl: session.chatUrl,
       ...session.status(),
     };

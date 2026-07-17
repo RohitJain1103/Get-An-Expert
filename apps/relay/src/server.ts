@@ -598,6 +598,23 @@ export function createRelay(options: RelayOptions): Relay {
           broadcastIssueUpdated(updated);
           return;
         }
+        case "deliver": {
+          if (!conn.claimed.has(msg.sessionId)) return; // not yours to deliver
+          const session = store.get(msg.sessionId);
+          if (!session || session.status !== "active") return;
+          if (!allowChat(ws)) return; // rate limited (shares the chat bucket)
+          // Redact the summary the same way as chat: the customer reads it word
+          // for word, so a stray secret in it must not reach them.
+          const { text } = redactText(msg.summary);
+          const updated = store.setDelivery(msg.sessionId, text);
+          persist(updated);
+          const at = updated.delivery?.at ?? Date.now();
+          const payload = { type: "delivered", summary: text, at };
+          notifyChatSockets(msg.sessionId, payload);
+          const agentWs = agents.get(msg.sessionId);
+          if (agentWs) sendTo(agentWs, payload);
+          return;
+        }
       }
     });
 
@@ -673,6 +690,9 @@ export function createRelay(options: RelayOptions): Relay {
           issueEditedAt: session.issueEditedAt,
           issueEditedBy: session.issueEditedBy,
           contextManifest: session.contextManifest,
+          // The whole delivery record, so a reload restores the delivered card
+          // (unresponded) or the accepted screen (accepted).
+          delivery: session.delivery,
         });
         log(`customer chat socket joined session ${sessionId}`);
         return;
@@ -703,6 +723,47 @@ export function createRelay(options: RelayOptions): Relay {
           const updated = store.setIssue(sessionId, text, "customer");
           persist(updated);
           broadcastIssueUpdated(updated);
+          return;
+        }
+        case "delivery-response": {
+          const session = store.get(sessionId);
+          if (!session || session.status !== "active") return;
+          if (!allowChat(ws)) return; // rate limited (shares the chat bucket)
+          let updated: Session;
+          try {
+            updated = store.respondDelivery(sessionId, msg.accepted);
+          } catch {
+            return; // no delivery / already responded: ignore silently
+          }
+          // Accepting does NOT end the session or revoke access (decision
+          // 2026-07-17). Just persist the outcome and fan it out.
+          persist(updated);
+          const at = updated.delivery?.respondedAt ?? Date.now();
+          const payload = {
+            type: msg.accepted ? "delivery-accepted" : "delivery-declined",
+            at,
+          };
+          const agentWs = agents.get(sessionId);
+          if (agentWs) sendTo(agentWs, payload);
+          const expertWs = expertFor(sessionId);
+          if (expertWs) sendTo(expertWs, payload);
+          notifyChatSockets(sessionId, payload);
+          return;
+        }
+        case "rate": {
+          const session = store.get(sessionId);
+          if (!session || session.status !== "active") return;
+          if (!allowChat(ws)) return; // rate limited (shares the chat bucket)
+          try {
+            store.setRating(sessionId, msg.rating);
+          } catch {
+            return; // rate before accept / double-rate: ignore silently
+          }
+          // The rating is a fire-once event to the claiming expert only: never
+          // persisted, never aggregated, never shown to other chat sockets
+          // (decision 2026-07-17).
+          const expertWs = expertFor(sessionId);
+          if (expertWs) sendTo(expertWs, { type: "rated", rating: msg.rating });
           return;
         }
         case "end": {

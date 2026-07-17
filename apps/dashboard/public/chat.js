@@ -39,7 +39,36 @@
   const STEPS_FOOT =
     "Close this tab anytime. Your place in the queue holds, and this link brings you back.";
   const BENCH_HEADING = "Experts on bench";
-  const BENCH_MORE = "100+ other experts";
+  const BENCH_MORE = "+100 more experts";
+  // Delivery + accepted copy, verbatim from the locked visual spec.
+  const DELIVER_TITLE = (first) => first + " delivered the fix";
+  const DELIVER_YES = "Yes, that solved it";
+  const DELIVER_NO = "Not yet";
+  const DECLINE_PLACEHOLDER = (first) => "Tell " + first + " what's missing";
+  const DONE_BANNER = "All done.";
+  const DONE_TITLE = "Fixed and confirmed";
+  const DONE_BODY = (first) =>
+    first +
+    " got you unstuck. This chat stays at this link if you need the summary again. Now go build.";
+  const DONE_MINI = (name) => name + " fixed this for you.";
+  const ENDED_MINI = (name) => name + " worked on this session.";
+  const RATE_LABEL = "Optional: rate this session";
+  const RATE_THANKS = (first) => "Thanks. Sent to " + first + ".";
+
+  // Short bench labels keyed by expert id (from the spec's EXPERTS.short).
+  // Unknown ids fall back to the full tag.
+  const BENCH_SHORT = {
+    rohit: "Code & APIs",
+    aakash: "Deploys",
+    senjal: "Design",
+    inigo: "AI & agents",
+    hardik: "Security",
+    pulkit: "GTM",
+  };
+
+  // Drawn checkmark, fixed constant markup (no interpolated data), for the
+  // delivery ring and the accepted big ring.
+  const CHECK_SVG = '<svg viewBox="0 0 24 24"><polyline points="4.5 12.5 10 18 19.5 7"/></svg>';
 
   // LinkedIn glyph, verbatim from the spec's reference implementation.
   const LI_PATH =
@@ -138,6 +167,16 @@
   // shows the inline "End session? Yes, end it / Keep going" confirm. Pure
   // transitions live in GaeChat.nextEndStep (tested); this only holds the step.
   let endStep = "idle"; // "idle" | "armed" | "ending"
+
+  // Celebration latches. `celebrated` fires the confetti once per entry into the
+  // done screen (an incidental re-render must not re-burst it). `ratedLocally`
+  // collapses the star row the instant a star is tapped (the rating is not
+  // echoed back, so there is nothing to reduce). Both reset on leaving done.
+  let celebrated = false;
+  let ratedLocally = false;
+  // The phase the feed was last painted for, so render() knows when to replay
+  // the staggered entrance (phase change) versus appending quietly.
+  let lastPhase = null;
 
   function armEnd() {
     endStep = G.nextEndStep(endStep, "arm");
@@ -283,14 +322,13 @@
     const box = el("div", "c-bench");
     const top = el("div", "c-bench-top");
     top.append(el("div", "c-bench-h", BENCH_HEADING));
-    top.append(el("div", "c-bench-more", BENCH_MORE));
     box.append(top);
     const faces = el("div", "c-faces");
     for (const x of list) {
       const f = el("div", "c-face");
       f.append(img(x.photo));
       f.append(el("div", "nm", G.firstName(x.name)));
-      f.append(el("div", "sb", x.tag)); // full tag; CSS truncates
+      f.append(el("div", "sb", BENCH_SHORT[x.id] || x.tag)); // short label
       const w = el("div", "w");
       w.append(
         x.rating
@@ -301,6 +339,9 @@
       f.append(w);
       faces.append(f);
     }
+    // The +100 tail sits inside the strip, partly under the right-edge fade, so
+    // the row reads as the front of a long bench rather than the whole bench.
+    faces.append(el("div", "c-more", BENCH_MORE));
     box.append(faces);
     return box;
   }
@@ -351,10 +392,131 @@
     node.append(body);
   }
 
-  function miniInto(node) {
+  // The collapsed mini row. Keeps the expert photo through the ended AND done
+  // states (the reducer retains the profile past session-ended), so the avatar
+  // never falls back to a broken image glyph. `text` is the state's copy.
+  function miniInto(node, text) {
     node.replaceChildren();
     if (state.expert && state.expert.photo) node.append(img(state.expert.photo));
-    node.append(el("span", null, expertName() + " worked on this session."));
+    node.append(el("span", null, text));
+  }
+
+  /* ── Delivery card + accepted celebration ──────────────────────────── */
+
+  function deliveryCard() {
+    const box = el("div", "c-deliver anim-in");
+    const dh = el("div", "dh");
+    const ring = el("div", "ring");
+    ring.innerHTML = CHECK_SVG; // fixed constant markup, no interpolation
+    dh.append(ring);
+    dh.append(el("div", "dt", DELIVER_TITLE(G.firstName(expertName()))));
+    box.append(dh);
+    box.append(el("div", "ds", (state.delivery && state.delivery.summary) || ""));
+    const acts = el("div", "dacts");
+    const yes = el("button", "c-btn", DELIVER_YES);
+    yes.addEventListener("click", () => respondDelivery(true));
+    const no = el("button", "c-btn ghost", DELIVER_NO);
+    no.addEventListener("click", () => respondDelivery(false));
+    acts.append(yes, no);
+    box.append(acts);
+    return box;
+  }
+
+  function respondDelivery(accepted) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    // No optimistic render: the delivery-accepted / delivery-declined echo is
+    // the single render path (accepting shows the payoff, declining reopens work).
+    ws.send(JSON.stringify(G.deliveryResponsePayload(accepted)));
+  }
+
+  function doneScreen() {
+    const wrap = el("div", "celebrate");
+    const canvas = document.createElement("canvas");
+    canvas.id = "confetti";
+    wrap.append(canvas);
+    const done = el("div", "c-done");
+    const ring = el("div", "bigring");
+    ring.innerHTML = CHECK_SVG;
+    done.append(ring);
+    done.append(el("div", "dt", DONE_TITLE));
+    done.append(el("div", "ds", DONE_BODY(G.firstName(expertName()))));
+    if (ratedLocally || G.canRate(state)) done.append(starRow());
+    wrap.append(done);
+    // One burst per entry into done. confettiBurst honours reduced motion.
+    if (!celebrated) {
+      celebrated = true;
+      requestAnimationFrame(() => confettiBurst(canvas));
+    }
+    return wrap;
+  }
+
+  function starRow() {
+    const wrap = el("div", "c-rate-row");
+    if (ratedLocally) {
+      wrap.append(el("div", "c-rate-thanks", RATE_THANKS(G.firstName(expertName()))));
+      return wrap;
+    }
+    wrap.append(el("div", "c-rate-label", RATE_LABEL));
+    const stars = el("div", "c-stars");
+    for (let i = 1; i <= 5; i++) {
+      const b = el("button", "c-star", "★");
+      b.setAttribute("aria-label", i + (i === 1 ? " star" : " stars"));
+      b.addEventListener("click", () => sendRating(i));
+      stars.append(b);
+    }
+    wrap.append(stars);
+    return wrap;
+  }
+
+  function sendRating(n) {
+    const payload = G.ratePayload(n);
+    if (!payload || !ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify(payload));
+    // The rating is never echoed back, so collapse the row locally now.
+    ratedLocally = true;
+    render();
+  }
+
+  // One confetti burst, brand colours, ~1.4s, skipped under reduced motion.
+  // Ported verbatim from the locked visual spec.
+  function confettiBurst(canvas) {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const W = (canvas.width = canvas.clientWidth);
+    const H = (canvas.height = canvas.clientHeight);
+    const COLORS = ["#2F4A38", "#8FB89B", "#8C7136", "#D98A79", "#E8DFC9"];
+    const parts = Array.from({ length: 70 }, () => ({
+      x: W / 2 + (Math.random() - 0.5) * W * 0.35,
+      y: H * 0.35,
+      vx: (Math.random() - 0.5) * 7,
+      vy: -(3 + Math.random() * 6),
+      w: 5 + Math.random() * 4,
+      h: 3 + Math.random() * 3,
+      r: Math.random() * Math.PI,
+      vr: (Math.random() - 0.5) * 0.3,
+      c: COLORS[(Math.random() * COLORS.length) | 0],
+    }));
+    const t0 = performance.now();
+    (function tick(t) {
+      const dt = (t - t0) / 1400;
+      ctx.clearRect(0, 0, W, H);
+      ctx.globalAlpha = Math.max(0, 1 - dt);
+      for (const p of parts) {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.22;
+        p.r += p.vr;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.r);
+        ctx.fillStyle = p.c;
+        ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        ctx.restore();
+      }
+      if (dt < 1) requestAnimationFrame(tick);
+      else ctx.clearRect(0, 0, W, H);
+    })(t0);
   }
 
   function accessBodyInto(node, perms) {
@@ -443,8 +605,16 @@
 
   function render() {
     editorTextarea = null;
+    // Leaving the done screen clears the celebration + rating latches so a later
+    // accepted delivery bursts fresh.
+    if (lastPhase === "done" && state.phase !== "done") {
+      celebrated = false;
+      ratedLocally = false;
+    }
+    const phaseChanged = state.phase !== lastPhase;
+    lastPhase = state.phase;
     renderConn();
-    renderBody();
+    renderBody(phaseChanged);
     // Keep the caret in the editor across rebuilds (a stray relay message must
     // not steal focus from someone mid-edit).
     if (ctxMode === "edit" && editorTextarea) {
@@ -459,6 +629,39 @@
     }
   }
 
+  // Append a single new feed node with the spring-in physics, without replaying
+  // the whole feed. Only used when the phase is unchanged (chat/activity while
+  // waiting or working).
+  function appendFeedItem(item) {
+    if (!item) return;
+    const node = item.kind === "chat" ? messageNode(item.message) : activityNode(item.entry);
+    if (!node) return;
+    // Drop the phase-enter class so this new child animates only via msg-in.
+    els.messages.classList.remove("phase-enter");
+    node.classList.add("anim-in");
+    els.messages.append(node);
+    els.messages.scrollTo({ top: els.messages.scrollHeight, behavior: "smooth" });
+  }
+
+  // Decide whether an incoming relay message appends one node (phase unchanged)
+  // or triggers a full, possibly staggered, re-render.
+  function dispatchRender(prev, msg) {
+    const appendable = msg.type === "chat" || msg.type === "activity";
+    const samePhase = state.phase === prev.phase;
+    const grewByOne = state.feed.length === prev.feed.length + 1;
+    const feedPhase = state.phase === "waiting" || state.phase === "claimed";
+    if (appendable && samePhase && grewByOne && feedPhase) {
+      appendFeedItem(state.feed[state.feed.length - 1]);
+      return;
+    }
+    render();
+    // A blame-free decline reopens the composer and prompts for what is missing.
+    if (msg.type === "delivery-declined" && state.phase === "claimed" && !els.input.disabled) {
+      els.input.placeholder = DECLINE_PLACEHOLDER(G.firstName(expertName()));
+      els.input.focus();
+    }
+  }
+
   function renderConn() {
     let label, off;
     if (state.phase === "failed") {
@@ -467,6 +670,11 @@
     } else if (state.phase === "ended") {
       label = "ENDED";
       off = true;
+    } else if (state.phase === "done") {
+      // Accepted: the session is still live (accepting never ends it), so the
+      // dot stays on; the label reads COMPLETE to mark the payoff.
+      label = "COMPLETE";
+      off = false;
     } else if (connState === "open") {
       label = "CONNECTED";
       off = false;
@@ -481,7 +689,10 @@
     els.connDot.classList.toggle("off", off);
   }
 
-  function renderBody() {
+  function renderBody(phaseChanged) {
+    // The staggered entrance replays only on a phase change; appended feed
+    // items animate on their own via msg-in.
+    els.messages.classList.toggle("phase-enter", !!phaseChanged);
     // The End control only lives in the claimed pinned region; drop any armed
     // confirm the moment the session leaves that state.
     if (state.phase !== "claimed") endStep = "idle";
@@ -505,6 +716,23 @@
       return;
     }
 
+    if (state.phase === "done") {
+      // Accepted: pinned collapses to the mini row ("<Name> fixed this for
+      // you."), the body becomes the one celebration in the product, and the
+      // composer goes quiet. Accepting does NOT end or revoke; the link stays.
+      els.pinned.classList.remove("hidden");
+      els.pinLabel.classList.add("hidden");
+      els.expertCard.classList.add("hidden");
+      els.mini.classList.remove("hidden");
+      els.ctxMini.classList.add("hidden");
+      els.access.classList.add("hidden");
+      miniInto(els.mini, DONE_MINI(expertName()));
+      setBanner(DONE_BANNER, "");
+      els.messages.replaceChildren(doneScreen());
+      disableComposer("Session complete");
+      return;
+    }
+
     if (state.phase === "ended") {
       els.pinned.classList.remove("hidden");
       els.pinLabel.classList.add("hidden");
@@ -512,7 +740,7 @@
       els.mini.classList.remove("hidden");
       els.ctxMini.classList.add("hidden");
       els.access.classList.add("hidden");
-      miniInto(els.mini);
+      miniInto(els.mini, ENDED_MINI(expertName()));
       setBanner(ENDED_BANNER, "muted");
       els.messages.replaceChildren(...feedNodes());
       disableComposer("Session ended");
@@ -535,7 +763,13 @@
     accessBodyInto(els.accessBody, state.permissions);
     setBanner(G.firstName(expertName()) + " is here and working on your machine.", "");
     enableComposer("Message your expert");
-    els.messages.replaceChildren(...feedNodes());
+    const nodes = feedNodes();
+    // A delivered-but-unresponded fix shows the delivery card at the foot of the
+    // feed. A declined delivery (respondedAt set, accepted false) shows nothing.
+    if (state.delivery && state.delivery.respondedAt === undefined) {
+      nodes.push(deliveryCard());
+    }
+    els.messages.replaceChildren(...nodes);
     scrollFeed();
   }
 
@@ -587,8 +821,9 @@
       }
       if (!msg || typeof msg.type !== "string") return;
       if (msg.type === "hello-ok") connState = "open";
+      const prev = state;
       state = G.reduce(state, msg);
-      render();
+      dispatchRender(prev, msg);
     });
 
     socket.addEventListener("close", () => {

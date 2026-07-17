@@ -75,6 +75,15 @@ class FakeRelay implements RelayConnection {
   fireIssueUpdated(issue: string): void {
     this.events.onIssueUpdated?.(issue);
   }
+  fireDelivered(summary: string): void {
+    this.events.onDelivered?.(summary);
+  }
+  fireDeliveryAccepted(): void {
+    this.events.onDeliveryAccepted?.();
+  }
+  fireDeliveryDeclined(): void {
+    this.events.onDeliveryDeclined?.();
+  }
 }
 
 let projectDir: string;
@@ -415,3 +424,51 @@ describe("AgentSession.resumeExpert", () => {
     await session.end();
   });
 })
+
+describe("AgentSession delivery status", () => {
+  // A no-op peer so a claim doesn't spin up a real WebRTC connection.
+  function makeSessionFakePeer(relay: FakeRelay): AgentSession {
+    return new AgentSession({
+      relayUrl: "ws://relay.test",
+      projectDir,
+      customerName: "Jordan Lee",
+      browser: fakeBrowser,
+      relayClientFactory: () => relay,
+      peerFactory: () => ({
+        onChannel() {},
+        onError() {},
+        handleSignal() {},
+        close() {},
+      }),
+    });
+  }
+
+  it("records a delivered fix and the customer confirmation in status()", async () => {
+    const relay = new FakeRelay();
+    const session = makeSessionFakePeer(relay);
+    await session.requestExpert("fix the thing");
+    relay.fireExpertJoined("Rohit Jain");
+    expect(session.state).toBe("connected");
+
+    relay.fireDelivered("renamed and rebuilt");
+    expect(session.lastDelivery).toEqual({ summary: "renamed and rebuilt" });
+    expect(session.status().lastDelivery).toEqual({ summary: "renamed and rebuilt" });
+
+    relay.fireDeliveryAccepted();
+    expect(session.lastDelivery).toEqual({ summary: "renamed and rebuilt", accepted: true });
+
+    await session.end();
+  });
+
+  it("marks a declined delivery without a confirmation", async () => {
+    const relay = new FakeRelay();
+    const session = makeSessionFakePeer(relay);
+    await session.requestExpert("x");
+    relay.fireExpertJoined("Rohit Jain");
+    relay.fireDelivered("attempt one");
+    relay.fireDeliveryDeclined();
+    expect(session.lastDelivery).toEqual({ summary: "attempt one", accepted: false });
+
+    await session.end();
+  });
+});

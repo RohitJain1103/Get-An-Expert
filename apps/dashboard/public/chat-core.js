@@ -62,7 +62,9 @@
 
   /* ── State machine ──────────────────────────────────────────────────── */
 
-  // phase: "waiting" | "claimed" | "ended" | "failed"
+  // phase: "waiting" | "claimed" | "done" | "ended" | "failed"
+  // "done" is the accepted-delivery payoff screen; the session is still active
+  // (accepting never ends or revokes), the phase just drives the celebration.
   // The renderer reads this; the WebSocket handler only dispatches messages.
   function initialState() {
     return {
@@ -73,8 +75,31 @@
       permissions: undefined,
       issue: undefined,
       manifest: undefined,
+      // The delivery record: { summary, at, respondedAt?, accepted?, rating? }.
+      // A pending (unresponded) delivery shows the delivery card; accepted moves
+      // to the done screen; declined keeps working with no card.
+      delivery: undefined,
       feed: [],
     };
+  }
+
+  /* ── Delivery normalisation: accept only a plausibly-shaped record off the
+     wire, so a malformed frame never fabricates a card. A "delivered" message
+     carries { summary, at }; the stored record may also carry respondedAt /
+     accepted / rating. ──────────────────────────────────────────────────── */
+
+  function normalizeDelivery(d) {
+    if (!d || typeof d !== "object" || typeof d.summary !== "string") {
+      return undefined;
+    }
+    var out = {
+      summary: d.summary,
+      at: typeof d.at === "number" ? d.at : 0,
+    };
+    if (typeof d.respondedAt === "number") out.respondedAt = d.respondedAt;
+    if (typeof d.accepted === "boolean") out.accepted = d.accepted;
+    if (typeof d.rating === "number") out.rating = d.rating;
+    return out;
   }
 
   /* ── Context chips: the two always-true chips, with count-bearing chips
@@ -126,8 +151,16 @@
     switch (msg.type) {
       case "hello-ok": {
         var profile = validProfile(msg.expert) ? msg.expert : undefined;
+        var delivery = normalizeDelivery(msg.delivery);
+        var basePhase = phaseFromStatus(msg.status);
         return {
-          phase: phaseFromStatus(msg.status),
+          // Restore the ending on reload: an accepted delivery lands on the
+          // done screen; a pending or declined delivery stays working (the
+          // renderer shows the card only while the delivery is unresponded).
+          phase:
+            delivery && delivery.accepted === true && basePhase !== "ended"
+              ? "done"
+              : basePhase,
           expert: profile,
           expertName:
             typeof msg.expertName === "string" ? msg.expertName : undefined,
@@ -135,6 +168,7 @@
           permissions: msg.permissions,
           issue: typeof msg.issue === "string" ? msg.issue : undefined,
           manifest: msg.contextManifest,
+          delivery: delivery,
           feed: feedFromHello(msg.history, msg.activity),
         };
       }
@@ -193,6 +227,45 @@
         // the case keeps reduce total and leaves the issue untouched.
         return s;
 
+      case "delivered": {
+        // The expert marked the work done. Phase stays working-like (claimed);
+        // the unresponded delivery drives the delivery card. A fresh deliver
+        // after a decline or accept replaces the previous one.
+        if (s.phase === "ended" || s.phase === "failed") return s;
+        var d = normalizeDelivery(msg);
+        if (!d) return s;
+        return assign(s, { phase: "claimed", delivery: d });
+      }
+
+      case "delivery-accepted": {
+        // "Yes, that solved it": the payoff screen. The session stays active
+        // (accepting never ends or revokes); only the phase changes.
+        if (s.phase === "ended" || s.phase === "failed") return s;
+        var acc = assign(s.delivery || { summary: "", at: 0 }, {
+          respondedAt: typeof msg.at === "number" ? msg.at : undefined,
+          accepted: true,
+        });
+        return assign(s, { phase: "done", delivery: acc });
+      }
+
+      case "delivery-declined": {
+        // Blame-free "Not yet": clear the pending card into a plain declined
+        // marker and stay working. The renderer reopens the composer.
+        if (s.phase === "ended" || s.phase === "failed") return s;
+        var dec = s.delivery
+          ? assign(s.delivery, {
+              respondedAt: typeof msg.at === "number" ? msg.at : undefined,
+              accepted: false,
+            })
+          : undefined;
+        return assign(s, { phase: "claimed", delivery: dec });
+      }
+
+      case "rated":
+        // The rating rides to the expert only; a customer socket never receives
+        // this. The case keeps reduce total.
+        return s;
+
       case "session-ended":
         return assign(s, { phase: "ended" });
 
@@ -208,6 +281,32 @@
     var trimmed = text.trim();
     if (trimmed.length === 0) return undefined;
     return { type: "edit-issue", text: trimmed.slice(0, 2000) };
+  }
+
+  /* ── Delivery response + rating payloads (validated) ────────────────────
+     canRate gates the optional star row: it appears only after an accepted
+     delivery, and only until a rating exists (one time, per decision). ──── */
+
+  function canRate(state) {
+    var s = state || {};
+    var d = s.delivery;
+    return (
+      s.phase === "done" &&
+      !!d &&
+      d.accepted === true &&
+      (d.rating === undefined || d.rating === null)
+    );
+  }
+
+  function deliveryResponsePayload(accepted) {
+    return { type: "delivery-response", accepted: accepted === true };
+  }
+
+  function ratePayload(n) {
+    if (typeof n !== "number" || !isFinite(n)) return undefined;
+    var r = Math.round(n);
+    if (r < 1 || r > 5) return undefined;
+    return { type: "rate", rating: r };
   }
 
   /* ── End session two-step confirm state machine ─────────────────────────
@@ -247,6 +346,9 @@
     editPayload: editPayload,
     contextChips: contextChips,
     nextEndStep: nextEndStep,
+    canRate: canRate,
+    deliveryResponsePayload: deliveryResponsePayload,
+    ratePayload: ratePayload,
     initialState: initialState,
   };
 

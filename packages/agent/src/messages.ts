@@ -26,17 +26,34 @@ export function statusMessage(
   state: SessionState,
   expertName?: string,
   profile?: PublicExpertProfile,
+  delivery?: { summary: string; accepted?: boolean },
 ): string {
   switch (state) {
     case "waiting":
       return "Still in the queue, and no expert has joined yet. You don't have to wait here: step away and check back later. Your request stays queued through disconnects and restarts (it reconnects on its own), so it won't be lost; keep your machine on and awake so an expert can work once they pick it up.";
     case "connected":
-      return `${connectedSubject(expertName, profile)} is working on your machine right now, within the scopes you approved. Every action is in the log below. Feel free to step away (keep the machine awake); check back whenever you like.`;
+      return (
+        `${connectedSubject(expertName, profile)} is working on your machine right now, within the scopes you approved. Every action is in the log below. Feel free to step away (keep the machine awake); check back whenever you like.` +
+        deliverySuffix(delivery)
+      );
     case "ended":
       return "This session has ended and all expert access is revoked.";
     case "idle":
       return "No expert session is active. Call request_expert_help to start one.";
   }
+}
+
+/**
+ * The delivery tail for the connected status line: the expert's delivered
+ * summary and, once the customer accepts, a confirmation. Empty when nothing
+ * has been delivered, so the line is unchanged in the common case.
+ */
+function deliverySuffix(delivery?: { summary: string; accepted?: boolean }): string {
+  if (!delivery || typeof delivery.summary !== "string" || delivery.summary.length === 0) {
+    return "";
+  }
+  const confirmed = delivery.accepted === true ? " The customer confirmed the fix." : "";
+  return ` Delivered: "${delivery.summary}".${confirmed}`;
 }
 
 /**

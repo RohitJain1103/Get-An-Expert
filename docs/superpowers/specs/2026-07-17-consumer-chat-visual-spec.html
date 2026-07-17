@@ -115,6 +115,11 @@
   .caption { font-family: var(--mono); font-size: 10.5px; color: var(--text3); line-height: 1.5; }
 
   /* ══ CONSUMER CHAT. Brand theme, light only. ══════════════════════ */
+  /* Round 2: the page content is capped at 760px and centered; the full
+     window shows the cream ground with hairline side borders, so a
+     maximized browser reads as a composed column, not a stretched app. */
+  .viewport { background: #F4F1E9; padding: 0 24px; display: flex; justify-content: center; border: 1px solid var(--border-strong); }
+  .viewport .device { max-width: 760px; width: 100%; border-left: 1px solid #E8DFC9; border-right: 1px solid #E8DFC9; border-top: none; border-bottom: none; }
   .device {
     --c-bg: #FAF7F0; --c-paper: #FFFFFF; --c-raised: #F4F1E9;
     --c-sand: #E8DFC9; --c-sand2: #D6CBB0;
@@ -241,10 +246,23 @@
   .c-bench-top { display: flex; align-items: baseline; gap: 8px; }
   .c-bench-h { font-family: var(--mono); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--c-ink3); }
   .c-bench-more { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--c-ink2); white-space: nowrap; }
-  /* 3 x 2, not 6 across: six columns in a phone-width chat leaves ~55px per
-     cell, which cannot hold a name, a tag, a rating and a link without
-     turning to mush. Two rows buys each expert room to be legible. */
-  .c-faces { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 8px; }
+  /* Round 2: ONE horizontal strip. The row runs edge to edge and fades
+     out at the right into a +100 tail, so six visible faces read as the
+     front of a long bench, not the whole bench. Short specialty labels
+     (approved rev 8 wording) return here: full tags are too wide for a
+     strip cell. */
+  .c-faces {
+    display: flex; gap: 18px; overflow: hidden; padding: 2px 0;
+    -webkit-mask-image: linear-gradient(to right, black 82%, transparent 99%);
+    mask-image: linear-gradient(to right, black 82%, transparent 99%);
+  }
+  .c-face { flex: 0 0 64px; }
+  .c-more {
+    flex: 0 0 auto; align-self: center; display: flex; align-items: center; gap: 6px;
+    font-family: var(--mono); font-size: 10px; color: var(--c-forest);
+    border: 1px solid var(--c-sage); background: var(--c-sage-soft);
+    padding: 5px 10px; border-radius: var(--r-pill); white-space: nowrap;
+  }
   .c-face { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
   .c-face img { width: 46px; height: 46px; border-radius: 50%; object-fit: cover; border: 1px solid var(--c-sand); transition: transform 0.2s var(--ease-out), border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out); }
   .c-face:hover img { transform: translateY(-2px); border-color: var(--c-sage); box-shadow: var(--shadow-soft); }
@@ -314,6 +332,35 @@
   .c-body > *:nth-child(3) { animation-delay: 0.12s; }
   .c-body > *:nth-child(n+4) { animation-delay: 0.16s; }
 
+  /* Round 2 message physics. New bubbles spring in from below with a
+     slight overshoot (iMessage feel); ONLY the appended node animates,
+     the feed itself glides via scrollTo({behavior:'smooth'}). The v1
+     full-feed replay is retired. */
+  @keyframes msg-in {
+    0% { opacity: 0; transform: translateY(14px) scale(0.94); }
+    70% { opacity: 1; transform: translateY(-2px) scale(1.01); }
+    100% { opacity: 1; transform: none; }
+  }
+  .c-body > .anim-in { animation: msg-in 0.34s cubic-bezier(0.34, 1.2, 0.64, 1) both; }
+
+  /* Delivery + celebration */
+  @keyframes check-draw { from { stroke-dashoffset: 48; } to { stroke-dashoffset: 0; } }
+  @keyframes bloom { 0% { transform: scale(0.6); opacity: 0; } 60% { transform: scale(1.06); opacity: 1; } 100% { transform: scale(1); } }
+  .c-deliver { background: var(--c-paper); border: 1px solid var(--c-sage); border-radius: var(--r-card); box-shadow: var(--shadow-raised); padding: 18px; display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+  .c-deliver .dh { display: flex; align-items: center; gap: 10px; }
+  .c-deliver .ring { width: 34px; height: 34px; border-radius: 50%; background: var(--c-sage-soft); border: 1px solid var(--c-sage); display: flex; align-items: center; justify-content: center; animation: bloom 0.4s var(--ease-out) both; }
+  .c-deliver .ring svg { width: 18px; height: 18px; stroke: var(--c-forest); stroke-width: 2.5; fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 48; animation: check-draw 0.5s 0.15s var(--ease-out) both; }
+  .c-deliver .dt { font-family: var(--cd-serif); font-size: 20px; font-weight: 600; }
+  .c-deliver .ds { font-size: 14px; color: var(--c-ink2); line-height: 1.55; }
+  .c-deliver .dacts { display: flex; gap: 8px; }
+  .celebrate { position: relative; overflow: hidden; }
+  .c-done { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 28px 16px; }
+  .c-done .bigring { width: 64px; height: 64px; border-radius: 50%; background: var(--c-sage-soft); border: 1px solid var(--c-sage); display: flex; align-items: center; justify-content: center; animation: bloom 0.45s var(--ease-out) both; }
+  .c-done .bigring svg { width: 32px; height: 32px; stroke: var(--c-forest); stroke-width: 2.5; fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 48; animation: check-draw 0.6s 0.2s var(--ease-out) both; }
+  .c-done .dt { font-family: var(--cd-serif); font-size: 24px; font-weight: 600; }
+  .c-done .ds { font-size: 14px; color: var(--c-ink2); max-width: 40ch; line-height: 1.6; }
+  #confetti { position: absolute; inset: 0; pointer-events: none; }
+
   /* The trust moment gets the longest, softest entrance on the page. */
   .c-pinned { animation: settle 0.45s var(--ease-out) both; }
   .c-dot { animation: breathe 2.8s ease-in-out infinite; }
@@ -331,11 +378,11 @@
 <div class="wrap">
 
   <header>
-    <div class="eyebrow">Step 0 / Design LOCKED / Revision 7</div>
+    <div class="eyebrow">Round 2 / Design gate / Revision 9</div>
     <h1>The consumer chat, in your own clothes</h1>
     <p class="lede">Real experts, real photos, real credentials. The brand theme from midsesh.com, applied to the consumer side only. Approve the look, the states, and the copy.</p>
     <div class="meta">
-      <span class="pill hot">APPROVED 2026-07-17. This is the visual spec.</span>
+      <span class="pill hot">ROUND 2 PROPOSAL. v1 shipped; this adds motion, strip, delivery.</span>
       <span class="pill">5 real experts</span>
       <span class="pill">Claude type system: Styrene B / Copernicus stacks</span>
       <span class="pill">Consumer side only</span>
@@ -358,6 +405,8 @@
             <button class="btn" data-state="waiting" aria-pressed="true">Waiting<span class="sub">context + bench</span></button>
             <button class="btn" data-state="claimed" aria-pressed="false">Expert claimed<span class="sub">the trust moment</span></button>
             <button class="btn" data-state="working" aria-pressed="false">Working<span class="sub">live actions</span></button>
+            <button class="btn" data-state="delivered" aria-pressed="false">Delivered<span class="sub">expert says it's done</span></button>
+            <button class="btn" data-state="done" aria-pressed="false">Accepted<span class="sub">the payoff</span></button>
             <button class="btn" data-state="ended" aria-pressed="false">Ended<span class="sub">card collapses</span></button>
           </div>
         </div>
@@ -369,7 +418,7 @@
       </div>
 
       <div>
-        <div class="device" id="device">
+        <div class="viewport"><div class="device" id="device">
           <div class="c-top">
             <div class="c-logo">get an <em>expert</em></div>
             <div class="c-conn"><span class="c-dot" id="c-dot"></span><span id="c-conn">CONNECTED</span></div>
@@ -505,6 +554,87 @@
       <div class="note-label">Considered and rejected in this pass</div>
       <p><strong>Typing indicator</strong>: needs a new relay message and invites staring at the screen, against the walk-away promise. <strong>Sound on expert join</strong>: high value but browser autoplay rules make it unreliable; revisit with the notification question. <strong>Skeleton loaders</strong>: this page has nothing slow enough to skeleton. <strong>Avatars in every message row</strong>: the pinned card already answers who; repeating the face 40 times is noise.</p>
     </div>
+  </section>
+
+  <section>
+    <h2>Round 2: what this proposal changes</h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Ask</th><th>Proposal, visible above</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Side borders when maximized</strong></td><td class="new">Content column capped at 760px, centered, hairline borders on cream gutters. The frame around the prototype simulates a maximized window.</td></tr>
+          <tr><td><strong>Bench implies more than six</strong></td><td class="new">One horizontal strip. The row fades out at the right edge and a "+100 more experts" pill sits partly under the fade, so six faces read as the front of a long bench. No fake faces, no fake presence. Short specialty labels return (full tags were a v1 deviation).</td></tr>
+          <tr><td><strong>iMessage-grade chat motion</strong></td><td class="new">New bubbles spring in from below with a slight overshoot (340ms, custom curve); the feed glides to them with smooth scrolling. Only the NEW node animates. The v1 full-feed repaint (the jump you felt) is retired: rendering becomes append-only for new messages. Press "Incoming message" to feel it.</td></tr>
+          <tr><td><strong>Delivery ending</strong></td><td class="new">Two new states. "Delivered": the expert marks the work done and a delivery card lands in the chat with what changed and two buttons: "Yes, that solved it" / "Not yet". "Accepted": the payoff screen, drawn checkmark, one confetti burst in brand colours, "now go build" copy. "Not yet" returns to working with the composer focused and prompting.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>The delivery ending: contract and copy</h2>
+    <p>Protocol cost, stated up front: two validated additions, one per direction, mirroring the edit-issue pattern that already shipped.</p>
+<pre style="font-family:var(--mono); font-size:11.5px; line-height:1.6; background:var(--raised); border:1px solid var(--border); padding:13px; overflow-x:auto; margin:0">// expertMessageSchema gains:
+{ type: "deliver", sessionId, summary: string /* 1..2000, what changed */ }
+
+// customerMessageSchema gains:
+{ type: "delivery-response", accepted: boolean }
+
+// relay fan-out (unvalidated, additive):
+{ type: "delivered", summary, at }            // to chat sockets + agent
+{ type: "delivery-accepted" | "delivery-declined", at }   // to everyone</pre>
+    <div class="note flag">
+      <div class="note-label">Semantics, decided here for your approval</div>
+      <p><strong>Accepting does not end the session by itself.</strong> It records the outcome and shows the payoff screen; access revocation stays an explicit act (End session, or the expert leaving). Rationale: "solved" and "I want the expert's access gone" are different decisions, and fusing them would make people hesitate on the happy button.</p>
+      <p><strong>"Not yet" is cheap and blame-free.</strong> It reopens the conversation with the composer focused and the placeholder asking what's missing. The expert sees a plain "not yet" event, no red, no failure language.</p>
+      <p><strong>The declined path never auto-repeats.</strong> The expert must send a fresh deliver after more work; the card never nags.</p>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Where</th><th>String</th></tr></thead>
+        <tbody>
+          <tr><td class="new">delivery card title</td><td class="copy-str">{FirstName} delivered the fix</td></tr>
+          <tr><td class="new">delivery buttons</td><td class="copy-str">Yes, that solved it / Not yet</td></tr>
+          <tr><td class="new">not-yet placeholder</td><td class="copy-str">Tell {FirstName} what's missing</td></tr>
+          <tr><td class="new">accepted banner</td><td class="copy-str">All done.</td></tr>
+          <tr><td class="new">accepted title</td><td class="copy-str">Fixed and confirmed</td></tr>
+          <tr><td class="new">accepted body</td><td class="copy-str">{FirstName} got you unstuck. This chat stays at this link if you need the summary again. Now go build.</td></tr>
+          <tr><td class="new">accepted mini card</td><td class="copy-str">{Name} fixed this for you.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Satisfaction moments, end to end</h2>
+    <p>The patterns worth stealing are physics and payoff, not gamification: iMessage's send spring, Stripe's drawn checkmark, Duolingo's one-burst celebration. Streaks, points, and badges are wrong for a product someone uses when they are stuck; the satisfying arc here is <em>tension, then a human, then release</em>.</p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Moment</th><th>Today</th><th>Proposed</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Request sent</strong></td><td>Text confirmation</td><td class="new">Tab opens itself (shipped). No further flourish: the page arriving IS the moment.</td></tr>
+          <tr><td><strong>Waiting</strong></td><td>Static cards</td><td class="new">Bench strip suggests depth; connection dot breathes. Deliberately calm, no fake progress bars, no fake "matching..." spinner.</td></tr>
+          <tr><td><strong>Expert claims</strong></td><td>Card settles in (shipped)</td><td class="new">Keep the settle as the hero. Add nothing: competing flourishes would cheapen it.</td></tr>
+          <tr><td><strong>Working</strong></td><td>Bronze activity pills (shipped)</td><td class="new">Live actions are already the engagement. New-message spring + glide makes the conversation feel alive.</td></tr>
+          <tr><td><strong>Delivered</strong></td><td>Does not exist</td><td class="new">Delivery card with drawn check ring. The ask lands as a gift, not a form.</td></tr>
+          <tr><td><strong>Accepted</strong></td><td>Does not exist</td><td class="new">The one celebration in the product: check bloom + single confetti burst, brand colours, 1.4s, honoured reduced-motion. Copy sends them back to building.</td></tr>
+          <tr><td><strong>Session ends</strong></td><td>Collapsed card (shipped)</td><td class="new">Unchanged. Ending access is administrative, not celebratory.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">
+      <div class="note-label">Considered and rejected for this round</div>
+      <p><strong>Queue position / wait estimate</strong>: we cannot promise times we do not control; a wrong estimate costs more trust than silence. <strong>Typing indicator</strong>: still rejected, invites staring. <strong>Sound</strong>: browser autoplay rules make it unreliable; revisit with notifications. <strong>Star-rating prompt at accept</strong>: the yes/no IS the rating for now; a five-star ask at the moment of relief reads as needy. Fix counts on cards can grow from accepted deliveries later, which finally gives those numbers a real source.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Round 2 open questions</h2>
+    <ol style="margin:0; padding-left:20px; display:flex; flex-direction:column; gap:8px; max-width:68ch;">
+      <li style="font-size:14.5px"><strong>Confetti: in or out?</strong> It is the one theatrical beat in an otherwise calm product. I lean in, once, at the single moment of genuine relief. Easy to remove.</li>
+      <li style="font-size:14.5px"><strong>Accept does not end the session.</strong> Agree with the semantics above, or should "Yes, that solved it" also revoke access after a beat?</li>
+      <li style="font-size:14.5px"><strong>Delivery outcomes as the future source of "fixes delivered"</strong>: fine to record accepted deliveries per expert id now (a counter in relay persistence), so the hardcoded card numbers can eventually be replaced by real ones?</li>
+    </ol>
   </section>
 
   <section>
@@ -713,7 +843,6 @@ const FONT_FAMILJEN='data:font/woff2;base64,d09GMgABAAAAAEnEABMAAAAAs5QAAElVAAEA
     const box = el("div", "c-bench");
     const top = el("div", "c-bench-top");
     top.appendChild(el("div", "c-bench-h", "Experts on bench"));
-    top.appendChild(el("div", "c-bench-more", "100+ other experts"));
     box.appendChild(top);
     const faces = el("div", "c-faces");
     for (const x of EXPERTS) {
@@ -739,6 +868,10 @@ const FONT_FAMILJEN='data:font/woff2;base64,d09GMgABAAAAAEnEABMAAAAAs5QAAElVAAEA
       f.appendChild(w);
       faces.appendChild(f);
     }
+    // The +100 tail sits inside the strip, partly under the fade, so the
+    // row reads as the front of a long bench rather than the whole bench.
+    const more = el("div", "c-more", "+100 more experts");
+    faces.appendChild(more);
     box.appendChild(faces);
     return box;
   }
@@ -754,6 +887,66 @@ const FONT_FAMILJEN='data:font/woff2;base64,d09GMgABAAAAAEnEABMAAAAAs5QAAElVAAEA
     });
     box.appendChild(el("div", "c-foot", "Close this tab anytime. Your place in the queue holds, and this link brings you back."));
     return box;
+  }
+
+  const CHECK_SVG = '<svg viewBox="0 0 24 24"><polyline points="4.5 12.5 10 18 19.5 7"/></svg>';
+
+  function deliveryCard(x) {
+    const box = el("div", "c-deliver");
+    const dh = el("div", "dh");
+    const ring = el("div", "ring");
+    ring.innerHTML = CHECK_SVG;
+    dh.appendChild(ring);
+    dh.appendChild(el("div", "dt", x.name.split(" ")[0] + " delivered the fix"));
+    box.appendChild(dh);
+    box.appendChild(el("div", "ds",
+      "Renamed HeroImg to HeroImage in assets.ts and re-ran the build: passing. The change is in your repo, nothing else touched."));
+    const acts = el("div", "dacts");
+    const yes = el("button", "c-btn", "Yes, that solved it");
+    yes.addEventListener("click", () => { state = "done"; syncButtons(); render(); });
+    const no = el("button", "c-btn ghost", "Not yet");
+    no.addEventListener("click", () => {
+      state = "working"; syncButtons(); render();
+      const input = $("c-input");
+      input.placeholder = "Tell " + x.name.split(" ")[0] + " what's missing";
+      input.focus();
+    });
+    acts.append(yes, no);
+    box.appendChild(acts);
+    return box;
+  }
+
+  function confettiBurst(canvas) {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const ctx = canvas.getContext("2d");
+    const W = canvas.width = canvas.clientWidth;
+    const H = canvas.height = canvas.clientHeight;
+    const COLORS = ["#2F4A38", "#8FB89B", "#8C7136", "#D98A79", "#E8DFC9"];
+    const parts = Array.from({ length: 70 }, () => ({
+      x: W / 2 + (Math.random() - 0.5) * W * 0.35,
+      y: H * 0.35,
+      vx: (Math.random() - 0.5) * 7,
+      vy: -(3 + Math.random() * 6),
+      w: 5 + Math.random() * 4,
+      h: 3 + Math.random() * 3,
+      r: Math.random() * Math.PI,
+      vr: (Math.random() - 0.5) * 0.3,
+      c: COLORS[(Math.random() * COLORS.length) | 0],
+    }));
+    const t0 = performance.now();
+    (function tick(t) {
+      const dt = (t - t0) / 1400;
+      ctx.clearRect(0, 0, W, H);
+      ctx.globalAlpha = Math.max(0, 1 - dt);
+      for (const p of parts) {
+        p.x += p.vx; p.y += p.vy; p.vy += 0.22; p.r += p.vr;
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r);
+        ctx.fillStyle = p.c; ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        ctx.restore();
+      }
+      if (dt < 1) requestAnimationFrame(tick);
+      else ctx.clearRect(0, 0, W, H);
+    })(t0);
   }
 
   function msg(mine, name, text, time) {
@@ -795,6 +988,40 @@ const FONT_FAMILJEN='data:font/woff2;base64,d09GMgABAAAAAEnEABMAAAAAs5QAAElVAAEA
     }
 
     $("c-pinned").classList.remove("hidden");
+
+    if (state === "done") {
+      $("c-pinned").classList.remove("hidden");
+      $("c-pin-label").classList.add("hidden");
+      $("c-card").classList.add("hidden");
+      $("c-mini").classList.remove("hidden");
+      $("c-ctx-mini").classList.add("hidden");
+      $("c-access").classList.add("hidden");
+      const mini = $("c-mini");
+      mini.replaceChildren();
+      mini.appendChild(img(x.photo));
+      mini.appendChild(el("span", null, x.name + " fixed this for you."));
+      $("c-banner").className = "c-banner";
+      $("c-banner").textContent = "All done.";
+      const wrap = el("div", "celebrate");
+      const canvas = document.createElement("canvas");
+      canvas.id = "confetti";
+      wrap.appendChild(canvas);
+      const done = el("div", "c-done");
+      const ring = el("div", "bigring");
+      ring.innerHTML = CHECK_SVG;
+      done.appendChild(ring);
+      done.appendChild(el("div", "dt", "Fixed and confirmed"));
+      done.appendChild(el("div", "ds",
+        x.name.split(" ")[0] + " got you unstuck. This chat stays at this link if you need the summary again. Now go build."));
+      wrap.appendChild(done);
+      body.appendChild(wrap);
+      requestAnimationFrame(() => confettiBurst(canvas));
+      $("c-composer").classList.add("off");
+      $("c-input").disabled = true;
+      $("c-input").placeholder = "Session complete";
+      $("c-conn").textContent = "COMPLETE";
+      return;
+    }
 
     if (state === "ended") {
       $("c-pin-label").classList.add("hidden");
@@ -845,6 +1072,14 @@ const FONT_FAMILJEN='data:font/woff2;base64,d09GMgABAAAAAEnEABMAAAAAs5QAAElVAAEA
     body.appendChild(msg(true, null, "It only breaks after a refresh, never on first login.", "14:05"));
     body.appendChild(activity("Edited src/lib/auth/session.ts", "14:06"));
     body.appendChild(msg(false, x.name, "Found it. Your refresh handler reads the cookie before it's rewritten. Testing a fix now.", "14:07"));
+
+    if (state === "delivered") {
+      body.appendChild(activity("Ran the build: passing", "14:09"));
+      const card = deliveryCard(x);
+      card.classList.add("anim-in");
+      body.appendChild(card);
+      requestAnimationFrame(() => body.scrollTo({ top: body.scrollHeight, behavior: "smooth" }));
+    }
   }
 
   function syncButtons() {
@@ -862,6 +1097,24 @@ const FONT_FAMILJEN='data:font/woff2;base64,d09GMgABAAAAAEnEABMAAAAAs5QAAElVAAEA
     b.appendChild(document.createTextNode(x.name));
     b.appendChild(el("span", "sub", x.short.toLowerCase()));
     whoBox.appendChild(b);
+  });
+
+  const SIM_LINES = [
+    "Pushed the fix to a branch. Building now.",
+    "Can you try the login flow once more?",
+    "Also tidied the assets barrel while I was in there.",
+  ];
+  let simCount = 0;
+  document.getElementById("sim-msg").addEventListener("click", () => {
+    if (state === "waiting" || state === "ended" || state === "done") {
+      state = "working"; syncButtons(); render();
+    }
+    const body = $("c-body");
+    const m = msg(false, EXPERTS[who].name, SIM_LINES[simCount % SIM_LINES.length], "14:1" + (simCount % 10));
+    simCount += 1;
+    m.classList.add("anim-in");
+    body.appendChild(m);
+    body.scrollTo({ top: body.scrollHeight, behavior: "smooth" });
   });
 
   $("states").addEventListener("click", (e) => {

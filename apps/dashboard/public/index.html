@@ -61,6 +61,8 @@
         <span id="ws-title">—</span>
         <span class="ws-issue" id="ws-issue"></span>
         <button id="issue-edit-btn" class="small ghost hidden">Edit issue</button>
+        <button id="deliver-btn" class="small hidden">Deliver</button>
+        <span class="deliver-status" id="deliver-status"></span>
         <span class="perms" id="ws-perms"></span>
         <span class="spacer"></span>
         <button id="end-btn" class="danger small">End session</button>
@@ -72,6 +74,16 @@
       <div class="issue-editor-acts">
         <button id="issue-save-btn" class="small">Save</button>
         <button id="issue-cancel-btn" class="small ghost">Cancel</button>
+      </div>
+    </div>
+
+    <div class="issue-editor hidden" id="deliver-editor">
+      <textarea id="deliver-input" rows="3" maxlength="2000"
+        placeholder="What did you change? The customer sees this word for word."
+        aria-label="What you delivered"></textarea>
+      <div class="issue-editor-acts">
+        <button id="deliver-send-btn" class="small">Send</button>
+        <button id="deliver-cancel-btn" class="small ghost">Cancel</button>
       </div>
     </div>
 
