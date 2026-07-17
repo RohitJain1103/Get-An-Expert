@@ -25,7 +25,6 @@ import {
   sessionMaxAgeMs,
 } from "./config";
 import {
-  buildContextMarkdown,
   readProjectOverview,
   readTranscriptPointer,
   readTranscriptTail,
@@ -433,7 +432,7 @@ async function writeSessionContext(
     overview = null;
   }
   try {
-    const markdown = buildContextMarkdown({
+    await activeSession.writeContextFrom({
       customerName: customerName(),
       issue: input.issue,
       summary: input.summary,
@@ -441,7 +440,6 @@ async function writeSessionContext(
       transcriptMarkdown,
       requestedAt: Date.now(),
     });
-    await activeSession.writeContext(markdown);
   } catch {
     return "not written — the expert will start from the issue description";
   }

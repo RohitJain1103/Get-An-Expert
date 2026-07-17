@@ -9,6 +9,9 @@ export interface RelayClientEvents {
   onExpertLeft?: () => void;
   onSignal?: (payload: unknown) => void;
   onSessionEnded?: (reason: string | undefined) => void;
+  /** The shared issue text was edited (by the customer or the expert). The
+   * agent rebuilds CONTEXT.md so the hand-off file reflects the edit. */
+  onIssueUpdated?: (issue: string) => void;
   /** The connection closed for good (intentional end, or never registered). */
   onClose?: () => void;
   /** A reconnect attempt is starting after an unexpected drop. */
@@ -208,6 +211,9 @@ export class RelayClient implements RelayConnection {
         return;
       case "expert-left":
         this.#events.onExpertLeft?.();
+        return;
+      case "issue-updated":
+        if (typeof msg.issue === "string") this.#events.onIssueUpdated?.(msg.issue);
         return;
       case "signal":
         this.#events.onSignal?.(msg.payload);
