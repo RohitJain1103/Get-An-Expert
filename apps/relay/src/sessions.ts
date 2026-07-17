@@ -32,6 +32,8 @@ export interface Session {
    */
   online: boolean;
   expertName?: string;
+  /** Roster id of the claiming expert, when they self-selected an identity. */
+  expertId?: string;
   createdAt: number;
   /** Epoch ms of the last mutation, so callers can show freshness. */
   updatedAt: number;
@@ -137,7 +139,7 @@ export class SessionStore {
     return ids;
   }
 
-  claim(id: string, expertName: string): Session {
+  claim(id: string, expertName: string, expertId?: string): Session {
     const session = this.#require(id);
     if (session.status === "active") {
       throw new Error(
@@ -151,6 +153,7 @@ export class SessionStore {
       ...session,
       status: "active",
       expertName,
+      expertId,
       claimedAt: Date.now(),
     });
   }
@@ -162,6 +165,7 @@ export class SessionStore {
       ...session,
       status: "waiting",
       expertName: undefined,
+      expertId: undefined,
       claimedAt: undefined,
     });
   }

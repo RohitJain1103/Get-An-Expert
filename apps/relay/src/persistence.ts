@@ -23,6 +23,7 @@ export interface PersistedSession {
   issue?: string;
   status: Session["status"];
   expertName?: string;
+  expertId?: string;
   createdAt: number;
   updatedAt: number;
   claimedAt?: number;
@@ -49,6 +50,7 @@ export function toPersisted(session: Session): PersistedSession {
     issue: session.issue,
     status: session.status,
     expertName: session.expertName,
+    expertId: session.expertId,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
     claimedAt: session.claimedAt,
@@ -73,6 +75,9 @@ export function fromPersisted(p: PersistedSession): Session {
     status: "waiting",
     online: false,
     expertName: undefined,
+    // Cleared alongside expertName: a hydrated session is always demoted to
+    // waiting and must be re-claimed, so it carries no expert identity.
+    expertId: undefined,
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
     claimedAt: undefined,

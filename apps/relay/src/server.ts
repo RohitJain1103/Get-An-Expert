@@ -483,7 +483,7 @@ export function createRelay(options: RelayOptions): Relay {
             return;
           }
           try {
-            store.claim(msg.sessionId, conn.name);
+            store.claim(msg.sessionId, conn.name, conn.profile?.id);
           } catch (err) {
             sendTo(ws, {
               type: "claim-failed",
@@ -502,11 +502,16 @@ export function createRelay(options: RelayOptions): Relay {
           });
           const agentWs = agents.get(msg.sessionId);
           if (agentWs) {
-            sendTo(agentWs, { type: "expert-joined", expertName: conn.name });
+            sendTo(agentWs, {
+              type: "expert-joined",
+              expertName: conn.name,
+              expert: conn.profile,
+            });
           }
           notifyChatSockets(msg.sessionId, {
             type: "expert-joined",
             expertName: conn.name,
+            expert: conn.profile,
           });
           broadcastQueue();
           return;
@@ -608,6 +613,12 @@ export function createRelay(options: RelayOptions): Relay {
           // Seed the live activity feed for a customer who opens (or reopens)
           // the page after the expert has already started working.
           activity: session.activity.slice(-50),
+          // Expert card when claimed, the full bench always, and the granted
+          // scopes + current issue so a reload restores the whole chat state.
+          expert: session.expertId ? findExpert(session.expertId) : undefined,
+          bench: ROSTER,
+          permissions: session.permissions,
+          issue: session.issue,
         });
         log(`customer chat socket joined session ${sessionId}`);
         return;

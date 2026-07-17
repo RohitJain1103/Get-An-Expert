@@ -286,6 +286,61 @@ describe("claiming sessions", () => {
   });
 });
 
+describe("claim carries the roster profile", () => {
+  async function rohitExpert() {
+    const expert = await connect("/expert");
+    send(expert, { type: "auth", token: TOKEN, name: "Whoever", expertId: "rohit" });
+    await waitFor(expert, (m) => m.type === "auth-ok");
+    await waitFor(expert, (m) => m.type === "queue");
+    return expert;
+  }
+
+  it("claim fans the full profile out to agent and chat sockets", async () => {
+    const { agent, sessionId, customerToken } = await registeredAgent();
+    const customer = await connect("/customer");
+    send(customer, { type: "hello", sessionId, token: customerToken });
+    await waitFor(customer, (m) => m.type === "hello-ok");
+
+    const expert = await rohitExpert();
+    send(expert, { type: "claim", sessionId });
+
+    const toAgent = await waitFor(agent, (m) => m.type === "expert-joined");
+    expect(toAgent.expertName).toBe("Rohit Jain");
+    expect(toAgent.expert).toEqual(
+      expect.objectContaining({ photo: "/experts/rohit.jpg" }),
+    );
+    const toChat = await waitFor(customer, (m) => m.type === "expert-joined");
+    expect(toChat.expert).toEqual(expect.objectContaining({ id: "rohit" }));
+  });
+
+  it("hello-ok includes bench, permissions, issue, and expert when claimed", async () => {
+    const { agent, sessionId, customerToken } = await registeredAgent();
+    send(agent, {
+      type: "metadata",
+      permissions: { files: true, terminal: false, browser: false },
+    });
+    const expert = await rohitExpert();
+    send(expert, { type: "claim", sessionId });
+    await waitFor(expert, (m) => m.type === "claimed");
+
+    const customer = await connect("/customer");
+    send(customer, { type: "hello", sessionId, token: customerToken });
+    const hello = await waitFor(customer, (m) => m.type === "hello-ok");
+    expect(hello.bench).toHaveLength(6);
+    expect(hello.expert?.id).toBe("rohit");
+    expect(hello.permissions).toEqual(expect.objectContaining({ files: true }));
+    expect(hello.issue).toBe("Build failing");
+  });
+
+  it("hello-ok bench never includes token material", async () => {
+    const { sessionId, customerToken } = await registeredAgent();
+    const customer = await connect("/customer");
+    send(customer, { type: "hello", sessionId, token: customerToken });
+    const hello = await waitFor(customer, (m) => m.type === "hello-ok");
+    expect(JSON.stringify(hello)).not.toContain(TOKEN);
+  });
+});
+
 describe("signaling passthrough", () => {
   it("routes signal payloads opaquely in both directions", async () => {
     const { agent, sessionId } = await registeredAgent();

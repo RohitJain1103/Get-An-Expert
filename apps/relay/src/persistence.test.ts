@@ -72,6 +72,18 @@ describe("persisted session mapping", () => {
     expect(restored.status).toBe("waiting");
     expect(restored.expertName).toBeUndefined();
   });
+
+  it("serializes the expert roster id but clears it on hydrate (must re-claim)", () => {
+    const store = new SessionStore();
+    const s = store.create({ customerName: "Dana", projectDir: "~/p" }).session;
+    store.claim(s.id, "Rohit Jain", "rohit");
+    const persisted = toPersisted(store.get(s.id)!);
+    expect(persisted.expertId).toBe("rohit");
+    // A hydrated session comes back waiting and must be re-claimed, so the
+    // expert identity is cleared alongside expertName (Wire Contract: an
+    // expert profile is only present when the session is claimed).
+    expect(fromPersisted(persisted).expertId).toBeUndefined();
+  });
 });
 
 describe("MemoryPersistence", () => {
