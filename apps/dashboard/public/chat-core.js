@@ -114,7 +114,10 @@
       chips.push("This conversation, " + m.conversationMessages + " messages");
     }
     chips.push("A short overview of your project");
-    if (typeof m.secretsRedacted === "number") {
+    // Only surface the redaction chip when something was actually removed:
+    // "0 secrets removed" reads as a warning that there might have been some,
+    // which is the opposite of the reassurance it is meant to give.
+    if (typeof m.secretsRedacted === "number" && m.secretsRedacted >= 1) {
       chips.push(m.secretsRedacted + " secrets removed");
     }
     return chips;
