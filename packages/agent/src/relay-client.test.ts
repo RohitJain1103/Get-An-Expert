@@ -181,3 +181,36 @@ describe("RelayClient.resume (process-restart path)", () => {
     await expect(p).rejects.toThrow(/unknown session/);
   });
 });
+
+describe("RelayClient delivery events", () => {
+  async function registered() {
+    const { client, created } = makeClient();
+    const p = client.register({ customerName: "A", projectDir: "~/a" });
+    created[0].open();
+    created[0].deliver({ type: "registered", sessionId: "s1", resumeToken: "r1" });
+    await p;
+    return { client, ws: created[0] };
+  }
+
+  it("forwards delivered with the summary", async () => {
+    const { client, ws } = await registered();
+    const summaries: string[] = [];
+    client.on({ onDelivered: (s) => summaries.push(s) });
+    ws.deliver({ type: "delivered", summary: "renamed and rebuilt", at: 1 });
+    expect(summaries).toEqual(["renamed and rebuilt"]);
+  });
+
+  it("forwards delivery-accepted and delivery-declined", async () => {
+    const { client, ws } = await registered();
+    let accepted = 0;
+    let declined = 0;
+    client.on({
+      onDeliveryAccepted: () => (accepted += 1),
+      onDeliveryDeclined: () => (declined += 1),
+    });
+    ws.deliver({ type: "delivery-accepted", at: 2 });
+    ws.deliver({ type: "delivery-declined", at: 3 });
+    expect(accepted).toBe(1);
+    expect(declined).toBe(1);
+  });
+});
