@@ -6,208 +6,265 @@
   <meta name="robots" content="noindex">
   <title>Get An Expert | Chat</title>
   <style>
-    /* Standalone page: palette copied from the dashboard theme on purpose,
-       do not link styles.css. */
-    :root {
-      --bg: #0A0A0E;
-      --surface: #131318;
-      --raised: #1C1C24;
-      --border: #282830;
-      --text: #E4E4EC;
-      --text2: #90909B;
-      --text3: #585860;
-      --amber: #F5A623;
-      --amber-soft: rgba(245, 166, 35, 0.12);
-      --green: #22C55E;
-      --red: #EF4444;
-      --sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    /* Standalone customer page, deliberately NOT the dashboard theme: the customer
+       is a client, the dashboard is an operator tool. Brand palette + type follow
+       docs/superpowers/specs/2026-07-17-consumer-chat-visual-spec.html. Still no
+       styles.css link: this page stays self-contained. */
+
+    /* Claude type system: exact commercial names first, legal faces delivered.
+       Never embed Styrene B / Copernicus files without a license. Only Familjen
+       Grotesk is self-hosted; Georgia is a system font. */
+    @font-face {
+      font-family: 'Familjen Grotesk';
+      src: url(/vendor/fonts/familjen.woff2) format('woff2');
+      font-weight: 400 700; font-style: normal; font-display: swap;
     }
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --c-bg: #FAF7F0; --c-paper: #FFFFFF; --c-raised: #F4F1E9;
+      --c-sand: #E8DFC9; --c-sand2: #D6CBB0;
+      --c-ink: #1C1A16; --c-ink2: #4B4841; --c-ink3: #8A8578;
+
+      /* GREEN FAMILY: people, conversation, brand. */
+      --c-forest: #2F4A38; --c-sage: #8FB89B; --c-sage-soft: #EDF3EE;
+
+      /* BRONZE FAMILY, the fourth colour: your machine, the access you granted,
+         and actions taken on it. #8C7136 for marks and borders; darkened to
+         #7D6530 wherever it carries text (4.33:1 vs 5.20:1 on cream). */
+      --c-bronze: #8C7136; --c-bronze-ink: #7D6530; --c-bronze-soft: #F6F1E4;
+
+      /* Attention / missing / destructive. Rust as text, terracotta as fill. */
+      --c-rust: #A04A3C; --c-terracotta: #D98A79;
+
+      /* Claude desktop type system (decision 2026-07-17). Exact families first:
+         Styrene B and Copernicus are COMMERCIAL and not embedded; if licensed
+         later they activate automatically. Delivered faces: Familjen Grotesk
+         (Styrene stand-in) and Georgia (Claude's serif fallback). */
+      --cd-serif: 'Copernicus', Georgia, ui-serif, serif;
+      --cd-ui: 'Styrene B', 'Familjen Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+      --mono: ui-monospace, Menlo, Consolas, monospace;
+
+      /* Claude-desktop-native shape system, minus Claude's orange: generous
+         radii, one soft shadow level, pill controls. Palette stays brand. */
+      --r-card: 14px; --r-pill: 999px;
+      --shadow-soft: 0 1px 3px rgba(28, 26, 22, 0.06), 0 1px 2px rgba(28, 26, 22, 0.04);
+      --shadow-raised: 0 2px 8px rgba(28, 26, 22, 0.08), 0 1px 2px rgba(28, 26, 22, 0.05);
+      --ease-out: cubic-bezier(0.21, 0.61, 0.35, 1);
+    }
+
+    * { box-sizing: border-box; }
     html, body { height: 100%; }
     body {
-      font-family: var(--sans);
-      background: var(--bg);
-      color: var(--text);
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
+      margin: 0; background: var(--c-bg); color: var(--c-ink);
+      font-family: var(--cd-ui); font-size: 16px; line-height: 1.65;
+      display: flex; flex-direction: column; overflow: hidden;
       -webkit-font-smoothing: antialiased;
     }
     .hidden { display: none !important; }
 
-    .topbar {
-      padding: 10px 16px;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-shrink: 0;
-    }
-    .topbar .logo { font-weight: 700; font-size: 15px; letter-spacing: -0.3px; }
-    .topbar .logo span { color: var(--amber); }
-    .conn {
-      margin-left: auto;
-      display: flex;
-      align-items: center;
-      gap: 7px;
-      font-size: 12px;
-      color: var(--text2);
-    }
-    .conn-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text3); flex-shrink: 0; }
-    .conn-dot.online { background: var(--green); }
-    .conn-dot.error { background: var(--red); }
+    /* ── Top bar ────────────────────────────────────────────────────── */
+    .topbar { padding: 13px 16px; background: var(--c-paper); border-bottom: 1px solid var(--c-sand); display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+    .logo { font-family: var(--cd-serif); font-weight: 600; font-size: 19px; letter-spacing: -0.01em; color: var(--c-ink); }
+    .logo em { font-style: normal; color: var(--c-forest); }
+    .conn { margin-left: auto; display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 10px; color: var(--c-ink3); letter-spacing: 0.04em; }
+    .conn-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--c-forest); flex-shrink: 0; }
+    .conn-dot.off { background: var(--c-sand2); }
 
-    .banner {
-      padding: 9px 16px;
-      font-size: 12.5px;
-      line-height: 1.5;
-      background: var(--amber-soft);
-      color: var(--amber);
-      border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
-    }
-    .banner.ok { background: rgba(34, 197, 94, 0.1); color: var(--green); }
-    .banner.bad { background: rgba(239, 68, 68, 0.1); color: var(--red); }
-    .banner.muted { background: var(--surface); color: var(--text2); }
+    /* ── Banner ─────────────────────────────────────────────────────── */
+    .banner { padding: 11px 16px; font-size: 14px; line-height: 1.5; background: var(--c-sage-soft); color: var(--c-forest); border-bottom: 1px solid var(--c-sand); flex-shrink: 0; }
+    .banner.muted { background: var(--c-raised); color: var(--c-ink3); }
 
-    .messages {
-      flex: 1;
-      overflow-y: auto;
-      padding: 14px 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      -webkit-overflow-scrolling: touch;
+    /* ── Pinned region (expert card, mini row, context mini, access) ──── */
+    .pinned { flex-shrink: 0; border-bottom: 1px solid var(--c-sand); background: var(--c-paper); }
+    .c-pin-label { font-family: var(--mono); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--c-ink3); padding: 11px 16px 0; }
+
+    .c-card { display: flex; gap: 13px; padding: 10px 16px 13px; align-items: flex-start; }
+    .c-photo { width: 52px; height: 52px; border-radius: 50%; flex-shrink: 0; object-fit: cover; border: 1px solid var(--c-sand); background: var(--c-raised); box-shadow: 0 0 0 3px var(--c-sage-soft); }
+    .c-cbody { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+    .c-nrow { display: flex; align-items: center; gap: 7px; }
+    .c-name { font-family: var(--cd-serif); font-size: 22px; font-weight: 600; line-height: 1.15; letter-spacing: -0.005em; word-break: break-word; }
+    .c-li { flex-shrink: 0; width: 15px; height: 15px; color: var(--c-ink3); }
+    .c-li svg { width: 100%; height: 100%; fill: currentColor; display: block; }
+    .c-rate { margin-left: auto; font-family: var(--mono); font-size: 11.5px; color: var(--c-forest); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .c-role { font-size: 14px; color: var(--c-ink2); line-height: 1.4; }
+    .c-cos { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-top: 3px; }
+    .c-cos img { width: 15px; height: 15px; border-radius: 3px; object-fit: cover; flex-shrink: 0; }
+    .c-cos span { font-size: 11px; color: var(--c-ink2); }
+    .c-cos .dot { color: var(--c-sand2); }
+    .c-tagrow { display: flex; align-items: center; gap: 8px; margin-top: 5px; flex-wrap: wrap; }
+    .c-tag { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.05em; padding: 3px 9px; background: var(--c-sage-soft); border: 1px solid var(--c-sage); color: var(--c-forest); border-radius: var(--r-pill); }
+    .c-fixes { font-family: var(--mono); font-size: 10px; color: var(--c-ink3); font-variant-numeric: tabular-nums; }
+    /* Missing real data renders as a visible gap, never as a plausible number. */
+    .c-rate.pending, .c-fixes.pending {
+      color: var(--c-rust); border: 1px dashed var(--c-rust);
+      padding: 1px 6px; font-size: 9px; letter-spacing: 0.04em;
     }
-    .msg { max-width: 82%; display: flex; flex-direction: column; }
+
+    .c-mini { display: flex; align-items: center; gap: 9px; padding: 12px 16px; font-size: 14px; color: var(--c-ink2); }
+    .c-mini img { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; border: 1px solid var(--c-sand); flex-shrink: 0; }
+
+    /* Access disclosure: collapsed to one quiet line by default. Native
+       details/summary so keyboard and screen readers get the toggle for free. */
+    .c-access { border-top: 1px solid var(--c-sand); background: var(--c-bronze-soft); }
+    .c-access > summary {
+      list-style: none; cursor: pointer; padding: 8px 16px;
+      display: flex; align-items: center; gap: 7px;
+      font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.08em;
+      color: var(--c-bronze-ink); text-transform: uppercase;
+      transition: background 0.18s var(--ease-out);
+    }
+    .c-access > summary::-webkit-details-marker { display: none; }
+    .c-access > summary .lock { width: 4px; height: 4px; border-radius: 50%; background: var(--c-bronze); flex-shrink: 0; }
+    .c-access > summary:hover { background: rgba(140, 113, 54, 0.07); }
+    .c-access > summary .chev { margin-left: auto; font-size: 8px; transition: transform 0.2s var(--ease-out); }
+    .c-access[open] > summary .chev { transform: rotate(180deg); }
+    .c-access-body { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 0 16px 10px; }
+    .c-scope { font-family: var(--mono); font-size: 10px; padding: 2px 9px; border: 1px solid var(--c-bronze); background: var(--c-paper); color: var(--c-bronze-ink); border-radius: var(--r-pill); }
+
+    .c-ctx-mini { display: flex; align-items: center; gap: 8px; padding: 9px 16px; border-top: 1px solid var(--c-sand); font-size: 13px; color: var(--c-ink2); }
+    .c-ctx-mini .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .c-ctx-mini button { font-family: var(--mono); font-size: 10px; color: var(--c-forest); background: none; border: none; text-decoration: underline; cursor: pointer; flex-shrink: 0; padding: 0; }
+
+    /* ── Message feed / waiting cards live here ─────────────────────── */
+    .messages { flex: 1; overflow-y: auto; padding: 16px 14px; display: flex; flex-direction: column; gap: 12px; -webkit-overflow-scrolling: touch; }
+
+    /* Context card */
+    .c-ctx { background: var(--c-paper); border: 1px solid var(--c-sand); border-radius: var(--r-card); box-shadow: var(--shadow-raised); padding: 16px; display: flex; flex-direction: column; gap: 11px; }
+    .c-ctx-h { font-family: var(--cd-serif); font-size: 20px; font-weight: 600; letter-spacing: -0.005em; }
+    .c-ctx-issue { font-size: 16px; line-height: 1.65; color: var(--c-ink); white-space: pre-wrap; word-break: break-word; }
+    .c-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+    .c-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 4px 9px; background: var(--c-sage-soft); border: 1px solid var(--c-sage); color: var(--c-forest); border-radius: 999px; }
+    .c-chip .tk { font-size: 9px; }
+    .c-ctx-note { font-size: 12px; color: var(--c-ink3); line-height: 1.5; }
+    .c-ctx-acts { display: flex; gap: 7px; align-items: center; }
+    .c-btn { font-family: var(--cd-ui); font-size: 14px; font-weight: 600; padding: 7px 16px; border: 1px solid var(--c-forest); background: var(--c-forest); color: #FAF7F0; cursor: pointer; border-radius: var(--r-pill); transition: background 0.18s var(--ease-out), transform 0.18s var(--ease-out); }
+    .c-btn:hover { background: #263D2E; }
+    .c-btn:active { transform: scale(0.97); }
+    .c-btn.ghost { background: transparent; color: var(--c-forest); }
+    .c-edit { width: 100%; min-height: 78px; background: var(--c-bg); border: 1px solid var(--c-forest); border-radius: 10px; color: var(--c-ink); font-family: var(--cd-ui); font-size: 16px; padding: 10px 12px; resize: vertical; line-height: 1.5; }
+    .c-saved { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--c-forest); }
+
+    /* Bench */
+    .c-bench { background: var(--c-paper); border: 1px solid var(--c-sand); border-radius: var(--r-card); box-shadow: var(--shadow-soft); padding: 16px; display: flex; flex-direction: column; gap: 13px; }
+    .c-bench-top { display: flex; align-items: baseline; gap: 8px; }
+    .c-bench-h { font-family: var(--mono); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--c-ink3); }
+    .c-bench-more { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--c-ink2); white-space: nowrap; }
+    /* 3 x 2, not 6 across: two rows buys each expert room to be legible. */
+    .c-faces { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 8px; }
+    .c-face { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+    .c-face img { width: 46px; height: 46px; border-radius: 50%; object-fit: cover; border: 1px solid var(--c-sand); transition: transform 0.2s var(--ease-out), border-color 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out); }
+    .c-face:hover img { transform: translateY(-2px); border-color: var(--c-sage); box-shadow: var(--shadow-soft); }
+    .c-face .nm { font-size: 11px; color: var(--c-ink); text-align: center; line-height: 1.2; font-weight: 600; }
+    /* Full tag at 8px, truncated with ellipsis: one field fewer to drift than a
+       separate short label. */
+    .c-face .sb { font-family: var(--mono); font-size: 8px; color: var(--c-ink3); text-align: center; line-height: 1.25; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* Credential widgets under each face: the rating and a real profile link. */
+    .c-face .w { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+    .c-face .w .r { font-family: var(--mono); font-size: 9.5px; color: var(--c-forest); font-variant-numeric: tabular-nums; }
+    .c-face .w .r.pending { color: var(--c-rust); font-size: 8px; border: 1px dashed var(--c-rust); padding: 0 3px; }
+    .c-face .w a { width: 11px; height: 11px; color: var(--c-ink3); display: block; flex-shrink: 0; }
+    .c-face .w a:hover { color: var(--c-forest); }
+    .c-face .w a svg { width: 100%; height: 100%; fill: currentColor; display: block; }
+
+    /* Steps: visual, minimal words */
+    .c-steps { background: var(--c-paper); border: 1px solid var(--c-sand); border-radius: var(--r-card); box-shadow: var(--shadow-soft); padding: 16px; display: flex; flex-direction: column; gap: 11px; }
+    .c-steps-h { font-family: var(--cd-serif); font-size: 20px; font-weight: 600; }
+    .c-step { display: flex; gap: 10px; align-items: center; font-size: 14px; color: var(--c-ink2); }
+    .c-step .n { width: 20px; height: 20px; flex-shrink: 0; border-radius: 50%; background: var(--c-sage-soft); border: 1px solid var(--c-sage); color: var(--c-forest); font-family: var(--mono); font-size: 9.5px; display: flex; align-items: center; justify-content: center; }
+    .c-foot { font-size: 12px; color: var(--c-ink3); border-top: 1px solid var(--c-sand); padding-top: 10px; line-height: 1.5; }
+
+    /* Messages */
+    .msg { max-width: 80%; display: flex; flex-direction: column; }
     .msg.mine { align-self: flex-end; align-items: flex-end; }
     .msg.theirs { align-self: flex-start; align-items: flex-start; }
-    .msg .meta {
-      font-size: 10.5px;
-      color: var(--text3);
-      margin-bottom: 3px;
-      padding: 0 4px;
-      display: flex;
-      gap: 6px;
-    }
-    .msg .meta .who { font-weight: 600; color: var(--text2); }
-    .msg .bubble {
-      padding: 8px 12px;
-      border-radius: 12px;
-      font-size: 13.5px;
-      line-height: 1.45;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-    .msg.mine .bubble {
-      background: var(--amber);
-      color: #000;
-      border-bottom-right-radius: 4px;
-    }
-    .msg.theirs .bubble {
-      background: var(--raised);
-      border: 1px solid var(--border);
-      border-bottom-left-radius: 4px;
-    }
+    .msg .meta { font-family: var(--mono); font-size: 9px; color: var(--c-ink3); margin-bottom: 4px; padding: 0 3px; display: flex; gap: 6px; letter-spacing: 0.04em; }
+    .bubble { padding: 9px 14px; border-radius: 16px; font-size: 16px; line-height: 1.65; white-space: pre-wrap; word-break: break-word; }
+    .msg.mine .bubble { background: var(--c-forest); color: #FAF7F0; border-bottom-right-radius: 4px; }
+    .msg.theirs .bubble { background: var(--c-paper); border: 1px solid var(--c-sand); border-bottom-left-radius: 4px; }
+    /* Actions on YOUR MACHINE. Bronze, not green, and a fully rounded tinted
+       row (no left border): the eye separates them from chat while scrolling. */
     .msg.activity {
-      max-width: 100%;
-      align-self: stretch;
-      flex-direction: row;
-      align-items: baseline;
-      gap: 7px;
-      font-size: 12px;
-      color: var(--text2);
-      padding: 1px 2px;
+      max-width: 100%; align-self: stretch; flex-direction: row; align-items: center; gap: 8px;
+      font-size: 11.5px; color: var(--c-bronze-ink); padding: 5px 11px;
+      background: var(--c-bronze-soft); border-radius: var(--r-pill);
     }
-    .msg.activity .act-dot { color: var(--amber); flex-shrink: 0; }
-    .msg.activity .act-text { flex: 1; word-break: break-word; }
-    .msg.activity .act-time { font-size: 10px; color: var(--text3); flex-shrink: 0; }
-    .messages .empty {
-      margin: auto;
-      text-align: center;
-      color: var(--text3);
-      font-size: 12.5px;
-      line-height: 1.6;
-      max-width: 260px;
-    }
+    .msg.activity .act-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--c-bronze); flex-shrink: 0; }
+    .msg.activity .act-text { flex: 1; word-break: break-word; font-family: var(--mono); font-size: 10.5px; }
+    .msg.activity .act-time { font-family: var(--mono); font-size: 9px; color: var(--c-bronze); flex-shrink: 0; }
 
-    .composer {
-      display: flex;
-      gap: 8px;
-      padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
-      background: var(--surface);
-      border-top: 1px solid var(--border);
-      flex-shrink: 0;
-    }
-    .composer input {
-      flex: 1;
-      min-width: 0;
-      padding: 10px 12px;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: var(--bg);
-      color: var(--text);
-      font-size: 16px; /* >=16px stops iOS zoom-on-focus */
-      font-family: var(--sans);
-    }
-    .composer input:focus { outline: none; border-color: var(--amber); }
-    .composer input:disabled { opacity: 0.5; }
-    .composer button {
-      padding: 10px 18px;
-      border-radius: 8px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      border: 1px solid var(--amber);
-      background: var(--amber);
-      color: #000;
-      font-family: var(--sans);
-      flex-shrink: 0;
-    }
-    .composer button:disabled { opacity: 0.5; cursor: not-allowed; }
+    /* ── Composer ───────────────────────────────────────────────────── */
+    .composer { display: flex; gap: 8px; padding: 12px 14px calc(14px + env(safe-area-inset-bottom)); background: var(--c-paper); border-top: 1px solid var(--c-sand); flex-shrink: 0; }
+    .composer input { flex: 1; min-width: 0; padding: 10px 16px; border-radius: var(--r-pill); border: 1px solid var(--c-sand2); background: var(--c-bg); color: var(--c-ink); font-size: 16px; font-family: var(--cd-ui); box-shadow: var(--shadow-soft); transition: border-color 0.18s var(--ease-out), box-shadow 0.18s var(--ease-out); }
+    .composer input:focus { outline: none; border-color: var(--c-forest); box-shadow: var(--shadow-raised); }
+    .composer input::placeholder { color: var(--c-ink3); }
+    .composer button { padding: 10px 18px; border-radius: var(--r-pill); font-size: 14px; font-weight: 600; border: 1px solid var(--c-forest); background: var(--c-forest); color: #FAF7F0; font-family: var(--cd-ui); flex-shrink: 0; cursor: pointer; transition: background 0.18s var(--ease-out), transform 0.18s var(--ease-out); }
+    .composer button:hover { background: #263D2E; }
+    .composer button:active { transform: scale(0.96); }
+    .composer.off input, .composer.off button { opacity: 0.4; cursor: not-allowed; }
 
-    .fatal {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-    }
-    .fatal-card {
-      width: 100%;
-      max-width: 340px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 26px;
-      text-align: center;
-    }
-    .fatal-card h1 { font-size: 16px; margin-bottom: 8px; }
-    .fatal-card p { font-size: 13px; color: var(--text2); line-height: 1.55; }
+    /* ── Fatal card (invalid or missing link) ───────────────────────── */
+    .fatal { flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .fatal-card { width: 100%; max-width: 360px; background: var(--c-paper); border: 1px solid var(--c-sand); border-radius: var(--r-card); box-shadow: var(--shadow-raised); padding: 28px; text-align: center; }
+    .fatal-card h1 { font-family: var(--cd-serif); font-size: 22px; font-weight: 600; margin: 0 0 10px; }
+    .fatal-card p { font-size: 14px; color: var(--c-ink2); line-height: 1.6; margin: 0; }
+
+    /* ── Motion. One orchestrated moment (the expert card arriving), a gentle
+         stagger on state changes, and micro-transitions on everything touchable.
+         Nothing loops except the connection dot's slow breath. ─────────────── */
+    @keyframes rise { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+    @keyframes settle { from { opacity: 0; transform: translateY(-6px) scale(0.985); } to { opacity: 1; transform: none; } }
+    @keyframes breathe { 50% { opacity: 0.45; } }
+
+    .messages > * { animation: rise 0.32s var(--ease-out) both; }
+    .messages > *:nth-child(2) { animation-delay: 0.06s; }
+    .messages > *:nth-child(3) { animation-delay: 0.12s; }
+    .messages > *:nth-child(n+4) { animation-delay: 0.16s; }
+
+    /* The trust moment gets the longest, softest entrance on the page. */
+    .pinned { animation: settle 0.45s var(--ease-out) both; }
+    .conn-dot { animation: breathe 2.8s ease-in-out infinite; }
+    .banner { transition: background 0.25s var(--ease-out), color 0.25s var(--ease-out); }
+    .c-ctx-mini button, .c-li { transition: color 0.18s var(--ease-out); }
+    .c-li:hover { color: var(--c-forest); }
+
+    :focus-visible { outline: 2px solid var(--c-forest); outline-offset: 2px; }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
   </style>
 </head>
 <body>
   <header class="topbar">
-    <div class="logo">Get An <span>Expert</span></div>
+    <div class="logo">get an <em>expert</em></div>
     <div class="conn">
-      <div class="conn-dot" id="conn-dot"></div>
-      <span id="conn-label">Connecting&hellip;</span>
+      <span class="conn-dot off" id="conn-dot"></span>
+      <span id="conn-label">CONNECTING</span>
     </div>
   </header>
 
   <div class="banner hidden" id="banner"></div>
 
-  <main class="messages" id="messages">
-    <div class="empty" id="empty">No messages yet. Say hello &mdash; your messages are delivered to the expert working on your machine.</div>
-  </main>
+  <div class="pinned hidden" id="pinned">
+    <div class="c-pin-label" id="pin-label">Your expert</div>
+    <div class="c-card" id="expert-card"></div>
+    <div class="c-mini hidden" id="mini"></div>
+    <div class="c-ctx-mini hidden" id="ctx-mini"></div>
+    <details class="c-access" id="access">
+      <summary>
+        <span class="lock"></span>
+        <span>Access you granted</span>
+        <span class="chev">&#9660;</span>
+      </summary>
+      <div class="c-access-body" id="access-body"></div>
+    </details>
+  </div>
+
+  <main class="messages" id="messages"></main>
 
   <form class="composer" id="composer">
     <input
       type="text"
       id="input"
       maxlength="2000"
-      placeholder="Type a message"
+      placeholder="Message your expert"
       autocomplete="off"
       aria-label="Chat message"
     >
