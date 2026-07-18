@@ -79,7 +79,7 @@ describe("buildChatFooter", () => {
       const footer = buildChatFooter(cmd, opened);
       expect(footer).toContain("relays live");
       expect(footer).toContain("your agent's replies");
-      expect(footer).toContain("RELAY ON");
+      expect(footer).toContain("🟢 LIVE");
       expect(footer).toContain("/end");
       expect(footer).toContain("/pause");
       // Honest about silent install failure: the indicator is the truth test.

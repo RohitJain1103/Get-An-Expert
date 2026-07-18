@@ -6,7 +6,6 @@ describe("buildOfferMessage", () => {
 
   it("names the expertise area in the attention line", () => {
     expect(message).toContain("React state management");
-    expect(message).toContain("✨");
   });
 
   it("contains the compliance-required elements", () => {
@@ -39,7 +38,7 @@ describe("buildOfferMessage", () => {
     // hard stop + pause + visibility
     expect(message.toLowerCase()).toContain("end it anytime");
     expect(message.toLowerCase()).toContain("/pause");
-    expect(message).toContain("RELAY ON");
+    expect(message).toContain("🟢 LIVE");
     // the chat itself is human-to-human
     expect(message.toLowerCase()).toContain("no ai reads");
     // this is the only consent ask

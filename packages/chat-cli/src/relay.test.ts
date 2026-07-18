@@ -53,7 +53,7 @@ describe("runRelay", () => {
     expect(result).toEqual({ stdout: null, spoolPath: null });
   });
 
-  it("spools a redacted, typed event and reports RELAY ON for prompts", () => {
+  it("spools a redacted, typed event and reports 🟢 LIVE for prompts", () => {
     writeRelayFlag({ ...flag, expertName: "Priya" });
     const result = runRelay(
       "claude-code",
@@ -61,7 +61,7 @@ describe("runRelay", () => {
       JSON.stringify({ prompt: "key sk-ant-api03-abcdefghijklmnopqrstuvwx" }),
       NOW,
     );
-    expect(result.stdout).toContain("RELAY ON");
+    expect(result.stdout).toContain("🟢 LIVE");
     expect(result.stdout).toContain("Priya");
     expect(result.spoolPath).not.toBeNull();
     const spool = readSpool(result.spoolPath as string);
@@ -83,7 +83,7 @@ describe("runRelay", () => {
       NOW,
     );
     expect(result.spoolPath).toBeNull();
-    expect(result.stdout).toContain("RELAY ON");
+    expect(result.stdout).toContain("🟢 LIVE");
     expect(existsSync(join(dir, "outbox"))).toBe(false);
   });
 

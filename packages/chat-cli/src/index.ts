@@ -141,7 +141,7 @@ async function main(): Promise<void> {
       if (!result.ok) return; // transient; next tick retries
       if (result.expertName && result.expertName !== expertName) {
         expertName = result.expertName;
-        // Remember the name locally so the host's RELAY ON indicator can
+        // Remember the name locally so the host's 🟢 LIVE indicator can
         // say who is watching.
         const flag = readRelayFlag();
         if (flag?.requestId === requestId) {
