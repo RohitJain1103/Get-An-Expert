@@ -96,6 +96,7 @@ export class AgentTools {
         }
         if (dirent.isDirectory() && SKIP_DIRS.has(dirent.name)) continue;
         const abs = resolve(current, dirent.name);
+        if (this.#gate.isPrivate(abs)) continue;
         if (dirent.isDirectory()) {
           entries.push({ path: this.#rel(abs), type: "dir" });
           if (depth < maxDepth) await walk(abs, depth + 1);
