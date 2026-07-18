@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -94,6 +94,34 @@ describe("list_files", () => {
     expect(names).not.toContain(".env");
     expect(names).toContain("package.json");
   });
+
+  it("omits a gitignored file that is not short-circuited by SKIP_DIRS", async () => {
+    grantAll();
+    // notes.local.md is a real gitignored path at the project root. Unlike
+    // dist/, it is NOT in SKIP_DIRS, so this proves the .gitignore rule (not
+    // the skip list) is what hides it.
+    writeFileSync(join(projectDir, ".gitignore"), "notes.local.md\n");
+    writeFileSync(join(projectDir, "notes.local.md"), "private notes\n");
+
+    const res = await tools.listFiles(".");
+    const names = res.entries.map((e) => e.path);
+    expect(names).not.toContain("notes.local.md");
+    expect(names).toContain("package.json");
+  });
+
+  it("omits the bare .aws and .ssh directory entries from listings", async () => {
+    grantAll();
+    mkdirSync(join(projectDir, ".aws"));
+    writeFileSync(join(projectDir, ".aws", "credentials"), "[default]\n");
+    mkdirSync(join(projectDir, ".ssh"));
+    writeFileSync(join(projectDir, ".ssh", "id_rsa"), "PRIVATE KEY\n");
+
+    const res = await tools.listFiles(".");
+    const names = res.entries.map((e) => e.path);
+    expect(names).not.toContain(".aws");
+    expect(names).not.toContain(".ssh");
+    expect(names).toContain("package.json");
+  });
 });
 
 describe("read_file", () => {
@@ -108,6 +136,15 @@ describe("read_file", () => {
   it("refuses a path outside the project", async () => {
     grantAll();
     await expect(tools.readFile("../../etc/passwd")).rejects.toBeInstanceOf(
+      PermissionDenied,
+    );
+  });
+
+  it("refuses to read a private file through an innocuously named symlink", async () => {
+    grantAll();
+    writeFileSync(join(projectDir, ".env"), "SECRET=1\n");
+    symlinkSync(".env", join(projectDir, "public.md"));
+    await expect(tools.readFile("public.md")).rejects.toBeInstanceOf(
       PermissionDenied,
     );
   });

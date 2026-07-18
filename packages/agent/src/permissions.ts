@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { readFileSync, realpathSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import ignore from "ignore";
 
 /**
@@ -15,10 +15,15 @@ const SECRET_DENYLIST = [
   "*.key",
   "id_rsa",
   "id_ed25519",
+  // Both the bare directory and its contents: the bare form keeps the .aws /
+  // .ssh entries themselves out of directory listings, not just their children.
+  ".aws",
   ".aws/",
+  ".ssh",
   ".ssh/",
-  "credentials",
-  "credentials.*",
+  // Any basename starting with "credentials" (credentials.json,
+  // credentials-prod.json, credentials-production.json, ...).
+  "credentials*",
 ];
 
 export type Scope = "files" | "terminal" | "browser";
@@ -60,7 +65,16 @@ export class PermissionGate {
   #gitignore?: ReturnType<typeof ignore>;
 
   constructor(projectDir: string) {
-    this.#projectDir = resolve(projectDir);
+    const resolved = resolve(projectDir);
+    // Resolve the project root through any symlinks up front so containment
+    // compares real path against real path. If the directory does not exist
+    // yet (e.g. in unit tests using a synthetic path), fall back to the
+    // lexical resolve so behavior is unchanged.
+    try {
+      this.#projectDir = realpathSync(resolved);
+    } catch {
+      this.#projectDir = resolved;
+    }
   }
 
   get projectDir(): string {
@@ -108,9 +122,14 @@ export class PermissionGate {
     if (!this.#files) {
       throw new PermissionDenied("The customer has not granted file access.");
     }
-    const target = isAbsolute(path)
+    const lexical = isAbsolute(path)
       ? resolve(path)
       : resolve(this.#projectDir, path);
+    // Resolve symlinks BEFORE the containment and private-file checks. A
+    // lexical resolve alone would let a pre-existing symlink with an innocent
+    // name (public.md -> .env, or -> /etc/passwd) slip past both checks and
+    // then have the read follow the link straight to the secret.
+    const target = this.#realPath(lexical);
     if (target !== this.#projectDir && !target.startsWith(this.#projectDir + sep)) {
       throw new PermissionDenied(
         `Path is outside the approved project directory (${this.#projectDir}).`,
@@ -122,6 +141,30 @@ export class PermissionGate {
       );
     }
     return target;
+  }
+
+  /**
+   * Resolve `lexical` (an already absolute path) through any symlinks so the
+   * containment and private-file checks run on the REAL location on disk.
+   *
+   *  - Existing path: follow it to its real target.
+   *  - Not-yet-existing path (a write to a new file): resolve the real PARENT
+   *    directory and rejoin the basename, so a symlinked parent cannot smuggle
+   *    the path out of the project while a brand-new leaf name still resolves.
+   *  - Broken link or missing parent: fall back to the lexical path so
+   *    containment still runs, and a genuine read just hits the normal
+   *    not-found behavior instead of crashing.
+   */
+  #realPath(lexical: string): string {
+    try {
+      return realpathSync(lexical);
+    } catch {
+      try {
+        return join(realpathSync(dirname(lexical)), basename(lexical));
+      } catch {
+        return lexical;
+      }
+    }
   }
 
   /**

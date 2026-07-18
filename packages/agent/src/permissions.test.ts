@@ -1,6 +1,6 @@
-import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { PermissionDenied, PermissionGate } from "./permissions";
 
@@ -177,5 +177,76 @@ describe("PermissionGate.checkFile private files (.gitignore + secret denylist)"
       expect((err as Error).message).not.toContain("id_rsa");
       expect((err as Error).message).not.toContain(".pem");
     }
+  });
+
+  it("blocks credentials files with any suffix on the denylist", () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), "gae-perm-")));
+    writeFileSync(join(dir, "credentials-prod.json"), "{}\n");
+    const g = realProjectGate(dir);
+    expect(() => g.checkFile(join(dir, "credentials-prod.json"))).toThrow(
+      PermissionDenied,
+    );
+    expect(() => g.checkFile(join(dir, "credentials-production.json"))).toThrow(
+      PermissionDenied,
+    );
+  });
+});
+
+describe("PermissionGate.checkFile symlink resolution", () => {
+  function realProjectGate(dir: string) {
+    const g = new PermissionGate(dir);
+    g.grant({ files: true, terminal: false, browser: false });
+    return g;
+  }
+
+  it("denies reading a private file through an innocuously named symlink", () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), "gae-perm-")));
+    writeFileSync(join(dir, ".env"), "SECRET=1\n");
+    // A symlink with a public-looking name that actually points at the secret.
+    symlinkSync(".env", join(dir, "public.md"));
+    const g = realProjectGate(dir);
+    expect(() => g.checkFile(join(dir, "public.md"))).toThrow(PermissionDenied);
+  });
+
+  it("denies a symlink whose real target escapes the project directory", () => {
+    const parent = realpathSync(mkdtempSync(join(tmpdir(), "gae-perm-")));
+    const dir = join(parent, "project");
+    mkdirSync(dir);
+    const outsideSecret = join(parent, "outside.txt");
+    writeFileSync(outsideSecret, "top secret\n");
+    symlinkSync(outsideSecret, join(dir, "notes.md"));
+    const g = realProjectGate(dir);
+    expect(() => g.checkFile(join(dir, "notes.md"))).toThrow(PermissionDenied);
+  });
+
+  it("still allows a normal (non-symlink) file after real-path resolution", () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), "gae-perm-")));
+    mkdirSync(join(dir, "src"));
+    writeFileSync(join(dir, "src", "index.ts"), "export {};\n");
+    const g = realProjectGate(dir);
+    expect(g.checkFile(join(dir, "src", "index.ts"))).toBe(join(dir, "src", "index.ts"));
+  });
+
+  it("allows a write to a not-yet-existing file inside the project", () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), "gae-perm-")));
+    const target = join(dir, "src", "new-file.ts");
+    mkdirSync(dirname(target));
+    const g = realProjectGate(dir);
+    // The parent exists but the leaf does not yet; containment must still pass.
+    expect(g.checkFile(target)).toBe(target);
+  });
+
+  it("denies a write whose real parent directory is a symlink out of the project", () => {
+    const parent = realpathSync(mkdtempSync(join(tmpdir(), "gae-perm-")));
+    const dir = join(parent, "project");
+    mkdirSync(dir);
+    const outsideDir = join(parent, "outside");
+    mkdirSync(outsideDir);
+    // A directory-level symlink inside the project that resolves outside it.
+    symlinkSync(outsideDir, join(dir, "escape"));
+    const g = realProjectGate(dir);
+    expect(() => g.checkFile(join(dir, "escape", "planted.txt"))).toThrow(
+      PermissionDenied,
+    );
   });
 });
