@@ -65,7 +65,7 @@ function render(data: ConsentData): void {
           <div class="pcell">${ic("lock")}<div><b>Consent based</b><span>Nothing is sent until you approve</span></div></div>
           <div class="pcell">${ic("eye")}<div><b>Fully logged</b><span>Every action, visible live</span></div></div>
           <div class="pcell">${ic("shield")}<div><b>Secrets redacted</b><span>Locally, before anything is sent</span></div></div>
-          <div class="pcell">${ic("fileoff")}<div><b>Keys stay safe</b><span>Your keys are never shared</span></div></div>
+          <div class="pcell">${ic("fileoff")}<div><b>Source files stay put</b><span>Your code is never sent</span></div></div>
         </div>
         <div class="btns">
           <button class="btn primary sel" data-a="yes">Yes</button>
