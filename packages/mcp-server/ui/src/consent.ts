@@ -51,14 +51,15 @@ function render(data: ConsentData): void {
       <div class="body">
         <div class="consent-hd">
           <div class="lock-badge">${ic("lock")}</div>
-          <div class="lead-line">An expert can take context and help with ${esc(
-            data.expertiseArea,
-          )} in ${esc(data.projectDir)}.</div>
+          <div class="hd-text">
+            <div class="lead-line">Allow expert to get context with your consent</div>
+            <div class="lead-sub">${esc(data.expertiseArea)} in ${esc(
+              data.projectDir,
+            )}</div>
+          </div>
         </div>
         <div class="scope-icons">
-          <span>${ic("folder")}files</span>
-          <span>${ic("terminal")}terminal</span>
-          <span>${ic("globe")}browser</span>
+          <span>${ic("terminal")}[files//terminal]</span>
         </div>
         <div class="privacy-grid">
           <div class="pcell">${ic("lock")}<div><b>Consent based</b><span>Nothing is sent until you approve</span></div></div>

@@ -112,13 +112,13 @@ body {
 p {
   margin: 0;
 }
+/* Symbols carry their own fill/stroke (SF Symbols style: filled objects,
+ * stroked actions); the class only sets caps, joins and layout. */
 .ic {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.7;
   stroke-linecap: round;
   stroke-linejoin: round;
   flex: none;
+  overflow: visible;
 }
 
 .card {
@@ -155,15 +155,26 @@ p {
   box-shadow: inset 0 0 0 1px var(--green-line);
 }
 .lock-badge .ic {
-  width: 25px;
-  height: 25px;
-  stroke-width: 1.8;
+  width: 26px;
+  height: 26px;
 }
-.consent-hd .lead-line {
-  font-size: 15px;
+.hd-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.lead-line {
+  font-size: 15.5px;
   font-weight: 640;
   letter-spacing: -0.01em;
-  line-height: 1.35;
+  line-height: 1.3;
+  text-wrap: balance;
+}
+.lead-sub {
+  font-size: 12.5px;
+  color: var(--text2);
+  font-family: var(--mono);
+  letter-spacing: -0.01em;
 }
 
 .scope-icons {
@@ -174,14 +185,15 @@ p {
 .scope-icons span {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   font-family: var(--mono);
-  font-size: 11.5px;
-  color: var(--text2);
+  font-size: 12px;
+  color: var(--text);
   background: var(--raised);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 5px 10px;
+  padding: 6px 11px;
+  letter-spacing: 0.01em;
 }
 .scope-icons .ic {
   width: 15px;
@@ -304,8 +316,8 @@ p {
   outline-offset: 2px;
 }
 .btn .ic {
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
 }
 .note {
   font-size: 12px;
@@ -317,8 +329,8 @@ p {
   gap: 6px;
 }
 .note .ic {
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
   color: var(--green);
 }
 .sep {
@@ -377,8 +389,8 @@ p {
   box-shadow: inset 0 0 0 1px var(--green-line);
 }
 .radar .core .ic {
-  width: 25px;
-  height: 25px;
+  width: 26px;
+  height: 26px;
 }
 .match .headline {
   font-size: 15.5px;
@@ -410,8 +422,8 @@ p {
   padding: 4px 9px;
 }
 .match-meta .ic {
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
   color: var(--green);
 }
 .reassure {
@@ -587,7 +599,7 @@ p {
   color: var(--text2);
   display: flex;
   gap: 8px;
-  align-items: baseline;
+  align-items: center;
 }
 .aline .t {
   color: var(--text3);
@@ -595,10 +607,9 @@ p {
   flex: none;
 }
 .aline .ic {
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
   color: var(--text3);
-  align-self: center;
 }
 .aline .s {
   color: var(--text);
@@ -681,8 +692,8 @@ p {
   gap: 8px;
 }
 .foot .ic {
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
   color: var(--green);
 }
 
@@ -709,9 +720,8 @@ p {
   box-shadow: inset 0 0 0 1px var(--green-line);
 }
 .check-hero .ic {
-  width: 35px;
-  height: 35px;
-  stroke-width: 2.2;
+  width: 36px;
+  height: 36px;
   stroke-dasharray: 40;
   stroke-dashoffset: 40;
   animation: draw 0.55s 0.25s ease forwards;
@@ -767,8 +777,8 @@ p {
   padding: 5px 10px;
 }
 .deliver-stats .ic {
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
   color: var(--green);
 }
 .rating {
@@ -799,10 +809,10 @@ p {
 }
 .stars .ic:hover {
   transform: scale(1.12);
+  color: var(--green);
 }
 .stars .ic.on {
   color: var(--green);
-  fill: var(--green);
 }
 .rated-msg {
   display: none;

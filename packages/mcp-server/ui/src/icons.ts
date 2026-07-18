@@ -1,24 +1,61 @@
 /**
- * Hand-drawn inline SVG icon set from the approved card preview. The MCP Apps
- * iframe CSP blocks icon libraries and external assets, so the symbols ship
- * inside the bundle and are injected once as a hidden sprite sheet.
- * Consistent 1.7 stroke, rounded caps (the .ic class in shared.css).
+ * Icon sprite for the cards, drawn in the SF Symbols convention the approved
+ * iOS-icon mock uses: solid filled objects (lock, eye, shield, person, star,
+ * play), bold rounded strokes for actions (check, arrow), and outline where a
+ * fill would lose detail at 15 to 19px (fileoff, terminal, globe, clock,
+ * edit). Symbols carry their own fill/stroke attributes; the .ic class only
+ * sets caps, joins and sizing. The MCP Apps iframe CSP blocks icon libraries,
+ * so the sprite ships inside the bundle and is injected once.
  */
 export const ICON_SPRITE = `<svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <symbol id="lock" viewBox="0 0 24 24"><rect x="4.5" y="10.5" width="15" height="10" rx="2.6"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15" r="1.4" fill="currentColor" stroke="none"/></symbol>
-  <symbol id="eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.8 12 5.8 21.5 12 21.5 12 18 18.2 12 18.2 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.7"/></symbol>
-  <symbol id="shield" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.4-3 7.4-7 8.9-4-1.5-7-4.5-7-8.9V6l7-3Z"/><path d="M9 12l2.2 2.2L15 10.4"/></symbol>
-  <symbol id="fileoff" viewBox="0 0 24 24"><path d="M13.5 3H7a1 1 0 0 0-1 1v13"/><path d="M18 8.5V20a1 1 0 0 1-1 1H8"/><path d="M14 3v4a1 1 0 0 0 1 1h4"/><line x1="4.5" y1="20.5" x2="19.5" y2="3.5"/></symbol>
-  <symbol id="folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h3.5l2 2H19a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></symbol>
-  <symbol id="terminal" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.2"/><path d="M7.5 9.5l3 2.5-3 2.5"/><line x1="12.5" y1="15" x2="16" y2="15"/></symbol>
-  <symbol id="globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><line x1="3.5" y1="12" x2="20.5" y2="12"/><path d="M12 3.5c2.4 2.3 2.4 14.7 0 17M12 3.5c-2.4 2.3-2.4 14.7 0 17"/></symbol>
-  <symbol id="arrow" viewBox="0 0 24 24"><line x1="5" y1="12" x2="18" y2="12"/><path d="M13 7l5 5-5 5"/></symbol>
-  <symbol id="check" viewBox="0 0 24 24"><path d="M4 12.5l5 5 11-11"/></symbol>
-  <symbol id="edit" viewBox="0 0 24 24"><path d="M4 20h4L18.5 9.5a2 2 0 0 0-3-3L5 17v3Z"/></symbol>
-  <symbol id="play" viewBox="0 0 24 24"><path d="M7 5l11 7-11 7V5Z" fill="currentColor" stroke="none"/></symbol>
-  <symbol id="person" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></symbol>
-  <symbol id="clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.2v5l3.4 2"/></symbol>
-  <symbol id="star" viewBox="0 0 24 24"><path d="M12 3.4l2.6 5.3 5.9.9-4.3 4.1 1 5.9L12 16.8l-5.2 2.8 1-5.9L3.5 9.6l5.9-.9L12 3.4Z"/></symbol>
+  <symbol id="lock" viewBox="0 0 24 24">
+    <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2"/>
+    <path fill="currentColor" fill-rule="evenodd" d="M6.5 10.3h11A2.5 2.5 0 0 1 20 12.8v5.7A2.5 2.5 0 0 1 17.5 21h-11A2.5 2.5 0 0 1 4 18.5v-5.7a2.5 2.5 0 0 1 2.5-2.5Zm5.5 3.9a1.5 1.5 0 0 0-.7 2.83V18.1a.7.7 0 0 0 1.4 0v-1.07a1.5 1.5 0 0 0-.7-2.83Z"/>
+  </symbol>
+  <symbol id="eye" viewBox="0 0 24 24">
+    <path fill="currentColor" fill-rule="evenodd" d="M12 5.4C5.9 5.4 2.4 12 2.4 12s3.5 6.6 9.6 6.6S21.6 12 21.6 12 18.1 5.4 12 5.4Zm0 3.9a2.7 2.7 0 1 0 0 5.4 2.7 2.7 0 0 0 0-5.4Z"/>
+  </symbol>
+  <symbol id="shield" viewBox="0 0 24 24">
+    <path fill="currentColor" fill-rule="evenodd" d="M11.6 2.6a1 1 0 0 1 .8 0l7 3a1 1 0 0 1 .6.92V11c0 4.8-3.2 8.3-7.7 9.95a.9.9 0 0 1-.6 0C7.2 19.3 4 15.8 4 11V6.52a1 1 0 0 1 .6-.92l7-3Zm4.3 6.86a1 1 0 0 0-1.5-1.32l-3.25 3.66-1.3-1.3a1 1 0 0 0-1.42 1.42l2.05 2.05a1 1 0 0 0 1.46-.05l3.96-4.46Z"/>
+  </symbol>
+  <symbol id="fileoff" viewBox="0 0 24 24">
+    <path d="M13.5 3.5H7A1.5 1.5 0 0 0 5.5 5v14A1.5 1.5 0 0 0 7 20.5h10A1.5 1.5 0 0 0 18.5 19V8.5L13.5 3.5Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+    <path d="M13 4v4.2a1 1 0 0 0 1 1H18.3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+    <line x1="5" y1="20.4" x2="19" y2="4" stroke="currentColor" stroke-width="1.9"/>
+  </symbol>
+  <symbol id="terminal" viewBox="0 0 24 24">
+    <rect x="3" y="4.5" width="18" height="15" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/>
+    <path d="M7.5 9.5l2.8 2.5-2.8 2.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    <line x1="12.4" y1="15" x2="16.5" y2="15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="person" viewBox="0 0 24 24">
+    <circle cx="12" cy="8" r="3.7" fill="currentColor"/>
+    <path fill="currentColor" d="M5 19.4a7 7 0 0 1 14 0 1 1 0 0 1-1 1H6a1 1 0 0 1-1-1Z"/>
+  </symbol>
+  <symbol id="play" viewBox="0 0 24 24">
+    <path fill="currentColor" d="M8.4 5.3c0-.82.9-1.32 1.6-.86l8.5 6.2a1.05 1.05 0 0 1 0 1.72l-8.5 6.2c-.7.46-1.6-.04-1.6-.86Z"/>
+  </symbol>
+  <symbol id="globe" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="8.4" fill="none" stroke="currentColor" stroke-width="1.7"/>
+    <line x1="3.6" y1="12" x2="20.4" y2="12" stroke="currentColor" stroke-width="1.7"/>
+    <path d="M12 3.6c2.4 2.4 2.4 14.4 0 16.8M12 3.6c-2.4 2.4-2.4 14.4 0 16.8" fill="none" stroke="currentColor" stroke-width="1.7"/>
+  </symbol>
+  <symbol id="clock" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="8.4" fill="none" stroke="currentColor" stroke-width="1.8"/>
+    <path d="M12 7.4V12l3.2 1.9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="edit" viewBox="0 0 24 24">
+    <path d="M4 20h4L18.5 9.5a2 2 0 0 0-3-3L5 17v3Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="star" viewBox="0 0 24 24">
+    <path fill="currentColor" d="M11.1 3.25a1 1 0 0 1 1.8 0l2.15 4.42 4.86.72a1 1 0 0 1 .56 1.7l-3.53 3.45.83 4.86a1 1 0 0 1-1.45 1.05L12 17.2l-4.33 2.3a1 1 0 0 1-1.45-1.05l.83-4.86-3.53-3.45a1 1 0 0 1 .56-1.7l4.86-.72Z"/>
+  </symbol>
+  <symbol id="check" viewBox="0 0 24 24">
+    <path d="M5 12.6l4.4 4.4L19 7.2" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="arrow" viewBox="0 0 24 24">
+    <path d="M4.5 12h13M12.5 6.5l5.5 5.5-5.5 5.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
 </svg>`;
 
 /** Inline `<svg><use>` reference into the sprite sheet. */
