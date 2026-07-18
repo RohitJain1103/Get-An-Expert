@@ -489,6 +489,19 @@ export class AgentSession {
           .slice(-20)
           .map((e) => ({ at: e.at, kind: e.kind, summary: e.summary })),
         updatedAt: Date.now(),
+        expertProfile: this.#expertProfile
+          ? {
+              name: this.#expertProfile.name,
+              photo: this.#expertProfile.photo,
+              role: this.#expertProfile.role,
+              tag: this.#expertProfile.tag,
+              rating: this.#expertProfile.rating,
+              fixesDelivered: this.#expertProfile.fixesDelivered,
+              companies: this.#expertProfile.companies,
+            }
+          : undefined,
+        lastDelivery: this.#lastDelivery,
+        startedAt: this.#startedAt || undefined,
       });
     } catch {
       // Best-effort: a failed write just means expert_status is briefly stale.
