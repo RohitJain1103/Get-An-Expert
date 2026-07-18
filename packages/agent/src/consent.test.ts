@@ -10,11 +10,25 @@ import {
   resolveScopeElicitation,
 } from "./consent";
 
+/** Copy that must never appear in any consent surface (elicitation prompt or
+ * plain-language fallback): the phrases we promised legal/positioning we would
+ * not use, plus the em dash. */
+const FORBIDDEN_SUBSTRINGS = ["sandboxed", "on your machine", "machine access"];
+const EM_DASH = "—";
+
+function expectClean(text: string): void {
+  const lower = text.toLowerCase();
+  for (const bad of FORBIDDEN_SUBSTRINGS) {
+    expect(lower).not.toContain(bad);
+  }
+  expect(text).not.toContain(EM_DASH);
+}
+
 describe("buildDeclinedMessage", () => {
-  it("returns the standard decline copy", () => {
-    expect(buildDeclinedMessage()).toBe(
-      "No access was granted, so the request was cancelled. Nothing runs on your machine without your approval.",
-    );
+  it("returns decline copy free of forbidden phrasing", () => {
+    const msg = buildDeclinedMessage();
+    expect(msg.toLowerCase()).toContain("no access was granted");
+    expectClean(msg);
   });
 });
 
@@ -23,6 +37,7 @@ describe("buildElicitationFailedMessage", () => {
     const msg = buildElicitationFailedMessage();
     expect(msg.toLowerCase()).toContain("again");
     expect(msg).not.toBe(buildDeclinedMessage());
+    expectClean(msg);
   });
 });
 
@@ -36,25 +51,29 @@ describe("buildScopesMessage", () => {
     expect(msg).toMatch(/browser/i);
   });
 
-  it("does not imply anything is already granted", () => {
+  it("ends with the calm yes-or-choose invitation and does not imply a prior grant", () => {
     const msg = buildScopesMessage("/proj", 3000);
     expect(msg.toLowerCase()).not.toContain("already granted");
     expect(msg.toLowerCase()).not.toContain("has been granted");
-    expect(msg.toLowerCase()).toContain("nothing is granted until you say so");
+    // The assurance carries the not-yet-granted promise in one voice.
+    expect(msg.toLowerCase()).toContain("nothing is accessed or shared until you approve");
+    expect(msg.trimEnd()).toMatch(/reply yes to approve, or tell me which parts\.?$/i);
   });
 
-  it("offers a dismissed variant that keeps the scopes and an explicit way out", () => {
+  it("offers a dismissed variant that still lets the user cleanly decline", () => {
     const msg = buildScopesMessage("/Users/pat/project", 4000, "dismissed");
     expect(msg).toContain("/Users/pat/project");
     expect(msg).toContain("localhost:4000");
     expect(msg).toMatch(/files/i);
-    expect(msg).toMatch(/terminal/i);
-    expect(msg).toMatch(/browser/i);
-    expect(msg.toLowerCase()).toContain("nothing is granted until you say so");
     // The prompt may have been deliberately dismissed — never pressure past a no.
-    expect(msg.toLowerCase()).toContain("just say no");
+    expect(msg.toLowerCase()).toContain("no");
     // Unlike the unsupported variant, don't claim the client can't show prompts.
     expect(msg.toLowerCase()).not.toContain("can't show");
+  });
+
+  it("keeps both variants free of forbidden phrasing", () => {
+    expectClean(buildScopesMessage("/proj", 3000, "unsupported"));
+    expectClean(buildScopesMessage("/proj", 3000, "dismissed"));
   });
 });
 
@@ -96,6 +115,7 @@ describe("canFinalizePending", () => {
 
 describe("resolveScopeElicitation", () => {
   const base = { dir: "/proj", port: 3000 };
+  const caps = { elicitation: {} };
 
   it("returns unsupported and never calls elicit when capability is absent", async () => {
     const elicit = vi.fn();
@@ -104,166 +124,103 @@ describe("resolveScopeElicitation", () => {
     expect(elicit).not.toHaveBeenCalled();
   });
 
-  it("returns declined when the user declines at a human pace", async () => {
-    const elicit = vi.fn().mockResolvedValue({ action: "decline" });
-    const now = vi.fn().mockReturnValueOnce(1000).mockReturnValueOnce(1000 + 5000);
-    const outcome = await resolveScopeElicitation({
-      ...base,
-      capabilities: { elicitation: {} },
-      elicit,
-      now,
-    });
-    expect(outcome).toEqual({ kind: "declined" });
+  it("presents a single decision field with approve preselected", async () => {
+    const elicit = vi.fn().mockResolvedValue({ action: "accept", content: { decision: "approve" } });
+    await resolveScopeElicitation({ ...base, capabilities: caps, elicit });
+    const schema = elicit.mock.calls[0][0].requestedSchema;
+    expect(Object.keys(schema.properties)).toEqual(["decision"]);
+    expect(schema.properties.decision.default).toBe("approve");
+    const consts = schema.properties.decision.oneOf.map((o: { const: string }) => o.const);
+    expect(consts).toEqual(["approve", "choose", "decline"]);
   });
 
-  it("returns declined at exactly the human-decline threshold", async () => {
-    const elicit = vi.fn().mockResolvedValue({ action: "decline" });
-    const now = vi.fn().mockReturnValueOnce(0).mockReturnValueOnce(MIN_HUMAN_DECLINE_MS);
-    const outcome = await resolveScopeElicitation({
-      ...base,
-      capabilities: { elicitation: {} },
-      elicit,
-      now,
-    });
-    expect(outcome).toEqual({ kind: "declined" });
-  });
-
-  it("returns dismissed when a decline arrives faster than a human could read the form", async () => {
-    // Hosts that advertise elicitation but never render it (e.g. the Claude
-    // Code desktop GUI) auto-answer in milliseconds.
-    const elicit = vi.fn().mockResolvedValue({ action: "decline" });
-    const now = vi.fn().mockReturnValueOnce(1000).mockReturnValueOnce(1050);
-    const outcome = await resolveScopeElicitation({
-      ...base,
-      capabilities: { elicitation: {} },
-      elicit,
-      now,
-    });
-    expect(outcome).toEqual({ kind: "dismissed" });
-  });
-
-  it("treats an un-injected instant decline as dismissed (default Date.now wiring)", async () => {
-    const elicit = vi.fn().mockResolvedValue({ action: "decline" });
-    const outcome = await resolveScopeElicitation({
-      ...base,
-      capabilities: { elicitation: {} },
-      elicit,
-    });
-    expect(outcome).toEqual({ kind: "dismissed" });
-  });
-
-  it("returns dismissed on cancel regardless of timing", async () => {
-    const elicit = vi.fn().mockResolvedValue({ action: "cancel" });
-    const slow = vi.fn().mockReturnValueOnce(0).mockReturnValueOnce(60_000);
-    expect(
-      await resolveScopeElicitation({
-        ...base,
-        capabilities: { elicitation: {} },
-        elicit,
-        now: slow,
-      }),
-    ).toEqual({ kind: "dismissed" });
-    expect(
-      await resolveScopeElicitation({ ...base, capabilities: { elicitation: {} }, elicit }),
-    ).toEqual({ kind: "dismissed" });
-  });
-
-  it("returns unsupported when the SDK refuses locally over a missing elicitation mode", async () => {
-    // @modelcontextprotocol/sdk throws a plain Error (not McpError) when the
-    // client advertises elicitation without the form mode we need.
-    const elicit = vi
-      .fn()
-      .mockRejectedValue(new Error("Client does not support form elicitation."));
-    const outcome = await resolveScopeElicitation({
-      ...base,
-      capabilities: { elicitation: {} },
-      elicit,
-    });
-    expect(outcome).toEqual({ kind: "unsupported" });
-  });
-
-  it("returns unsupported when the client rejects elicitation as method-not-found", async () => {
-    // A host that advertises the capability but never implemented the method
-    // behaves like one that never advertised it.
-    const elicit = vi
-      .fn()
-      .mockRejectedValue(new McpError(ErrorCode.MethodNotFound, "Method not found"));
-    const outcome = await resolveScopeElicitation({
-      ...base,
-      capabilities: { elicitation: {} },
-      elicit,
-    });
-    expect(outcome).toEqual({ kind: "unsupported" });
-  });
-
-  it("does not time-gate accepts — an instant accept is still granted", async () => {
-    const elicit = vi.fn().mockResolvedValue({
-      action: "accept",
-      content: { files: true, terminal: true, browser: false, conversation: false },
-    });
-    const now = vi.fn().mockReturnValue(1000);
-    const outcome = await resolveScopeElicitation({
-      ...base,
-      capabilities: { elicitation: {} },
-      elicit,
-      now,
-    });
-    expect(outcome.kind).toBe("granted");
-  });
-
-  it("returns declined when the user accepts but approves nothing", async () => {
-    const elicit = vi.fn().mockResolvedValue({
-      action: "accept",
-      content: { files: false, terminal: false, browser: false, conversation: true },
-    });
-    const outcome = await resolveScopeElicitation({
-      ...base,
-      capabilities: { elicitation: {} },
-      elicit,
-    });
-    expect(outcome).toEqual({ kind: "declined" });
-  });
-
-  it("returns failed when the elicit call throws", async () => {
-    const elicit = vi.fn().mockRejectedValue(new Error("transport closed"));
-    const outcome = await resolveScopeElicitation({
-      ...base,
-      capabilities: { elicitation: {} },
-      elicit,
-    });
-    expect(outcome).toEqual({ kind: "failed" });
-  });
-
-  it("returns granted with the approved scopes and browserPort when browser is approved", async () => {
-    const elicit = vi.fn().mockResolvedValue({
-      action: "accept",
-      content: { files: true, terminal: false, browser: true, conversation: true },
-    });
+  it("grants all three scopes and shares the conversation on approve", async () => {
+    const elicit = vi.fn().mockResolvedValue({ action: "accept", content: { decision: "approve" } });
     const outcome = await resolveScopeElicitation({
       dir: "/proj",
       port: 4000,
-      capabilities: { elicitation: {} },
+      capabilities: caps,
+      elicit,
+    });
+    expect(outcome).toEqual({
+      kind: "granted",
+      consent: {
+        grant: { files: true, terminal: true, browser: true, browserPort: 4000 },
+        shareTranscript: true,
+      },
+    });
+    expect(elicit).toHaveBeenCalledTimes(1);
+  });
+
+  it("declines when the user picks the decline option", async () => {
+    const elicit = vi.fn().mockResolvedValue({ action: "accept", content: { decision: "decline" } });
+    const outcome = await resolveScopeElicitation({ ...base, capabilities: caps, elicit });
+    expect(outcome).toEqual({ kind: "declined" });
+    expect(elicit).toHaveBeenCalledTimes(1);
+  });
+
+  it("choose issues a second per-scope prompt and grants exactly what is picked", async () => {
+    const elicit = vi
+      .fn()
+      .mockResolvedValueOnce({ action: "accept", content: { decision: "choose" } })
+      .mockResolvedValueOnce({
+        action: "accept",
+        content: { files: true, terminal: false, browser: true, conversation: false },
+      });
+    const outcome = await resolveScopeElicitation({
+      dir: "/proj",
+      port: 4000,
+      capabilities: caps,
       elicit,
     });
     expect(outcome).toEqual({
       kind: "granted",
       consent: {
         grant: { files: true, terminal: false, browser: true, browserPort: 4000 },
-        shareTranscript: true,
+        shareTranscript: false,
       },
     });
+    expect(elicit).toHaveBeenCalledTimes(2);
+    // The second prompt is the per-scope form, not the decision enum.
+    const second = elicit.mock.calls[1][0].requestedSchema;
+    expect(Object.keys(second.properties).sort()).toEqual([
+      "browser",
+      "conversation",
+      "files",
+      "terminal",
+    ]);
   });
 
-  it("omits browserPort when browser is not approved", async () => {
-    const elicit = vi.fn().mockResolvedValue({
-      action: "accept",
-      content: { files: true, terminal: true, browser: false, conversation: false },
-    });
-    const outcome = await resolveScopeElicitation({
-      ...base,
-      capabilities: { elicitation: {} },
-      elicit,
-    });
+  it("choose then approving nothing is a decline", async () => {
+    const elicit = vi
+      .fn()
+      .mockResolvedValueOnce({ action: "accept", content: { decision: "choose" } })
+      .mockResolvedValueOnce({
+        action: "accept",
+        content: { files: false, terminal: false, browser: false, conversation: true },
+      });
+    const outcome = await resolveScopeElicitation({ ...base, capabilities: caps, elicit });
+    expect(outcome).toEqual({ kind: "declined" });
+  });
+
+  it("choose then dismissing the second prompt is dismissed, not a decline", async () => {
+    const elicit = vi
+      .fn()
+      .mockResolvedValueOnce({ action: "accept", content: { decision: "choose" } })
+      .mockResolvedValueOnce({ action: "cancel" });
+    const outcome = await resolveScopeElicitation({ ...base, capabilities: caps, elicit });
+    expect(outcome).toEqual({ kind: "dismissed" });
+  });
+
+  it("omits browserPort when the chosen scopes exclude browser", async () => {
+    const elicit = vi
+      .fn()
+      .mockResolvedValueOnce({ action: "accept", content: { decision: "choose" } })
+      .mockResolvedValueOnce({
+        action: "accept",
+        content: { files: true, terminal: true, browser: false, conversation: false },
+      });
+    const outcome = await resolveScopeElicitation({ ...base, capabilities: caps, elicit });
     expect(outcome).toEqual({
       kind: "granted",
       consent: {
@@ -271,5 +228,101 @@ describe("resolveScopeElicitation", () => {
         shareTranscript: false,
       },
     });
+  });
+
+  it("returns declined when the user declines at a human pace", async () => {
+    const elicit = vi.fn().mockResolvedValue({ action: "decline" });
+    const now = vi.fn().mockReturnValueOnce(1000).mockReturnValueOnce(1000 + 5000);
+    const outcome = await resolveScopeElicitation({ ...base, capabilities: caps, elicit, now });
+    expect(outcome).toEqual({ kind: "declined" });
+  });
+
+  it("returns declined at exactly the human-decline threshold", async () => {
+    const elicit = vi.fn().mockResolvedValue({ action: "decline" });
+    const now = vi.fn().mockReturnValueOnce(0).mockReturnValueOnce(MIN_HUMAN_DECLINE_MS);
+    const outcome = await resolveScopeElicitation({ ...base, capabilities: caps, elicit, now });
+    expect(outcome).toEqual({ kind: "declined" });
+  });
+
+  it("returns dismissed when a non-accept arrives faster than a human could read it", async () => {
+    // Hosts that advertise elicitation but never render it (e.g. the Claude
+    // Code desktop GUI) auto-answer in milliseconds.
+    const elicit = vi.fn().mockResolvedValue({ action: "decline" });
+    const now = vi.fn().mockReturnValueOnce(1000).mockReturnValueOnce(1050);
+    const outcome = await resolveScopeElicitation({ ...base, capabilities: caps, elicit, now });
+    expect(outcome).toEqual({ kind: "dismissed" });
+  });
+
+  it("treats an un-injected instant decline as dismissed (default clock wiring)", async () => {
+    const elicit = vi.fn().mockResolvedValue({ action: "decline" });
+    const outcome = await resolveScopeElicitation({ ...base, capabilities: caps, elicit });
+    expect(outcome).toEqual({ kind: "dismissed" });
+  });
+
+  it("returns dismissed on cancel regardless of timing", async () => {
+    const elicit = vi.fn().mockResolvedValue({ action: "cancel" });
+    const slow = vi.fn().mockReturnValueOnce(0).mockReturnValueOnce(60_000);
+    expect(
+      await resolveScopeElicitation({ ...base, capabilities: caps, elicit, now: slow }),
+    ).toEqual({ kind: "dismissed" });
+    expect(await resolveScopeElicitation({ ...base, capabilities: caps, elicit })).toEqual({
+      kind: "dismissed",
+    });
+  });
+
+  it("returns unsupported when the SDK refuses locally over a missing elicitation mode", async () => {
+    const elicit = vi
+      .fn()
+      .mockRejectedValue(new Error("Client does not support form elicitation."));
+    const outcome = await resolveScopeElicitation({ ...base, capabilities: caps, elicit });
+    expect(outcome).toEqual({ kind: "unsupported" });
+  });
+
+  it("returns unsupported when the client rejects elicitation as method-not-found", async () => {
+    const elicit = vi
+      .fn()
+      .mockRejectedValue(new McpError(ErrorCode.MethodNotFound, "Method not found"));
+    const outcome = await resolveScopeElicitation({ ...base, capabilities: caps, elicit });
+    expect(outcome).toEqual({ kind: "unsupported" });
+  });
+
+  it("does not time-gate an approve — an instant approve is still granted", async () => {
+    const elicit = vi.fn().mockResolvedValue({ action: "accept", content: { decision: "approve" } });
+    const now = vi.fn().mockReturnValue(1000);
+    const outcome = await resolveScopeElicitation({ ...base, capabilities: caps, elicit, now });
+    expect(outcome.kind).toBe("granted");
+  });
+
+  it("returns failed when the elicit call throws", async () => {
+    const elicit = vi.fn().mockRejectedValue(new Error("transport closed"));
+    const outcome = await resolveScopeElicitation({ ...base, capabilities: caps, elicit });
+    expect(outcome).toEqual({ kind: "failed" });
+  });
+
+  it("keeps the inline prompt copy free of forbidden phrasing", async () => {
+    const elicit = vi.fn().mockResolvedValue({ action: "accept", content: { decision: "approve" } });
+    await resolveScopeElicitation({ ...base, capabilities: caps, elicit });
+    const params = elicit.mock.calls[0][0];
+    expectClean(params.message);
+    expectClean(params.requestedSchema.properties.decision.description ?? "");
+  });
+
+  it("keeps the second per-scope 'choose' prompt copy free of forbidden phrasing", async () => {
+    const elicit = vi
+      .fn()
+      .mockResolvedValueOnce({ action: "accept", content: { decision: "choose" } })
+      .mockResolvedValueOnce({
+        action: "accept",
+        content: { files: true, terminal: true, browser: true, conversation: true },
+      });
+    await resolveScopeElicitation({ ...base, capabilities: caps, elicit });
+    // The "choose" path issues a distinct second prompt; its copy must be as
+    // clean as the first (this is the message the forbidden-string test above
+    // never reached).
+    const second = elicit.mock.calls[1][0];
+    expectClean(second.message);
+    for (const key of ["files", "terminal", "browser", "conversation"]) {
+      expectClean(second.requestedSchema.properties[key].title ?? "");
+    }
   });
 });

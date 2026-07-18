@@ -1,81 +1,133 @@
 # Get An Expert
 
-Human expert helpline for AI coding tools, delivered as an MCP server. When a user is
-stuck in Claude Code / Codex / Cursor / Windsurf, their agent offers to bring in
-Get An Expert; with the user's explicit one-time consent, one redacted session summary
-goes to our API and a **live chat terminal opens where a human expert joins them** —
-direct, human-to-human, no AI in the middle. While the chat is open, the user's
-session (prompts, agent replies, agent-run commands with output, file edits) relays
-live to the expert so they can watch real attempts instead of retellings. All types
-of experts, real humans — no AI-generated answers.
+Human expert help for AI coding tools, delivered as an MCP server. When a user is
+stuck in Claude Code or Codex, their agent brings in a real human expert who works
+right in the project directory, with files, an interactive terminal (they can run
+`claude`, `codex`, a dev server, tests), and the browser, through scoped,
+consent-based access the user approves and can revoke anytime. The user watches a
+live log of every action; data flows straight to the expert over an encrypted peer
+to peer tunnel, and the relay never sees files, terminal, or browser. Every expert
+is a real human, no AI-generated answers.
 
-**Production:** https://get-an-expert.vercel.app · **npm:** `get-an-expert-mcp` (MCP
-server) + `get-an-expert` (chat CLI + relay)
+## Install
+
+Add the MCP server to your host of choice:
+
+```
+# Claude Code
+claude mcp add get-an-expert --scope user -- npx -y get-an-expert-agent@latest
+
+# Codex
+codex mcp add get-an-expert -- npx -y get-an-expert-agent@latest
+```
+
+Then, in any project where you're stuck, ask your agent for a human expert (in
+Claude Code, run `/get-an-expert`). Approve the scopes it asks for, Files, Terminal,
+and Browser, and your request enters the expert queue. Nothing is accessed or shared
+until you approve, everything is logged live, and you can revoke any scope or end the
+session anytime.
+
+**Production:** https://get-an-expert.vercel.app · **npm:** `get-an-expert-agent`
+(MCP server)
+
+## Install the Claude Code plugin
+
+For one-click setup in Claude Code (no manual `claude mcp add`), install the plugin,
+which bundles the agent and adds the `/get-an-expert` command:
+
+```
+/plugin marketplace add RohitJain1103/Get-An-Expert
+/plugin install get-an-expert-onmachine
+```
+
+See `plugins/onmachine/README.md` for details.
 
 ## Repo layout
 
+The current product, onmachine, is the agent plus its relay and dashboard:
+
 ```
-packages/core/         Shared types + secret redaction (runs client- AND server-side)
-packages/chat-cli/     Terminal chat + session-relay script (npx get-an-expert chat|init)
-packages/mcp-server/   The stdio MCP server published to npm as get-an-expert-mcp
-apps/web/              Next.js API + expert dashboard + privacy/terms (Vercel)
-plugins/claude-code/   Claude Code plugin: stuck-detection Stop hook + relay hooks + MCP bundle
-.claude-plugin/        Marketplace manifest for /plugin install
+packages/agent/      get-an-expert-agent: the onmachine MCP server (published to npm) that runs inside the user's coding tool
+packages/core/       @get-an-expert/core: shared types + secret redaction (runs client- AND server-side)
+apps/relay/          get-an-expert-relay: signaling server for session discovery, WebRTC signaling, session metadata. Self-hostable
+apps/dashboard/      get-an-expert-dashboard: an MCP client that connects to the agent peer-to-peer over WebRTC
+plugins/onmachine/   Claude Code plugin: one-click install of the agent + the /get-an-expert command
+.claude-plugin/      Marketplace manifest for /plugin install
+```
+
+An earlier track, Flow A, still lives in the repo alongside onmachine. It is
+separately published and still exercised by `pnpm -r test`. Rather than putting an
+expert in your project directory, it opens a redacted summary and a live human-to-human
+chat when a session gets stuck:
+
+```
+packages/mcp-server/ get-an-expert-mcp: the Flow A MCP server (published to npm) that offers a human when a session goes in circles, then relays a live chat
+packages/chat-cli/   get-an-expert: published CLI for the terminal chat with a human expert (npx get-an-expert chat <requestId>)
+apps/web/            Next.js web app: marketing pages, the /api/v1 backend the Flow A server calls, and the privacy/terms/deletion pages
 ```
 
 ## How the flow works
 
-1. **Detection.** In Claude Code, the plugin's Stop hook counts real user prompts and
-   failure signals in the transcript; past thresholds (default 10 prompts + 3 error
-   signals) it nudges Claude — max twice per session. In other hosts, the MCP server's
-   instructions describe when offering is appropriate.
-2. **Consent, once.** `offer_expert_help` renders the offer + consent notice: what's
-   sent, what relays while the chat is open, what's never sent, retention, deletion,
-   and the controls (/end, /pause). Nothing is transmitted.
-3. **Send.** After an explicit yes (plus a native elicitation dialog where supported),
-   `request_expert_help` redacts secrets locally and POSTs one structured summary to
-   `/api/v1/requests`. The API re-redacts, stores with a 30-day TTL, and mints a
-   chat token (returned once, stored hashed — same pattern as the delete token).
-4. **Terminal A opens + relay arms.** The MCP server writes the relay flag
-   (`~/.get-an-expert/relay.json`), best-effort opens a terminal running
-   `npx get-an-expert chat <id>`, and host hooks start relaying session events —
-   every payload passes local redaction first, and a RELAY ON indicator shows.
-   Cursor/Windsurf wire up via `npx get-an-expert init <host>`.
-5. **Live expert chat.** The expert works from the passcode-gated `/dashboard`:
-   chat thread with relayed events inline as terminal-style blocks. The user chats
-   from Terminal A like texting. Either side can end it — the server then refuses
-   further messages and events (410) and the local relay flag self-clears. After the
-   chat, `check_expert_replies` lets the agent pull the expert's advice back in.
+1. **Ask.** In your coding tool, run `/get-an-expert` (or just ask for a human
+   expert). The agent calls `request_expert_help` with the context already in your
+   conversation and registers the request with the relay, so it enters the expert
+   queue. It handles anything from a specific bug to an open-ended "could this be
+   better?", so there's no need to reduce your ask to a reproducible failure first.
+2. **Approve, nothing before.** The agent asks you to approve three scopes, Files,
+   Terminal, and Browser. Where your host supports an inline approval prompt, it
+   renders one the assistant cannot answer for you. Where it doesn't, the agent
+   relays a plain-language description and `confirm_expert_scopes` finalizes exactly
+   what you approve. Nothing is accessed or shared until you approve.
+3. **Connect, peer to peer.** Once approved, the expert joins from the dashboard and
+   connects straight to the agent over encrypted WebRTC. Your files, terminal, and
+   browser data flow peer to peer and never touch the relay; the relay only handles
+   the connection handshake and session metadata.
+4. **Work, watched.** The expert works in your project directory: reading and editing
+   files, running commands in an interactive terminal (they can run `claude`,
+   `codex`, a dev server, tests), and viewing the rendered page and console for the
+   one localhost port you approved. `expert_status` shows a live log of every action.
+5. **Stay in control.** `revoke_access` withdraws any single scope, and the next
+   matching action fails at once (revoking Terminal kills a live shell immediately).
+   `end_session` revokes everything and returns a summary of what changed. You can
+   walk away too: the request stays queued across an editor or agent restart and
+   reconnects automatically, re-arming the scopes you approved.
+
+## What you're approving
+
+| Scope | What it allows |
+|---|---|
+| Files | Read and edit files in the project directory. Files matched by your `.gitignore`, plus a built-in secret denylist, are skipped, so private files and secrets are not opened. |
+| Terminal | An interactive shell that opens in the project directory (any command, including AI tools). |
+| Browser | View the rendered page, console, and status for the one localhost port you approved. |
+
+Secrets are stripped from the hand-off context shared with the expert, and every
+expert works under a signed confidentiality agreement. See `SECURITY.md` for the
+full model.
 
 ## Development
 
 ```bash
 pnpm install
-pnpm -r test          # tests across core, chat-cli, mcp-server, web
-pnpm dev:web          # Next.js dev server (in-memory store unless Upstash env set)
-pnpm --filter get-an-expert-mcp build   # bundle the MCP server
-pnpm --filter get-an-expert build       # bundle the chat CLI + relay script
+pnpm -r test                              # tests across every workspace package (onmachine + Flow A)
+pnpm --filter get-an-expert-agent build   # bundle the agent MCP server
+pnpm --filter get-an-expert-relay dev     # run the signaling relay locally
 ```
 
-Environment (apps/web): `KV_REST_API_URL` + `KV_REST_API_TOKEN` (Upstash via Vercel
-Marketplace), `DASHBOARD_PASSCODE`, optional `EXPERT_DISPLAY_NAME`.
+The agent pulls native modules (`node-datachannel`, `node-pty`) with prebuilt
+binaries and uses a Chromium-family browser for the browser view (falling back to an
+HTTP check if none is present). Node.js ≥ 18 is required.
 
-## Deployment
+## Privacy posture (the short version)
 
-Vercel project `get-an-expert` (root directory `apps/web`). Deploy with
-`vercel deploy --prod`. Storage is Upstash for Redis via the Vercel Marketplace.
-
-## Compliance posture (the short version)
-
-- Zero bytes leave the user's machine before explicit consent; the chat and the
-  session relay run only between "proceed" and the chat's end, and the relay state
-  is always visible (RELAY ON indicator, /pause, /end).
-- Payloads are minimized and fixed-schema; client- and server-side secret redaction
-  on the summary, every chat message (both directions), and every relayed event.
-- Responses are written by human experts — no AI-generated answers; no AI ever reads
-  the chat.
-- 30-day auto-deletion covers the request, its chat, and its relayed events;
-  self-serve deletion endpoint; delete and chat tokens stored hashed.
-- Tool descriptions are pure function statements — no agent-directed nudging (MCP
-  directory / scanner requirement); proactive offering lives in server instructions
-  and the user-installed plugin hook.
+- **Consent first.** Nothing is accessed or shared until you approve, and you can
+  revoke any scope instantly. Which path granted access, an inline host prompt or
+  your reply in chat, is recorded in the activity log.
+- **Peer to peer.** Your files, terminal, and browser data flow directly to the
+  expert over encrypted WebRTC. The relay only handles signaling and session
+  metadata and never sees them.
+- **Scoped.** File access is limited to the project directory and skips `.gitignored`
+  and secret files; browser access is pinned to the one localhost port you approved.
+- **Visible.** A live log records every action the expert takes (action and target,
+  not the file contents or command output themselves).
+- **Human.** Every expert is a real, vetted person working under a signed
+  confidentiality agreement. No AI-generated answers, and no AI reads your session.

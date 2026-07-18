@@ -1,6 +1,6 @@
 {
   "name": "get-an-expert-onmachine",
-  "description": "Bring a real human expert onto your machine to fix what you're stuck on. Scoped, consent-based, revocable access — files, an interactive terminal (run claude/codex/dev servers live), and your browser — peer-to-peer over WebRTC.",
+  "description": "Scoped, consent-based expert help: a real human works in your project directory with files, an interactive terminal (they can run claude/codex/dev servers), and your browser, through access you approve and can revoke anytime. Peer to peer over WebRTC.",
   "version": "0.3.2",
   "author": {
     "name": "Get An Expert"

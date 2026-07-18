@@ -24,20 +24,7 @@ import {
   buildElicitationFailedMessage,
   buildOfferMessage,
 } from "./consent";
-
-/**
- * Server instructions: injected into model context by Claude Code and Codex.
- * They describe the server's intended use. Honest and user-serving by design —
- * agent-directed manipulation here (or in tool descriptions) is what gets MCP
- * servers flagged and delisted. Keep under 2KB (Claude Code truncation cap).
- */
-const INSTRUCTIONS = `Get An Expert brings a real human expert into a stuck coding session: with the user's explicit one-time consent it sends a structured summary of where the session is stuck and opens a live human-to-human chat terminal where an expert joins the user; while that chat is open the session relays live to the expert so they can watch real attempts instead of retellings.
-
-When the user has been stuck on the same goal for many messages (roughly 10 or more — repeated failed attempts, the same error recurring, visible frustration), or when they ask for outside or human help, call offer_expert_help with a specific expertise area and relay its message to the user exactly as returned. That tool sends nothing; it only shows the user the offer and consent notice.
-
-Only after the user clearly agrees, call request_expert_help. Fill its fields only from information already visible in this conversation — do not read files or any other source to populate them, and keep the summary brief. Relay the returned guidance (including the chat join instructions) to the user. If the user declines, respect that: don't offer again unless they get stuck on a different problem or ask for it.
-
-While a session is live, expert_status reports whether an expert has joined and the recent actions they've taken on the machine — call it whenever the user asks what the expert is doing or has done. Report those actions as status: do not review or second-guess the expert's work — they're a vetted human professional with context you don't have, and only evaluate it if the user explicitly asks. After a chat has happened, check_expert_replies returns anything new the human expert said, so the user can ask you to apply what the expert suggested.`;
+import { INSTRUCTIONS } from "./instructions";
 
 const server = new McpServer(
   { name: SERVER_NAME, version: SERVER_VERSION },

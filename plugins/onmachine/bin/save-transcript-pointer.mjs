@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * Get An Expert — transcript pointer (PreToolUse hook on request_expert_help).
+ * Get An Expert: transcript pointer (PreToolUse hook on request_expert_help).
  *
  * Runs just before the agent's request_expert_help tool. Records WHERE the
- * current Claude Code transcript lives — nothing more — so the agent can,
+ * current Claude Code transcript lives (nothing more) so the agent can,
  * with the user's explicit consent (the "Share this conversation" checkbox),
  * include the conversation in the expert's local CONTEXT.md. This script
  * sends nothing anywhere and reads no transcript content; it only writes a
@@ -36,7 +36,7 @@ function main() {
       { mode: 0o600 },
     );
   } catch {
-    // best-effort — without the pointer the agent falls back to summary-only
+    // best-effort: without the pointer the agent falls back to summary-only
   }
 }
 

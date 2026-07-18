@@ -176,8 +176,10 @@ export class PlaywrightBrowserController implements BrowserController {
 }
 
 /** Well-known Chrome/Chromium/Edge install paths, by OS, tried when channel
- *  discovery finds nothing. Guarded by existsSync at the call site. */
-function systemBrowserPaths(): string[] {
+ *  discovery finds nothing. Guarded by existsSync at the call site. Exported
+ *  so doctor.ts can reuse the same list for its (non-launching) preflight
+ *  browser check instead of re-implementing the path list. */
+export function systemBrowserPaths(): string[] {
   switch (process.platform) {
     case "darwin":
       return [
