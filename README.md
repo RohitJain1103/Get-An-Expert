@@ -55,16 +55,21 @@ plugins/onmachine/   Claude Code plugin: one-click install of the agent + the /g
 .claude-plugin/      Marketplace manifest for /plugin install
 ```
 
-An earlier track, Flow A, still lives in the repo alongside onmachine. It is
-separately published and still exercised by `pnpm -r test`. Rather than putting an
-expert in your project directory, it opens a redacted summary and a live human-to-human
-chat when a session gets stuck:
+An earlier track, **Flow A**, has been retired to `archive/` to keep the active
+workspace focused on onmachine. It is no longer part of `pnpm -r build`/`test` and is
+frozen (kept for reference, may be deleted later — see `archive/README.md`). Rather
+than putting an expert in your project directory, it opened a redacted summary and a
+live human-to-human chat when a session got stuck:
 
 ```
-packages/mcp-server/ get-an-expert-mcp: the Flow A MCP server (published to npm) that offers a human when a session goes in circles, then relays a live chat
-packages/chat-cli/   get-an-expert: published CLI for the terminal chat with a human expert (npx get-an-expert chat <requestId>)
-apps/web/            Next.js web app: marketing pages, the /api/v1 backend the Flow A server calls, and the privacy/terms/deletion pages
+archive/packages/mcp-server/ get-an-expert-mcp: the Flow A MCP server (published to npm) that offered a human when a session went in circles, then relayed a live chat
+archive/packages/chat-cli/   get-an-expert: published CLI for the terminal chat with a human expert (npx get-an-expert chat <requestId>)
+archive/plugins/claude-code/ Flow A Claude Code plugin: stuck-detection Stop hook + the get-an-expert-mcp bundle (delisted from the marketplace)
 ```
+
+`apps/web/` stays in place: it is the live marketing + privacy/terms/deletion site
+(https://get-an-expert.vercel.app, which onmachine links to as its homepage) and also
+hosts Flow A's `/api/v1` backend.
 
 ## How the flow works
 
