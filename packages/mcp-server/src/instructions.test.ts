@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INSTRUCTIONS } from "./index";
+import { INSTRUCTIONS } from "./instructions";
 
 describe("INSTRUCTIONS", () => {
   it("must be under 2400 bytes (measured host truncation cap)", () => {

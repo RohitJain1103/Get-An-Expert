@@ -44,13 +44,26 @@ See `plugins/onmachine/README.md` for details.
 
 ## Repo layout
 
+The current product, onmachine, is the agent plus its relay and dashboard:
+
 ```
-packages/agent/     get-an-expert-agent: the MCP server (published to npm) that runs inside the user's coding tool
-packages/core/      Shared types + secret redaction (runs client- AND server-side)
-apps/relay/         Signaling server: session discovery, WebRTC signaling, session metadata. Self-hostable
-apps/dashboard/     Expert dashboard: an MCP client that connects to the agent peer-to-peer over WebRTC
-plugins/onmachine/  Claude Code plugin: one-click install of the agent + the /get-an-expert command
-.claude-plugin/     Marketplace manifest for /plugin install
+packages/agent/      get-an-expert-agent: the onmachine MCP server (published to npm) that runs inside the user's coding tool
+packages/core/       @get-an-expert/core: shared types + secret redaction (runs client- AND server-side)
+apps/relay/          get-an-expert-relay: signaling server for session discovery, WebRTC signaling, session metadata. Self-hostable
+apps/dashboard/      get-an-expert-dashboard: an MCP client that connects to the agent peer-to-peer over WebRTC
+plugins/onmachine/   Claude Code plugin: one-click install of the agent + the /get-an-expert command
+.claude-plugin/      Marketplace manifest for /plugin install
+```
+
+An earlier track, Flow A, still lives in the repo alongside onmachine. It is
+separately published and still exercised by `pnpm -r test`. Rather than putting an
+expert in your project directory, it opens a redacted summary and a live human-to-human
+chat when a session gets stuck:
+
+```
+packages/mcp-server/ get-an-expert-mcp: the Flow A MCP server (published to npm) that offers a human when a session goes in circles, then relays a live chat
+packages/chat-cli/   get-an-expert: published CLI for the terminal chat with a human expert (npx get-an-expert chat <requestId>)
+apps/web/            Next.js web app: marketing pages, the /api/v1 backend the Flow A server calls, and the privacy/terms/deletion pages
 ```
 
 ## How the flow works
@@ -95,7 +108,7 @@ full model.
 
 ```bash
 pnpm install
-pnpm -r test                              # tests across agent, core, relay, dashboard
+pnpm -r test                              # tests across every workspace package (onmachine + Flow A)
 pnpm --filter get-an-expert-agent build   # bundle the agent MCP server
 pnpm --filter get-an-expert-relay dev     # run the signaling relay locally
 ```
