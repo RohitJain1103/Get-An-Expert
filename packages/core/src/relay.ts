@@ -121,6 +121,22 @@ export interface SessionStatusActivity {
   summary: string;
 }
 
+/**
+ * Subset of the expert's public profile mirrored into the status file so the
+ * MCP server can show who is working without a network round-trip. Structural
+ * copy of the agent's PublicExpertProfile; every field optional at read time
+ * because the file is written by a separate process and may predate a field.
+ */
+export interface SessionStatusExpertProfile {
+  name?: string;
+  photo?: string;
+  role?: string;
+  tag?: string;
+  rating?: number;
+  fixesDelivered?: number;
+  companies?: { logo?: string; label: string }[];
+}
+
 export interface SessionStatusRecord {
   state: "idle" | "waiting" | "connected" | "ended";
   sessionId?: string;
@@ -132,6 +148,12 @@ export interface SessionStatusRecord {
   recentActivity: SessionStatusActivity[];
   /** Epoch ms of the last write, so readers can show how fresh this is. */
   updatedAt: number;
+  /** Public profile of the connected expert, once one has joined. */
+  expertProfile?: SessionStatusExpertProfile;
+  /** The last delivered fix and whether the customer confirmed it. */
+  lastDelivery?: { summary: string; accepted?: boolean; at?: number };
+  /** Epoch ms the session started, so readers can show elapsed time. */
+  startedAt?: number;
 }
 
 export function sessionStatusFilePath(): string {
