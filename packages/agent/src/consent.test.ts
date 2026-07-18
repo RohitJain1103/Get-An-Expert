@@ -306,4 +306,23 @@ describe("resolveScopeElicitation", () => {
     expectClean(params.message);
     expectClean(params.requestedSchema.properties.decision.description ?? "");
   });
+
+  it("keeps the second per-scope 'choose' prompt copy free of forbidden phrasing", async () => {
+    const elicit = vi
+      .fn()
+      .mockResolvedValueOnce({ action: "accept", content: { decision: "choose" } })
+      .mockResolvedValueOnce({
+        action: "accept",
+        content: { files: true, terminal: true, browser: true, conversation: true },
+      });
+    await resolveScopeElicitation({ ...base, capabilities: caps, elicit });
+    // The "choose" path issues a distinct second prompt; its copy must be as
+    // clean as the first (this is the message the forbidden-string test above
+    // never reached).
+    const second = elicit.mock.calls[1][0];
+    expectClean(second.message);
+    for (const key of ["files", "terminal", "browser", "conversation"]) {
+      expectClean(second.requestedSchema.properties[key].title ?? "");
+    }
+  });
 });
