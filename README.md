@@ -1,16 +1,34 @@
 # Get An Expert
 
-Human expert helpline for AI coding tools, delivered as an MCP server. When a user is
-stuck in Claude Code / Codex / Cursor / Windsurf, their agent offers to bring in
-Get An Expert; with the user's explicit one-time consent, one redacted session summary
-goes to our API and a **live chat terminal opens where a human expert joins them** —
-direct, human-to-human, no AI in the middle. While the chat is open, the user's
-session (prompts, agent replies, agent-run commands with output, file edits) relays
-live to the expert so they can watch real attempts instead of retellings. All types
-of experts, real humans — no AI-generated answers.
+Human expert help for AI coding tools, delivered as an MCP server. When a user is
+stuck in Claude Code or Codex, their agent brings in a real human expert who works
+right in the project directory, with files, an interactive terminal (they can run
+`claude`, `codex`, a dev server, tests), and the browser, through scoped,
+consent-based access the user approves and can revoke anytime. The user watches a
+live log of every action; data flows straight to the expert over an encrypted peer
+to peer tunnel, and the relay never sees files, terminal, or browser. Every expert
+is a real human, no AI-generated answers.
 
-**Production:** https://get-an-expert.vercel.app · **npm:** `get-an-expert-mcp` (MCP
-server) + `get-an-expert` (chat CLI + relay)
+## Install
+
+Add the MCP server to your host of choice:
+
+```
+# Claude Code
+claude mcp add get-an-expert --scope user -- npx -y get-an-expert-agent@latest
+
+# Codex
+codex mcp add get-an-expert -- npx -y get-an-expert-agent@latest
+```
+
+Then, in any project where you're stuck, ask your agent for a human expert (in
+Claude Code, run `/get-an-expert`). Approve the scopes it asks for, Files, Terminal,
+and Browser, and your request enters the expert queue. Nothing is accessed or shared
+until you approve, everything is logged live, and you can revoke any scope or end the
+session anytime.
+
+**Production:** https://get-an-expert.vercel.app · **npm:** `get-an-expert-agent`
+(MCP server)
 
 ## Repo layout
 

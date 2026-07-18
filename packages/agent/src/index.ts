@@ -51,13 +51,13 @@ import type { Grant } from "./permissions";
  * The expert never talks to this server. The expert connects peer-to-peer to
  * the agent's OTHER MCP surface (see expert-server.ts) over WebRTC.
  */
-const INSTRUCTIONS = `Get An Expert brings a real human expert onto the user's machine, through scoped, consent-based access — for anything from fixing a bug to reviewing, polishing, or extending what's already there. The expert works in the user's own project directory — reading files, running commands, checking the browser — and the user sees a live log of every action and can revoke any scope at any time.
+const INSTRUCTIONS = `Get An Expert brings a real human expert into the user's project through scoped, consent-based access, for anything from fixing a bug to reviewing, polishing, or extending what's already there. The expert works in the user's own project directory, reading files, running commands, and checking the browser, and the user sees a live log of every action and can revoke any scope at any time.
 
-When the user asks for a human expert (or runs /get-an-expert), call request_expert_help immediately using whatever context already exists in this conversation. Do not ask clarifying questions first, do not offer automated alternatives instead, and do not gate on the ask being a specific reproducible bug — an open-ended "could this be better?" is a legitimate ask; the expert can ask their own follow-up questions once connected. That tool asks the user to approve three scopes — Files, Terminal, and Browser — either through an inline prompt or, on hosts without one, a plain-language description you must relay verbatim and then confirm with confirm_expert_scopes; relay whichever response request_expert_help returns verbatim. After an expert is requested, use expert_status to tell the user whether an expert has joined and what they have done so far (the live activity log). If the user wants to withdraw a scope, call revoke_access; when they're done, call end_session and relay the summary. Never grant or revoke on the user's behalf without them asking.
+When the user asks for a human expert (or runs /get-an-expert), call request_expert_help immediately using whatever context already exists in this conversation. Do not ask clarifying questions first, do not offer automated alternatives instead, and do not gate on the ask being a specific reproducible bug. An open-ended "could this be better?" is a legitimate ask; the expert can ask their own follow-up questions once connected. That tool asks the user to approve three scopes, Files, Terminal, and Browser, either through an inline prompt or, on hosts without one, a plain-language description you must relay verbatim and then confirm with confirm_expert_scopes; relay whichever response request_expert_help returns verbatim. After an expert is requested, use expert_status to tell the user whether an expert has joined and what they have done so far (the live activity log). If the user wants to withdraw a scope, call revoke_access; when they're done, call end_session and relay the summary. Never grant or revoke on the user's behalf without them asking.
 
-When you report status or the final summary, relay what the expert did or delivered — do not review, grade, or second-guess their work. The expert is a vetted human professional working with context you don't have; critiquing their in-progress or finished work confuses the user and is usually wrong. Only evaluate the expert's work if the user explicitly asks you to.
+When you report status or the final summary, relay what the expert did or delivered. Do not review, grade, or second-guess their work. The expert is a vetted human professional working with context you don't have; critiquing their in-progress or finished work confuses the user and is usually wrong. Only evaluate the expert's work if the user explicitly asks you to.
 
-Once the request is queued, tell the user plainly: they can walk away — the request stays in the queue even if their connection drops or they restart their editor, and reconnects automatically (re-arming the scopes they approved, within a bounded window), so it is never lost while no expert is online. Keeping the machine on and awake lets the expert actually work; every action is logged, and expert_status shows where things stand whenever they check back. If a chat link is returned, pass it on so they can message the expert from their phone or any browser.`;
+Once the request is queued, tell the user plainly: they can walk away. The request stays in the queue even if their connection drops or they restart their editor, and reconnects automatically (re-arming the scopes they approved, within a bounded window), so it is never lost while no expert is online. Keeping their computer on and awake lets the expert actually work; every action is logged, and expert_status shows where things stand whenever they check back. If a chat link is returned, pass it on so they can message the expert from their phone or any browser.`;
 
 const server = new McpServer(
   { name: SERVER_NAME, version: SERVER_VERSION },
@@ -114,9 +114,9 @@ function jsonWithGuidance(value: unknown) {
 server.registerPrompt(
   "get-an-expert",
   {
-    title: "Get an expert on your machine",
+    title: "Bring in a human expert",
     description:
-      "Bring a real human expert into this session to fix what you're stuck on. They work on your machine through scoped, revocable access.",
+      "Bring a real human expert into this session to fix what you're stuck on. They work in your project through scoped, revocable access.",
   },
   () => ({
     messages: [
@@ -138,7 +138,7 @@ server.registerTool(
   {
     title: "Request a human expert",
     description:
-      "Registers a help session and asks the user to approve the scopes an expert may use on their machine (Files, Terminal, Browser) — inline where the host supports it, otherwise via a plain-language description that confirm_expert_scopes finalizes. Nothing is granted until the user approves. Call this immediately when the user asks for a human expert; do not gate on the ask being a specific bug.",
+      "Registers a help session and asks the user to approve the scopes an expert may use in their project (Files, Terminal, Browser), inline where the host supports it, otherwise via a plain-language description that confirm_expert_scopes finalizes. Nothing is granted until the user approves. Call this immediately when the user asks for a human expert; do not gate on the ask being a specific bug.",
     inputSchema: {
       issue: z
         .string()
@@ -262,7 +262,7 @@ server.registerTool(
   {
     title: "Confirm expert access scopes",
     description:
-      "Finalizes scopes for a pending request after relaying the plain-language scope description from request_expert_help and getting the user's reply. Only call after request_expert_help returned that description (the host has no usable inline approval prompt — it can't show one, or the prompt came back unanswered). Set each field true only if the user explicitly approved it; default anything unaddressed to false.",
+      "Finalizes scopes for a pending request after relaying the plain-language scope description from request_expert_help and getting the user's reply. Only call after request_expert_help returned that description (the host has no usable inline approval prompt: it can't show one, or the prompt came back unanswered). Set each field true only if the user explicitly approved it; default anything unaddressed to false.",
     inputSchema: {
       files: z.boolean().describe("User approved file read/edit access."),
       terminal: z.boolean().describe("User approved running terminal commands."),
@@ -304,7 +304,7 @@ server.registerTool(
   {
     title: "Check the expert session",
     description:
-      "Reports whether an expert has connected, the currently approved scopes, and the live log of everything the expert has done on this machine.",
+      "Reports whether an expert has connected, the currently approved scopes, and the live log of everything the expert has done in the project.",
     inputSchema: {},
     annotations: { readOnlyHint: true, openWorldHint: false },
   },
