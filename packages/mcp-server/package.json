@@ -35,18 +35,22 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm --clean",
+    "build": "tsup src/index.ts --format esm --clean && pnpm build:ui",
+    "build:ui": "vite build --config vite.ui.config.ts --mode consent && vite build --config vite.ui.config.ts --mode status",
     "dev": "tsx src/index.ts",
     "test": "vitest run",
     "prepublishOnly": "pnpm test && pnpm build"
   },
   "devDependencies": {
     "@get-an-expert/core": "workspace:*",
+    "@modelcontextprotocol/ext-apps": "^1.7.4",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@types/node": "^20.19.43",
     "tsup": "^8.5.1",
     "tsx": "^4.23.1",
     "typescript": "^5.9.3",
+    "vite": "^8.1.5",
+    "vite-plugin-singlefile": "^2.3.3",
     "vitest": "^4.1.10",
     "zod": "^4.4.3"
   }
