@@ -120,7 +120,7 @@ export function buildChatFooter(
     "",
     "From now until that chat ends, this session (your prompts, your agent's " +
       "replies, agent-run commands and their output, file edits) relays live " +
-      "to the expert — a RELAY ON indicator confirms it's active. If you " +
+      "to the expert. A 🟢 LIVE indicator confirms it is active. If you " +
       "never see that indicator, relay wiring didn't install; the chat still " +
       "works, and `npx get-an-expert init <your editor>` wires it up. Type " +
       "/end in the chat to stop everything, /pause to pause relaying.",

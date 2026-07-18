@@ -144,12 +144,12 @@ export function runRelay(
   const flag = readRelayFlag();
   if (!flag) return { stdout: null, spoolPath: null };
 
-  // The RELAY ON indicator rides the Claude Code prompt hook whenever the
-  // relay is armed — even while paused (paused ≠ private chat over).
+  // The 🟢 LIVE indicator rides the Claude Code prompt hook whenever the
+  // relay is armed, even while paused (paused is not private chat over).
   const banner =
     host === "claude-code" && event === "prompt"
       ? JSON.stringify({
-          systemMessage: `🔴 RELAY ON — this session is visible to ${
+          systemMessage: `🟢 LIVE. This session is visible to ${
             flag.expertName ?? "your Get An Expert helper"
           }. Manage it in the chat terminal (/pause, /end).`,
         })

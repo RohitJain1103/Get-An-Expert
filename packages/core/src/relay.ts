@@ -20,7 +20,7 @@ export interface RelayFlag {
   apiBaseUrl?: string;
   /** ISO timestamp; hooks skip relaying until this passes. */
   pausedUntil?: string;
-  /** Learned from the chat once the expert joins; names the RELAY indicator. */
+  /** Learned from the chat once the expert joins; names the 🟢 LIVE indicator. */
   expertName?: string;
 }
 

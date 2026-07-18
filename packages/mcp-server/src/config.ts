@@ -7,7 +7,7 @@ export const SERVER_NAME = "get-an-expert";
 export const SERVER_VERSION = "0.3.0";
 
 /** Must match the consent text in consent.ts; bump both together. */
-export const CONSENT_TEXT_VERSION = "2026-07-15.v4";
+export const CONSENT_TEXT_VERSION = "2026-07-18.v5";
 
 const DEFAULT_API_URL = "https://get-an-expert.vercel.app";
 
