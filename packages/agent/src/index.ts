@@ -41,6 +41,17 @@ import {
 } from "./messages";
 import { openUrl } from "./open-url";
 import type { Grant } from "./permissions";
+import {
+  getUiCapability,
+  registerAppResource,
+  RESOURCE_MIME_TYPE,
+} from "@modelcontextprotocol/ext-apps/server";
+import {
+  CONSENT_RESOURCE_URI,
+  consentCardData,
+  loadConsentCardHtml,
+  tildify,
+} from "./consent-card";
 
 /**
  * The customer-facing MCP server. It runs inside the customer's own AI coding
@@ -63,6 +74,40 @@ const server = new McpServer(
   { name: SERVER_NAME, version: SERVER_VERSION },
   { instructions: INSTRUCTIONS },
 );
+
+/**
+ * The consent card, on hosts that support MCP Apps UI. When the built HTML is
+ * present, request_expert_help returns the card (a one-click approval) instead
+ * of asking the user to type yes; the card's buttons drive the same
+ * confirm_expert_scopes path. When it is absent (dev from source) or the host
+ * has no app UI, everything falls back to the one-voice consent text. The card
+ * is an enhancement, never a requirement.
+ */
+const consentCardHtml = loadConsentCardHtml();
+if (consentCardHtml) {
+  registerAppResource(
+    server,
+    "Get An Expert consent card",
+    CONSENT_RESOURCE_URI,
+    { mimeType: RESOURCE_MIME_TYPE },
+    async () => ({
+      contents: [
+        {
+          uri: CONSENT_RESOURCE_URI,
+          mimeType: RESOURCE_MIME_TYPE,
+          text: consentCardHtml,
+        },
+      ],
+    }),
+  );
+}
+
+/** Whether the connected host can render the consent card (built + UI-capable). */
+function hostSupportsConsentCard(): boolean {
+  if (!consentCardHtml) return false;
+  const ui = getUiCapability(server.server.getClientCapabilities());
+  return Boolean(ui?.mimeTypes?.includes(RESOURCE_MIME_TYPE));
+}
 
 /** One live session per process. */
 let session: AgentSession | undefined;
@@ -166,6 +211,11 @@ server.registerTool(
         .describe("Localhost dev-server port to scope Browser access to. Defaults to 3000."),
     },
     annotations: { readOnlyHint: false, openWorldHint: true },
+    // Links the consent card to this tool. Hosts without app UI ignore _meta
+    // and get the plain-language consent text unchanged.
+    ...(consentCardHtml
+      ? { _meta: { ui: { resourceUri: CONSENT_RESOURCE_URI } } }
+      : {}),
   },
   async ({ issue, summary, projectDir: dirArg, browserPort }) => {
     if (session && session.state !== "ended" && session.state !== "idle") {
@@ -200,9 +250,28 @@ server.registerTool(
       );
     }
 
-    // Ask the user to approve the scopes: inline via elicitation where the
-    // host supports it, otherwise fall back to a plain-language confirmation
-    // finalized by confirm_expert_scopes.
+    // Preferred surface: where the host can render app UI, return the consent
+    // card, a one-click approval. The card puts the user's choice into the
+    // conversation, and confirm_expert_scopes finalizes it, the same path the
+    // typed-yes fallback uses. Bind the pending confirmation to this session so
+    // a stale one can't be replayed.
+    if (hostSupportsConsentCard()) {
+      pendingConfirmation = { dir, port, issue, summary, sessionId: session.sessionId };
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text:
+              "A consent card is shown to the user with a one-tap approval. Wait for their choice, which arrives as their next message; then call confirm_expert_scopes with exactly what they approved (a full Yes means files, terminal, browser, and sharing the conversation). Do not call it before they choose, and do not also relay a separate text prompt.",
+          },
+        ],
+        structuredContent: consentCardData(tildify(dir)),
+      };
+    }
+
+    // Otherwise ask inline via native elicitation where the host supports it,
+    // and fall back to a plain-language confirmation finalized by
+    // confirm_expert_scopes.
     const outcome = await resolveScopeElicitation({
       dir,
       port,
