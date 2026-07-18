@@ -72,8 +72,8 @@ function defaultLoadNativeModule(name: string): void {
   require(name);
 }
 
-/** Browser check: a missing browser is NOT fatal — the agent falls back to
- *  an HTTP check — so this only ever produces an informational note. */
+/** Browser check: a missing browser is NOT fatal. The agent falls back to
+ *  an HTTP check, so this only ever produces an informational note. */
 export function checkBrowser(hasBrowser: () => boolean = defaultHasBrowser): DoctorIssue | undefined {
   if (hasBrowser()) return undefined;
   return {

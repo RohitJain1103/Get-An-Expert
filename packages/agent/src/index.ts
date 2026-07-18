@@ -70,8 +70,8 @@ let session: AgentSession | undefined;
 /**
  * AgentSession pulls in the heavy part of this module graph (node-datachannel,
  * node-pty's spawn-helper setup, playwright-core) via ./agent-session and
- * ./webrtc/peer. Loading it is deferred to first real use — a request for an
- * expert, or an auto-resume on restart — so the setup notice in main() can
+ * ./webrtc/peer. Loading it is deferred to first real use, a request for an
+ * expert, or an auto-resume on restart, so the setup notice in main() can
  * print before that cost is paid instead of after. `cleanupWebrtc` is cached
  * here alongside it so the SIGINT/SIGTERM handler below can call it
  * synchronously without a second, racy dynamic import at shutdown.
@@ -555,14 +555,14 @@ async function attemptAutoResume(): Promise<void> {
     clearResume();
     return;
   }
-  const AgentSessionCtor = await loadAgentSession();
-  const resumed = new AgentSessionCtor({
-    relayUrl: record.relayUrl || relayUrl(),
-    projectDir: record.projectDir,
-    customerName: record.customerName,
-    log: (line) => console.error(`[get-an-expert] ${line}`),
-  });
   try {
+    const AgentSessionCtor = await loadAgentSession();
+    const resumed = new AgentSessionCtor({
+      relayUrl: record.relayUrl || relayUrl(),
+      projectDir: record.projectDir,
+      customerName: record.customerName,
+      log: (line) => console.error(`[get-an-expert] ${line}`),
+    });
     await resumed.resumeExpert(record);
     session = resumed;
     console.error(
