@@ -3,7 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { clearResume, readResume } from "@get-an-expert/core/relay";
-import { AgentSession } from "./agent-session";
+import type { AgentSession } from "./agent-session";
 import {
   SCOPES_CONFIRM_GUIDANCE,
   buildDeclinedMessage,
@@ -41,7 +41,6 @@ import {
 } from "./messages";
 import { openUrl } from "./open-url";
 import type { Grant } from "./permissions";
-import { cleanupWebrtc } from "./webrtc/peer";
 
 /**
  * The customer-facing MCP server. It runs inside the customer's own AI coding
@@ -67,6 +66,25 @@ const server = new McpServer(
 
 /** One live session per process. */
 let session: AgentSession | undefined;
+
+/**
+ * AgentSession pulls in the heavy part of this module graph (node-datachannel,
+ * node-pty's spawn-helper setup, playwright-core) via ./agent-session and
+ * ./webrtc/peer. Loading it is deferred to first real use — a request for an
+ * expert, or an auto-resume on restart — so the setup notice in main() can
+ * print before that cost is paid instead of after. `cleanupWebrtc` is cached
+ * here alongside it so the SIGINT/SIGTERM handler below can call it
+ * synchronously without a second, racy dynamic import at shutdown.
+ */
+let cachedCleanupWebrtc: (() => void) | undefined;
+async function loadAgentSession(): Promise<typeof AgentSession> {
+  const [{ AgentSession: ctor }, { cleanupWebrtc }] = await Promise.all([
+    import("./agent-session"),
+    import("./webrtc/peer"),
+  ]);
+  cachedCleanupWebrtc = cleanupWebrtc;
+  return ctor;
+}
 
 function text(value: string) {
   return { content: [{ type: "text" as const, text: value }] };
@@ -158,7 +176,8 @@ server.registerTool(
 
     const dir = projectDir(dirArg);
     const port = browserPort ?? defaultBrowserPort();
-    session = new AgentSession({
+    const AgentSessionCtor = await loadAgentSession();
+    session = new AgentSessionCtor({
       relayUrl: relayUrl(),
       projectDir: dir,
       customerName: customerName(),
@@ -536,7 +555,8 @@ async function attemptAutoResume(): Promise<void> {
     clearResume();
     return;
   }
-  const resumed = new AgentSession({
+  const AgentSessionCtor = await loadAgentSession();
+  const resumed = new AgentSessionCtor({
     relayUrl: record.relayUrl || relayUrl(),
     projectDir: record.projectDir,
     customerName: record.customerName,
@@ -555,10 +575,42 @@ async function attemptAutoResume(): Promise<void> {
   }
 }
 
+/**
+ * Break the silence: on a cold start, the heavy imports below (native
+ * modules, ~113MB installed) take real time to load and there is nothing
+ * else on stderr until the very end. Printed unconditionally (a warm start
+ * paying this cost is rare enough that gating it isn't worth the complexity
+ * for v1) — one short line, never blocking startup.
+ */
+const SETUP_NOTICE = "Setting up Get An Expert. One time, about 30 seconds...";
+const READY_NOTICE = "Get An Expert is ready.";
+
 async function main(): Promise<void> {
+  console.error(SETUP_NOTICE);
+
+  // doctor.ts is imported dynamically, after the notice above, for the same
+  // reason AgentSession is (see loadAgentSession): it's the thing that
+  // actually pays for loading node-datachannel and node-pty, and it should
+  // do that after the user has been told something is happening — not
+  // before. A failure here is reported in plain language instead of the raw
+  // stack trace npx would otherwise print.
+  const { runDoctor } = await import("./doctor");
+  const result = runDoctor();
+  for (const issue of result.fatal) {
+    console.error(`[get-an-expert] ${issue.message}`);
+  }
+  if (!result.ok) {
+    process.exit(1);
+    return;
+  }
+  for (const issue of result.info) {
+    console.error(`[get-an-expert] ${issue.message}`);
+  }
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error(`[get-an-expert] agent ready (relay: ${relayUrl()})`);
+  console.error(READY_NOTICE);
   // Best-effort; never blocks the server from coming up.
   void attemptAutoResume();
 }
@@ -571,7 +623,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
       /* ignore */
     }
     try {
-      cleanupWebrtc();
+      cachedCleanupWebrtc?.();
     } catch {
       /* ignore */
     }
