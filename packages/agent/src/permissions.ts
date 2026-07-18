@@ -1,4 +1,25 @@
-import { isAbsolute, resolve, sep } from "node:path";
+import { readFileSync } from "node:fs";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import ignore from "ignore";
+
+/**
+ * Basename/path patterns that are always private, regardless of what the
+ * project's own .gitignore says. These cover the files a customer would
+ * never expect a remote expert to open, even on a project with no
+ * .gitignore at all.
+ */
+const SECRET_DENYLIST = [
+  ".env",
+  ".env.*",
+  "*.pem",
+  "*.key",
+  "id_rsa",
+  "id_ed25519",
+  ".aws/",
+  ".ssh/",
+  "credentials",
+  "credentials.*",
+];
 
 export type Scope = "files" | "terminal" | "browser";
 
@@ -35,6 +56,8 @@ export class PermissionGate {
   #terminal = false;
   #browser = false;
   #browserPort?: number;
+  readonly #secretIgnore = ignore().add(SECRET_DENYLIST);
+  #gitignore?: ReturnType<typeof ignore>;
 
   constructor(projectDir: string) {
     this.#projectDir = resolve(projectDir);
@@ -93,7 +116,39 @@ export class PermissionGate {
         `Path is outside the approved project directory (${this.#projectDir}).`,
       );
     }
+    if (this.isPrivate(target)) {
+      throw new PermissionDenied(
+        "This file is private and is not shared with the expert.",
+      );
+    }
     return target;
+  }
+
+  /**
+   * True if `path` (an absolute path inside the project) is off-limits to the
+   * expert: matched by the project's .gitignore, or on the hardcoded secret
+   * denylist that applies regardless of .gitignore. Used by checkFile and by
+   * directory listings so private entries never even show up.
+   */
+  isPrivate(path: string): boolean {
+    const rel = relative(this.#projectDir, resolve(path));
+    if (rel === "" || rel.startsWith("..")) return false;
+    const posixRel = rel.split(sep).join("/");
+    return this.#secretIgnore.ignores(posixRel) || this.#loadGitignore().ignores(posixRel);
+  }
+
+  /** Load the project's root .gitignore once, on first use. Missing file means no extra rules. */
+  #loadGitignore(): ReturnType<typeof ignore> {
+    if (!this.#gitignore) {
+      this.#gitignore = ignore();
+      try {
+        const contents = readFileSync(join(this.#projectDir, ".gitignore"), "utf8");
+        this.#gitignore.add(contents);
+      } catch {
+        // No .gitignore in this project: nothing beyond the secret denylist.
+      }
+    }
+    return this.#gitignore;
   }
 
   /** Validate that terminal commands are allowed. */

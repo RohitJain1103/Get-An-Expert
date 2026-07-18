@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { PermissionDenied, PermissionGate } from "./permissions";
 
@@ -121,5 +124,58 @@ describe("PermissionGate.revokeAll", () => {
     g.grant({ files: true, terminal: true, browser: true, browserPort: 3000 });
     g.revokeAll();
     expect(g.snapshot()).toEqual({ files: false, terminal: false, browser: false });
+  });
+});
+
+describe("PermissionGate.checkFile private files (.gitignore + secret denylist)", () => {
+  function realProjectGate(dir: string) {
+    const g = new PermissionGate(dir);
+    g.grant({ files: true, terminal: false, browser: false });
+    return g;
+  }
+
+  it("blocks .env even with no .gitignore present", () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), "gae-perm-")));
+    writeFileSync(join(dir, "index.ts"), "export {};\n");
+    const g = realProjectGate(dir);
+    expect(() => g.checkFile(join(dir, ".env"))).toThrow(PermissionDenied);
+  });
+
+  it("still allows a normal file when no .gitignore is present", () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), "gae-perm-")));
+    writeFileSync(join(dir, "index.ts"), "export {};\n");
+    const g = realProjectGate(dir);
+    expect(g.checkFile(join(dir, "index.ts"))).toBe(join(dir, "index.ts"));
+  });
+
+  it("blocks a path matched by the project's .gitignore", () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), "gae-perm-")));
+    writeFileSync(join(dir, ".gitignore"), "dist/\n");
+    mkdirSync(join(dir, "dist"));
+    writeFileSync(join(dir, "dist", "secret.js"), "// built\n");
+    const g = realProjectGate(dir);
+    expect(() => g.checkFile(join(dir, "dist", "secret.js"))).toThrow(PermissionDenied);
+  });
+
+  it("allows a normal source file alongside an active .gitignore", () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), "gae-perm-")));
+    writeFileSync(join(dir, ".gitignore"), "dist/\n");
+    mkdirSync(join(dir, "src"));
+    writeFileSync(join(dir, "src", "index.ts"), "export {};\n");
+    const g = realProjectGate(dir);
+    expect(g.checkFile(join(dir, "src", "index.ts"))).toBe(join(dir, "src", "index.ts"));
+  });
+
+  it("does not leak the denylist in the error message", () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), "gae-perm-")));
+    const g = realProjectGate(dir);
+    try {
+      g.checkFile(join(dir, ".env"));
+      throw new Error("expected checkFile to throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(PermissionDenied);
+      expect((err as Error).message).not.toContain("id_rsa");
+      expect((err as Error).message).not.toContain(".pem");
+    }
   });
 });

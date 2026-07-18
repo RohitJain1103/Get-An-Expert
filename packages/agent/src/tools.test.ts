@@ -79,6 +79,21 @@ describe("list_files", () => {
     await tools.listFiles(".");
     expect(activity.some((a) => a.kind === "list_files")).toBe(true);
   });
+
+  it("omits entries ignored by .gitignore and entries on the secret denylist", async () => {
+    grantAll();
+    writeFileSync(join(projectDir, ".gitignore"), "dist/\n");
+    mkdirSync(join(projectDir, "dist"));
+    writeFileSync(join(projectDir, "dist", "secret.js"), "// built\n");
+    writeFileSync(join(projectDir, ".env"), "SECRET=1\n");
+
+    const res = await tools.listFiles(".");
+    const names = res.entries.map((e) => e.path);
+    expect(names).not.toContain("dist");
+    expect(names).not.toContain("dist/secret.js");
+    expect(names).not.toContain(".env");
+    expect(names).toContain("package.json");
+  });
 });
 
 describe("read_file", () => {
