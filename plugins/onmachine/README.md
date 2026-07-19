@@ -52,6 +52,41 @@ flow peer to peer and never touch it. Secrets are stripped from the shared
 context, and every expert works under a signed confidentiality agreement. See
 the repo's `SECURITY.md`.
 
+## Proactive offer (opt-out)
+
+The plugin includes a quiet Stop hook (`bin/detect-stuck.mjs`) that runs after
+each turn. When a session genuinely looks stuck, many messages with repeated
+failure signals, it injects a single line suggesting the assistant may mention
+that a human expert can help via `/get-an-expert`. It is deliberately rare: at
+most once per session by default, and only past both thresholds.
+
+The hook **sends nothing anywhere**. It only adds a suggestion for the assistant
+to weigh. Real access still happens only through `request_expert_help` after your
+explicit consent. Every failure path is a silent no-op, so it never breaks a
+session.
+
+### Tuning it
+
+All knobs are environment variables:
+
+| Env var | Default | What it controls |
+|---|---|---|
+| `GAE_MIN_PROMPTS` | `10` | User messages before the offer can fire |
+| `GAE_MIN_ERRORS` | `3` | Failure signals ("still broken", "failed") required |
+| `GAE_MAX_NUDGES` | `1` | Most offers per session |
+| `GAE_RENUDGE_AFTER` | `10` | Extra messages before a repeat (only if max > 1) |
+
+### Turning it off
+
+Set a threshold out of reach, for example `GAE_MIN_PROMPTS=100000`, or remove
+the `Stop` entry from `hooks/hooks.json`.
+
+### Testing it
+
+```
+node --test plugins/onmachine/bin/detect-stuck.test.mjs
+```
+
 ## Requirements
 
 Node.js ≥ 18. The agent pulls native modules (`node-datachannel`, `node-pty`)
