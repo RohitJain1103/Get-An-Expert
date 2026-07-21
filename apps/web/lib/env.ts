@@ -17,6 +17,13 @@ export const env = {
   /** Name shown to users for dashboard-side chat messages. */
   expertDisplayName: (): string => process.env.EXPERT_DISPLAY_NAME ?? "Expert",
 
+  /** Webhook (Slack/Discord) pinged when a new request arrives. */
+  notifyWebhookUrl: (): string | null => process.env.NOTIFY_WEBHOOK_URL ?? null,
+
+  /** Postgres holding the permanent leads book, written by the relay. */
+  leadsDatabaseUrl: (): string | null =>
+    process.env.LEADS_DATABASE_URL ?? process.env.DATABASE_URL ?? null,
+
   /** Public base URL of this deployment, for deletion links. */
   publicBaseUrl: (): string =>
     process.env.PUBLIC_BASE_URL ??

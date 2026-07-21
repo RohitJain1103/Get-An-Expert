@@ -1102,3 +1102,98 @@ describe("active session grace", () => {
     expect(r.store.get(sessionId)?.status).toBe("ended");
   });
 });
+
+/**
+ * The permanent leads book has a different lifetime from every other store: it
+ * must outlive the session, the 72h max age, and the deploy. These guard the
+ * two ways that gets silently broken.
+ */
+describe("permanent lead capture", () => {
+  class FakeLeadStore {
+    records: any[] = [];
+    async init(): Promise<void> {}
+    async record(session: any): Promise<void> {
+      this.records.push({ ...session });
+    }
+    describe(): string {
+      return "fake";
+    }
+    async close(): Promise<void> {}
+  }
+
+  /** Poll until the fire-and-forget lead write lands, or fail loudly. */
+  async function waitForLead(
+    fake: FakeLeadStore,
+    predicate: (r: any) => boolean,
+    timeoutMs = 2000,
+  ): Promise<any> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const hit = [...fake.records].reverse().find(predicate);
+      if (hit) return hit;
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    throw new Error("timeout waiting for lead");
+  }
+
+  async function registerOn(url: string, customerName: string) {
+    const agent = await connect("/agent", url);
+    send(agent, {
+      type: "register",
+      customerName,
+      projectDir: "~/projects/api",
+      issue: "Webhook fires twice",
+    });
+    const reg = await waitFor(agent, (m) => m.type === "registered");
+    return { agent, sessionId: reg.sessionId as string };
+  }
+
+  it("records the lead when no expert is online at all", async () => {
+    const fake = new FakeLeadStore();
+    const { wsUrl: url } = await launch({ leads: fake as any });
+    const { sessionId } = await registerOn(url, "dana");
+    const lead = await waitForLead(fake, (r) => r.id === sessionId);
+    expect(lead.customerName).toBe("dana");
+    expect(lead.issue).toBe("Webhook fires twice");
+    expect(lead.status).toBe("waiting");
+    expect(lead.expertName).toBeUndefined();
+  });
+
+  // Regression: endSession deletes the durable record via persistence.remove()
+  // and never calls persist(), so hooking leads into persist() alone lost every
+  // outcome — no ended_at, and any delivery made at the end vanished.
+  it("records the outcome when a session ends", async () => {
+    const fake = new FakeLeadStore();
+    const { wsUrl: url } = await launch({ leads: fake as any });
+    const { agent, sessionId } = await registerOn(url, "sam");
+    const expert = await connect("/expert", url);
+    send(expert, { type: "auth", token: TOKEN, name: "Priya Sharma" });
+    await waitFor(expert, (m) => m.type === "queue");
+    send(expert, { type: "claim", sessionId });
+    await waitFor(expert, (m) => m.type === "claimed");
+    send(expert, { type: "end-session", sessionId, reason: "Fixed" });
+    await waitFor(agent, (m) => m.type === "session-ended");
+
+    const lead = await waitForLead(
+      fake,
+      (r) => r.id === sessionId && r.status === "ended",
+    );
+    expect(lead.endedAt).toBeTypeOf("number");
+    expect(lead.expertName).toBe("Priya Sharma");
+  });
+
+  it("records the outcome when a request expires unclaimed", async () => {
+    const fake = new FakeLeadStore();
+    // maxAgeMs of 1ms makes the sweep expire the request on its next tick.
+    const { wsUrl: url } = await launch({ leads: fake as any, maxAgeMs: 1 });
+    const { sessionId } = await registerOn(url, "kim");
+    const lead = await waitForLead(
+      fake,
+      (r) => r.id === sessionId && r.status === "ended",
+      4000,
+    );
+    // The lead an expert never reached: the number that matters most.
+    expect(lead.claimedAt).toBeUndefined();
+    expect(lead.expertName).toBeUndefined();
+  });
+});
