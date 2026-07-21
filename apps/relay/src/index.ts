@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createLeadStore } from "./leads";
 import { createPersistence } from "./persistence";
 import { DEFAULT_ACTIVE_GRACE_MS, DEFAULT_MAX_AGE_MS, createRelay } from "./server";
 
@@ -63,6 +64,7 @@ function resolveDashboardDir(): string | undefined {
 
 const { tokens, generated } = resolveExpertTokens();
 const dashboardDir = resolveDashboardDir();
+const leads = createLeadStore(process.env, (line) => console.log(`[relay] ${line}`));
 
 const relay = createRelay({
   expertTokens: tokens,
@@ -70,6 +72,7 @@ const relay = createRelay({
   persistence: createPersistence(resolveMaxAgeMs(), (line) =>
     console.log(`[relay] ${line}`),
   ),
+  leads,
   maxAgeMs: resolveMaxAgeMs(),
   activeGraceMs: resolveActiveGraceMs(),
   log: (line) => console.log(`[relay] ${line}`),
@@ -96,6 +99,7 @@ relay.server.listen(port, host, () => {
       `[relay] No GET_AN_EXPERT_EXPERT_TOKENS set. Generated expert token for this run:\n[relay]   ${generated}`,
     );
   }
+  console.log(`[relay] Leads: ${leads.describe()}`);
   console.log(
     "[relay] Signaling only: file contents, terminal output, and browser data flow peer-to-peer and never touch this server.",
   );

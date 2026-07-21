@@ -17,6 +17,7 @@ import {
   MemoryPersistence,
   type SessionPersistence,
 } from "./persistence";
+import { NullLeadStore, type LeadStore } from "./leads";
 import { serveStatic } from "./static";
 import { ROSTER, findExpert, type PublicExpertProfile } from "./roster";
 import { DEFAULT_STUN, iceServers } from "./ice";
@@ -38,6 +39,12 @@ export interface RelayOptions {
    * only relay-restart survival needs a real backend).
    */
   persistence?: SessionPersistence;
+  /**
+   * Permanent book of record for leads. Unlike `persistence` (a 72h cache that
+   * serves the live queue) this is never expired and survives redeploys.
+   * Defaults to a no-op when no database is configured.
+   */
+  leads?: LeadStore;
   /** Max age of a queued request before it is expired. Defaults to 72h. */
   maxAgeMs?: number;
   /**
@@ -79,6 +86,7 @@ export function createRelay(options: RelayOptions): Relay {
   const store = new SessionStore();
   const log = options.log ?? (() => {});
   const persistence = options.persistence ?? new MemoryPersistence();
+  const leads = options.leads ?? new NullLeadStore();
   const maxAgeMs = options.maxAgeMs ?? DEFAULT_MAX_AGE_MS;
   const activeGraceMs = options.activeGraceMs ?? DEFAULT_ACTIVE_GRACE_MS;
   const agents = new Map<string, WebSocket>(); // sessionId -> agent socket
@@ -103,12 +111,26 @@ export function createRelay(options: RelayOptions): Relay {
     expertGrace.delete(sessionId);
   }
 
+  /**
+   * Write the permanent lead row. Separate from persist() because the two have
+   * opposite lifetimes: ending a session DELETES its durable record but must
+   * still update the lead, which outlives the session, the 72h max age, and the
+   * deploy. Best-effort: a database blip must never interrupt a live session.
+   */
+  function recordLead(session: Session | undefined): void {
+    if (!session) return;
+    void leads.record(session).catch((err) =>
+      log(`lead write failed for ${session.id}: ${err instanceof Error ? err.message : String(err)}`),
+    );
+  }
+
   /** Mirror a session's durable metadata to storage; never throws into callers. */
   function persist(session: Session | undefined): void {
     if (!session) return;
     void persistence.save(session).catch((err) =>
       log(`persist failed for ${session.id}: ${err instanceof Error ? err.message : String(err)}`),
     );
+    recordLead(session);
   }
 
   const server = createServer((req, res) => {
@@ -381,6 +403,10 @@ export function createRelay(options: RelayOptions): Relay {
     void persistence.remove(sessionId).catch((err) =>
       log(`persist remove failed for ${sessionId}: ${err instanceof Error ? err.message : String(err)}`),
     );
+    // The lead outlives the session it came from, so the outcome (ended_at, the
+    // final status, and any delivery) is written here rather than dropped with
+    // the durable record above.
+    recordLead(session);
     log(`session ${sessionId} ended (${Math.round(durationMs / 1000)}s)`);
     broadcastQueue();
   }
@@ -920,6 +946,14 @@ export function createRelay(options: RelayOptions): Relay {
 
   /** Load persisted requests back into the queue. Call once before listen(). */
   async function hydrate(): Promise<void> {
+    // Create the leads table before accepting traffic. A failure here is
+    // logged, not fatal: the relay must still serve sessions without a
+    // database, and record() retries the schema on the next write.
+    try {
+      await leads.init();
+    } catch (err) {
+      log(`lead store init failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
     try {
       const restored = await persistence.loadAll();
       for (const s of restored) store.hydrate(s);
